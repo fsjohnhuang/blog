@@ -461,7 +461,7 @@ Version Control，版本控制。
 #+END_EXAMPLE
 
 ** 目录结构
-#+BEGIN_QUOTE
+#+BEGIN_EXAMPLE
 /var/ansible/
   - production  # inventory file for production environment
   - staging     # inventory file for staging environment
@@ -496,39 +496,39 @@ Version Control，版本控制。
         - copy_code.yml
         - install_httpd.yml
     - db/
-#+END_QUOTE
+#+END_EXAMPLE
 
-#+BEGIN_QUOTE dbservers.yml
+#+BEGIN_EXAMPLE dbservers.yml
 ---
 # The variables file used by the playbooks in the dbservers group.
 # These don't have to be explicitly imported by vars_files: the are autopopulated.
 
 mysqlservice: mysqld
 mysql_port: 3306
-#+END_QUOTE
+#+END_EXAMPLE
 
-#+BEGIN_QUOTE site.yml
+#+BEGIN_EXAMPLE site.yml
 ---
 # This playbook deploys LAMP application.
 
 - include_playbook: webserver.yml
 - include_playbook: dbserver.yml
-#+END_QUOTE
-#+BEGIN_QUOTE webserver.yml
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE webserver.yml
 ---
 
 - hosts: webservers
   roles:
     - common
     - web
-#+END_QUOTE
-#+BEGIN_QUOTE web/tasks/main.yml
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE web/tasks/main.yml
 ---
 # This playbook deploys webserver tier.
 
 - include_playbook: install_httpd.yml
 - include_playbook: copy_code.yml
-#+END_QUOTE
+#+END_EXAMPLE
 ** QA
 1) 对多个管理节点运行Playbook时，默认情况下是所有管理节点执行完一个任务后再执行下一个任务。
 * 插件
