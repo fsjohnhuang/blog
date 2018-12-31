@@ -1,0 +1,549 @@
+* 服务端
+
+ansible
+ansible-doc
+ansible-playbook
+ansible-vault
+ansible-galaxy
+ansible-pull
+
+* 架构
+Ansible编排引擎由Inventory,API,Modules和Plugins组成
+* Inventory管理
+Inventory就是管理节点集合
+Inventory清单路径：
+1) 在/etc/ansible/hosts
+2) 执行命令时可通过 ~-i~ 临时指定
+3) 修改ansible.cfg的invertory(旧版为hostfile)全局指定
+#+BEGIN_EXAMPLE
+# 分组
+[windows]
+127.0.0.1 ansible_ssh_user="lmx" ansible_ssh_pass="password" ansible_ssh_port="5985" ansible_connection="winrm" ansible_winrm_server_cert_validation=ignore
+
+# 分组内节点使用GLOB
+[linux]
+127.0.0.[2:4]
+
+[hosts]
+fsjohnhuan[g:j].com
+
+# 通过:children可实现分组内包含其他分组 
+[common:children]
+windows
+linux
+#+END_EXAMPLE
+** 命令
+#+BEGIN_EXAMPLE
+# 列出匹配的节点信息
+ansible linux --list-hosts
+
+## <pattern_goes_here>支持通配符和正则表达式匹配管理节点
+# 通过:分隔多个管理节点IP/域名/组名，如192.168.0.1:web.example.com:window
+# all/'*'匹配所有管理节点
+# a:!b表示匹配在分组a而不在分组b的管理节点
+# a:&b表示匹配即在分组a又在分组b的管理节点
+# *.example.com使用通配符匹配
+# a[0]:b[1:]:c[-1]表示通过切片匹配分组下部分管理节点
+# ~(web|db).*.example.com以~开头即表示使用正则表达式匹配管理节点
+ansible <pattern_goes_here> -m <module_name> -a <arguments>
+#+END_EXAMPLE
+** 变量
+**** 预定义变量/行为参数
+ansible_host，SSH目的主机名或IP
+ansible_ssh_user，SSH链接的用户名，默认值当前用户名
+ansible_ssh_port，SSH链接的端口号，默认值为22
+ansible_connection，链接模式，取值为smart/ssh/paramiko/winrm
+ansible_become，类似于Linux的sudo，默认值none
+ansible_become_user，切换到哪个用户执行命令，默认值为none
+ansible_shell_type，执行命令所使用的shell，默认为sh
+ansible_python_interpreter，使用哪个Python解释器，默认为/usr/bin/python
+ansible_*_interpreter，指定其他语言的解释器，默认为none
+**** 自定义变量
+在inventory文件和其他vars文件中定义即可，命名规则为字母、数字和下划线组成，并且首字符必须为字母。
+#+BEGIN_EXAMPLE hosts
+# 直接在管理节点配置中定义
+127.0.0.1 mysql_port=3306
+
+[test]
+127.0.0.[2:10]
+
+# 分组定义
+[test:vars]
+mysql_port=3307
+#+END_EXAMPLE
+
+#+BEGIN_SRC bash
+# 通过{{variable_name}}引用匹配的变量
+ansible all -a 'echo {{mysql_port}}'
+#+END_SRC
+
+实际项目中会将预定义变量和自定义变量定义在group_vars和host_vars目录下
+#+BEGIN_QUOTE
+/etc/ansible/
+  - hosts
+  - group_vars/
+    - test.yml
+  - host_vars/
+    - 127.0.0.1.yml
+#+END_QUOTE
+#+BEGIN_EXAMPLE test.yml
+---
+# group_vars/test.yml
+mysql_port: 3307
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE 127.0.0.1.yml
+---
+# host_vars/127.0.0.1.yml
+mysql_port: 3306
+#+END_EXAMPLE
+
+
+
+
+配置文件在/etc/ansible/ansible.cfg中
+#+BEGIN_EXAMPLE
+[defaults]
+remote_port = 22  # 默认ssh端口
+remote_user = lmx # 默认ssh登录帐号
+#+END_EXAMPLE
+
+* 配置
+配置读取顺序为：
+1) ANSIBLE_CONFIG
+2) ./ansible.cfg
+3) ~/.ansible.cfg
+4) /etc/ansible/ansible.cfg
+
+
+** 常用配置
+- inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)
+- remote_user，SSH的用户名
+- remote_port，SSH的端口号
+- log_path，日志文件路径
+- forks，并行进程的数量
+- gathering，控制收集Facts变量的策略
+- become，是否进行提权
+- become_method=sudo，提权方式
+- become_user=root，提权为哪个用户
+- become_ask_pass=no，提权是否需要密码
+- ssh_args，控制SSH连接参数
+- pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
+- control_path，保存ControlPath socket的路径
+
+* 管理Windows服务器
+** 前提条件
+- 控制端必须为Linux且安装python2.7+、pywinrm和requests
+- 管理端的操作系统：windows server 2008 R2+
+- 管理端的PowerShell3.0+，Framework3.0+
+- 管理端开启WinRM服务
+** QA
+1) 控制端执行 ~ansible all -m win_ping~ 报如下异常：
+#+BEGIN_QUOTE
+FAILED! => {
+    "msg": "winrm or requests is not installed: No module named winrm"
+}
+#+END_QUOTE
+那么需要在控制端执行 ~pip install pywinrm~
+2) 管理端已经配置完成，但在控制端执行 ~ansible all -m win_ping~ 返回如下内容
+#+BEGIN_QUOTE
+ UNREACHABLE! => {
+    "changed": false, 
+    "msg": "plaintext: HTTPConnectionPool(host='10.16.40.165', port=5985): Max retries exceeded with url: /wsman (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x7fd995aaa910>, 'Connection to 10.16.40.165 timed out. (connect timeout=30)'))", 
+    "unreachable": true
+}
+#+END_QUOTE
+那么有可能是防火墙入站规则的问题，在防火墙入站规则将 *Windows 远程管理(HTTP-In)-公用/将作用域/远程IP* 修改为 *任务IP地址* 即可。
+3) 在PowerShell中执行.ps1脚本文件时抛
+#+BEGIN_QUOTE
+无法加载文件 ******.ps1，因为在此系统中禁止执行脚本
+#+END_QUOTE
+那么需要先执行 ~set-executionpolicy remotesigned~
+因为默认值为 restricted为禁止执行任何脚本，而remotesigned为可在本机上执行未签名脚本。
+4) Windows Server 2008 R2已经升级到PowerShell3.0但执行win_ping时还是报
+#+BEGIN_QUOTE
+InvalidOperation: (:) [], ThreadStartException    + FullyQualifiedErrorId : InvalidOperation Thread failed to start
+#+END_QUOTE
+将PowerShell升级到4.0即可（Windows6.1-KB2819745-x64-MultiPkg.msu）。
+1) Windows Server 2008 R2下设置winrm报winrm 拒绝访问 0x80070005 -2147024891疑难杂症
+   1) 确定服务中，windows remote management（ws man） 服务已经启动。
+   2) 确定网络访问，使用的经典模式，即：[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa]
+      “forceguest”=dword:00000000
+      如果是1，请改成0，重启机子。感谢老史提供解题方案。
+   3) 确定（当前）administrators组中的账户，都设置了密码，而不是空密码。让空密码的远程管理员，登录机子，这肯定不合理。
+      这一点，是我们和群友一起试验出来的，空密码就会报拒绝访问的错。感谢提问者qq=504800471，帮忙验证。
+      和这个键值或许也应该有关，即：
+      [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa]
+      “LimitBlankPasswordUse”=dword:00000001
+      即空密码账户，只能本地登录。
+   4) 确定右键点powershell图标，选择了管理员，权限运行powershell。
+   5) 最后运行winrm quickconfig 命令。
+
+** 管理端安装配置
+参考:
+1) https://www.cnblogs.com/kingleft/p/6391652.html
+2) http://www.ansible.com.cn/docs/intro_windows.html (内含Windows Server 2008 R2管理节点配置方式)
+
+
+- 安装Framework3.0
+  - 下载地址 http://download.microsoft.com/download/B/A/4/BA4A7E71-2906-4B2D-A0E1-80CF16844F5F/dotNetFx45_Full_x86_x64.exe
+- Windows 7 和 Windows Server 2008 R2由于使用Windows Management Framework3.0因此存在OOM漏洞，需要安装补丁
+  - 下载地址 http://support.microsoft.com/kb/2842230
+- 设置PowerShell为remotesigned
+  - 在PowerShell中执行 ~set-executionpolicy remotesigned~
+- 升级PowerShell至3.0+(Windows7和Windows Server 2008 R2的PowerShell一般为2.0)
+  - 查看PowerShell版本，在PowerShell中执行 ~get-host~
+  - 到官网下载3.0安装包到管理节点安装
+- 启用WinRM(WS-Management)，在cmd下执行
+  - 基本配置 ~winrm quickconfig~
+  - 配置验证方式为基本验证 ~winrm set winrm/config/service/auth @{Basic="true"}~
+  - 配置加密方式为允许非加密 ~winrm set winrm/config/service @{AllowUnencrypted="true"}~
+  - 查看winrm service listener ~winrm e winrm/config/listener~ ，有返回即服务已启用
+  
+* 模块
+** Windows模块
+官方Windows可用模块： https://docs.ansible.com/ansible/latest/modules/list_of_windows_modules.html
+#+BEGIN_EXAMPLE
+# ping所有管理端
+ansible all -m win_ping
+
+# 复制文件
+ansible all -m win_copy -a 'src=/etc/passwd dest=f:\file\passwd'
+
+# 复制目录
+ansible all -m win_copy -a 'src=/etc dest=f:\file\'
+
+# 删除管理端的文件
+ansible all -m win_file -a 'path=f:\file\passwd state=absent'
+
+# 获取管理端的Windows Facts
+ansible all -m setup
+
+# 在管理端执行cmd命令
+ansible all -m raw -a 'ipconfig'
+
+# 在管理端执行ansible扩展命令
+ansible all -m win_command -a 'whoami'
+
+# 调用PowerShell执行命令
+ansible all -m script -a 'foo.ps1'
+
+# ??????
+ansible all -m slurp 
+
+# 查看模块的帮助文档
+ansible-doc <module_name>
+
+# 查看模块名或描述包含关键字的模块列表
+ansible-doc -l <keyword>
+#+END_EXAMPLE
+
+** 模块返回值
+| 返回值键    | 含义                                         |
+|-------------+----------------------------------------------|
+| changed     | 表示模块是否对管理节点执行了修改操作         |
+| failed      | 若模块未能执行，则返回true                   |
+| msg         | 模块执行失败的原因                           |
+| rc          | return code                                  |
+| stdout      | 标准输出                                     |
+| stderr      | 错误输出                                     |
+| backup_file | 用于来返回备份文件的路径                     |
+| results     | 应用在Playbook中存在循环的情况，返回多个结果 |
+* Playbook
+https://segmentfault.com/a/1190000015953283#articleHeader8
+
+
+1. 保存在.yml配置文件中
+#+BEGIN_EXAMPLE test_playbook.yml
+- hosts: linux # 管理节点
+  become: yes  # 是否提升权限，这个可以设置在Play中，也可以设置为Task中
+  become_method: sudo # 通过sudo提升权限，这个可以设置在Play中，也可以设置为Task中
+  gather_facts: false # 默认第一个任务必定是收集Facts变量，但若后续任务根本不使用Facts变量，那么可以手动禁止
+  tasks: # 定义顺序执行的任务序列
+  - name: copy file
+    copy: src=/tmp/data.txt dest=/tmp/data.txt
+    tags: copyfile
+
+  - name: change mode
+    file: dest=/tmp/data.txt mode=500 owner=root group=root
+  
+  - name: ensure packages installed
+    apt: pkg={{ itme }} state=present
+    with_items:
+      - tmux
+      - git
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE bash
+ansible-playbook test_playbook.yml
+# 仅对10.22.12.33执行任务
+ansible-playbook test_playbook.yml --limit 10.22.12.33
+#+END_EXAMPLE
+
+2. 引入其他playbook
+#+BEGIN_EXAMPLE yml
+- include_playbook: pb1.yml
+- include_playbook: pb2.yml
+#+END_EXAMPLE bash
+#+BEGIN_EXAMPLE
+# 仅执行pb1.yml的内容
+ansible-playbook test_playbook.yml --limit pb1.yml
+#+END_EXAMPLE
+
+一个Playbook可以包含1~N个Play，每个Play是一个完整的部署任务。每个Play定义对某组管理节点执行操作。
+一个Play可以包含1~N个Task，每个Task完成一件事。
+一个Play可以包含1~N个Role，每个Role是对某组Task所需的内容（handlers/templates/等）进行组织。
+** ansible-playbook命令
+#+BEGIN_EXAMPLE
+--list-hosts
+--list-tasks
+--tags <tag>，筛选含有tag且匹配<tag>的任务
+--step，每执行一个任务后停止，等待用户确认
+--syntax-check，检查Playbook的语法
+-C/--check，检查Playbook是否对管理节点执行修改操作
+-v，显示执行过程中读取哪个Ansible配置文件、各任务执行返回值等
+#+END_EXAMPLE
+
+** Handlers
+handler在整个Play执行完后才执行，并且同一个Play中多次触发同一个handler时，仅执行一次。
+#+BEGIN_EXAMPLE
+- hosts: test
+  name: configurate httpd
+  tasks:
+  - name: 1. ensure apache is a the latest version
+    yum: name=httpd state=latest
+  
+  - name: 2. write the apache config file
+    template: 
+       src: /srv/httpd.conf.j2
+       dest: /etc/httpd.conf
+    notify:
+    - restart apache
+
+  - name: 3. ensure apache is running
+    service: name=httpd state=started
+
+  handlers:
+  - name: restart apache
+    service: name=httpd state=restarted
+#+END_EXAMPLE
+task1,2,3执行后才会执行handlers
+
+** 变量
+变量可用于template模块中作为jinja2模板的参数值使用，也可以用在Playbook中。
+#+BEGIN_EXAMPLE test_playbook.yml
+---
+- host: test
+  vars:             # 变量定义在Playbook中
+    proxy: 123
+    dbname: foo
+  vars_files:        # 变量定义在外部文件中
+  - /vars/external_vars.yml
+  tasks:
+  - name: task1
+    template:
+       src: /srv/httpd.conf.j2
+       dest: /etc/httpd.conf
+
+  - name: task2
+    mysql_db: name={{ dbname }} state=present
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE httpd.conf.j2
+[server]
+proxy={{proxy}}
+#+END_EXAMPLE
+Q*** Facts变量
+通过 ~ansible all -m setup~ 获取所有管理节点的Facts信息，然后就可以在template和Playbook中使用了。
+甚至在group_vars/和host_vars/下的文件中都可以使用
+#+BEGIN_EXAMPLE yml
+---
+# group_vars/lbservers
+mode: http
+
+listenport: 8888
+
+daemonname: myapplb
+
+balance: roundrobin
+
+iface: '{{ ansible_default_ipv4.interface }}'
+#+END_EXAMPLE
+
+** 任务的公用参数
+任务中包含一些公用参数处理每个任务的执行结果。
+register: myresult ，将任务的执行结果保存到myresult中后续可以使用
+ignore_errors: True，表示这个任务执行失败不会影响后续任务的执行
+
+** 高级语法
+
+*** 循环
+#+BEGIN_EXAMPLE
+- name: Install Mysql package
+  yum: name={{ item }} state=installed
+  with_items:
+    - mysql-server
+    - MySQL-python
+    - libselinux-python
+    - libsemanage-python
+#+END_EXAMPLE
+
+** Role
+#+BEGIN_EXAMPLE
+# 初始化一个role的目录结构
+ansible-galaxy init /etc/ansible/roles/websrvs
+
+# 从galaxy.ansible.com上下载名为bennojoy.mysql的role到本地
+ansible-galaxy install -p /etc/ansible/roles bennojoy.mysql
+
+# 列出已安装的roles
+ansible-galaxy list
+
+# 查看已安装的role信息
+ansible-galaxy info bennojoy.mysql
+
+# 卸载
+ansible-galaxy remove bennojoy.mysql
+#+END_EXAMPLE
+在Playbook中使用roles
+#+BEGIN_QUOTE
+- hosts: all
+  roles:
+  - role: bennojoy.mysql
+#+END_QUOTE
+
+** 最佳实践
+官网 https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html
+Rolling Updates，依次更新集群中的服务器。
+#+BEGIN_EXAMPLE
+- hosts: webservers
+  user: root
+  serial: 1  # n: 以n台为单位执行完所有任务后才到后面n台管理节点
+             # "n%": 以百分之n台为单位执行完所有任务后才到后面百分之n台管理节点
+             # -1
+             # -5 定义分为2批进行，第一批对1台管理节点执行，第二批对5台管理节点进行
+#+END_EXAMPLE
+Always Mention The State，明确指定state的取值，Ansible很多模块都有state参数用于指明操作目的状态（如absent/present/lastest）。
+Group By Roles，以服务器的作用组织Inventory文件。可适当冗余。
+Whitespace and Comments，增加适当的空白和注释增加可读性。
+Always Name Tasks，总为任务命名。
+Keep It Simple，保持简单。定义变量时可以在vars/vars_files/vars_prompt和ansible-playbook的--extra-vars中定义，但应该尽量在某一初定义变量。
+Version Control，版本控制。
+
+
+
+*** 详细的执行信息(verbosity)
+执行ansible-playbook时会使用默认级别的verbosity
+1) none，默认级别，仅显示Play头、Task名称和Task执行状态(ok/fatal/changed)
+2) 1(-v)，1级，显示返回值
+3) 2(-vv)，2级，显示输入数据和返回值
+4) 3(-vvv)，3级，显示详细的连接尝试
+5) 4(-vvvv)，4级，会传输-v选项给SSH等具体的连接插件
+
+
+*** 执行日志
+通过ansible.cfg中的log_path或环境变量ANSIBLE_LOG_PATH设置，若文件不存在则会自动创建，若存在则将内容追加到文件末尾。输出到文件的同时也会输出到模拟终端中。
+
+*** 通过debug模块查看任务返回值
+若下一个任务依赖上一个任务的返回值时，就有可能因返回值内容缺失导致下一个任务执行失败。因此我们有需要预先查看返回值情况的需求了。
+#+BEGIN_EXAMPLE yml
+---
+- name: variable introspection demo
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: do something
+      uri:
+         url: http://fsjohnhuang.cnblogs.com
+      register: derpops
+    - name: show derpops
+      debug:
+         msg: "derpops value is {{ derpops }}"  # 显示整个返回值
+         var: derpops.server                    # 显示返回值的某个属性
+#+END_EXAMPLE
+
+** 目录结构
+#+BEGIN_QUOTE
+/var/ansible/
+  - production  # inventory file for production environment
+  - staging     # inventory file for staging environment
+  - group_vars/ # group variables
+    - dbservers.yml
+  - host_vars/  # variables for specific host
+    - 10.12.22.3.yml
+  - library/    # 3th party modules
+  - filter_plugins # 3th filter plugins
+  - site.yml      # master playbook
+  - webserver.yml # playbook for webserver tier
+  - dbserver.yml  # playbook for dbserver tier
+
+  - roles/
+    - common/     # common actions
+      - tasks/
+        - main.yml # main.yml is the entry file of each role
+      - handlers/
+        - ntp.conf.j2
+      - templates/
+      - files/     # 保存需要上传到管理节点的文件
+      - vars/      # 不可以被覆盖的变量
+        - main.yml
+      - default/   # 可以被覆盖的变量
+        - main.yml
+      - meta/
+      - library/
+      - lookup_plugins/
+    - web/
+      - tasks/
+        - main.yml # main.yml is the entry file of each role
+        - copy_code.yml
+        - install_httpd.yml
+    - db/
+#+END_QUOTE
+
+#+BEGIN_QUOTE dbservers.yml
+---
+# The variables file used by the playbooks in the dbservers group.
+# These don't have to be explicitly imported by vars_files: the are autopopulated.
+
+mysqlservice: mysqld
+mysql_port: 3306
+#+END_QUOTE
+
+#+BEGIN_QUOTE site.yml
+---
+# This playbook deploys LAMP application.
+
+- include_playbook: webserver.yml
+- include_playbook: dbserver.yml
+#+END_QUOTE
+#+BEGIN_QUOTE webserver.yml
+---
+
+- hosts: webservers
+  roles:
+    - common
+    - web
+#+END_QUOTE
+#+BEGIN_QUOTE web/tasks/main.yml
+---
+# This playbook deploys webserver tier.
+
+- include_playbook: install_httpd.yml
+- include_playbook: copy_code.yml
+#+END_QUOTE
+** QA
+1) 对多个管理节点运行Playbook时，默认情况下是所有管理节点执行完一个任务后再执行下一个任务。
+* 插件
+用于增强Ansible核心功能。
+
+** Callback插件
+对任务执行响应事件进行处理的插件。
+
+* Jinja2
+* QA
+1) 部署代码时中文乱码
+   解决方法：在Ansible配置文件的defaults section下修改为
+   #+BEGIN_EXAMPLE
+   # module_lang = C
+   # module_set_locale = True
+   module_lang = en_US.UTF-8
+   module_set_locale = True
+   #+END_EXAMPLE
