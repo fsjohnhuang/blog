@@ -1,0 +1,28 @@
+官网: http://www.orgmode.org/
+
+* 升级Org
+Emacs-24.5默认内置Org-8.2.10，当通过elpa直接安装Org-9.2后会报如下异常：
+#+BEGIN_QUOTE
+Symbol's function definition is void: org-link-types
+#+END_QUOTE
+原因：
+1) ~org-link-types~ 在Org-8.2.10中为变量，而在Org-9+中则为函数；
+2) 当前Emacs中安装了两个版本的Org，造成冲突。
+解决办法：
+1) 在elpa中卸载所有Org包
+   1) 在Emacs中执行 ~M-x package-list-packages~
+   2) 通过 ~C-s org RET~ 搜索Org相关包
+   3) ~d~ 标记Org相关包
+   4) ~x~ 执行删除操作
+2) 确认内置Org包所在目录
+   1) 在Emacs中执行 ~M-x org-version~ ，查看内置Org版本和所在目录（如 /usr/share/emacs24.5/lisp/org）
+   2) 将Org所在目录删除
+3) 通过elpa安装Org-9.2即可
+
+另外，通过elpa安装Org时可以添加官网的资源地址，以便获取最新版的Org
+#+BEGIN_EXAMPLE
+(setq package-archives
+      '(("gnu" . "http://elpa.emacs-china.org/gnu/")
+        ("melpa" . "http://elpa.emacs-china.org/melpa/")
+        ("org" . "http://orgmode.org/elpa/")))
+#+END_EXAMPLE

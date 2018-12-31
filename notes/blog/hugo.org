@@ -1,0 +1,18 @@
+官网： https://gohugo.io/
+
+
+* 主题
+
+** hugo-future-imperfect
+官网： https://github.com/jpescador/hugo-future-imperfect#table-of-contents
+Staicman： https://staticman.net/
+
+* 写作工具 Emacs + Org
+
+** ox-hugo
+官网： https://ox-hugo.scripter.co/
+作用：将Org文档转化为Markdown文档。
+
+** easy-hugo
+官网： https://github.com/masasam/emacs-easy-hugo
+作用：管理Hugo博客
