@@ -37,7 +37,7 @@ linux
 # 列出匹配的节点信息
 ansible linux --list-hosts
 
-## <pattern_goes_here>支持通配符和正则表达式匹配管理节点
+## <host-pattern>支持通配符和正则表达式匹配管理节点
 # 通过:分隔多个管理节点IP/域名/组名，如192.168.0.1:web.example.com:window
 # all/'*'匹配所有管理节点
 # a:!b表示匹配在分组a而不在分组b的管理节点
@@ -374,51 +374,10 @@ task1,2,3执行后才会执行handlers
 应用场景：
 1) 重启服务
 2) 重启系统
-
-** 变量
-变量可用于template模块中作为jinja2模板的参数值使用，也可以用在Playbook中。
-#+BEGIN_EXAMPLE test_playbook.yml
----
-- host: test
-  vars:             # 变量定义在Playbook中
-    proxy: 123
-    dbname: foo
-  vars_files:        # 变量定义在外部文件中
-  - /vars/external_vars.yml
-  tasks:
-  - name: task1
-    template:
-       src: /srv/httpd.conf.j2
-       dest: /etc/httpd.conf
-
-  - name: task2
-    mysql_db: name={{ dbname }} state=present
-#+END_EXAMPLE
-#+BEGIN_EXAMPLE httpd.conf.j2
-[server]
-proxy={{proxy}}
-#+END_EXAMPLE
-Q*** Facts变量
-通过 ~ansible all -m setup~ 获取所有管理节点的Facts信息，然后就可以在template和Playbook中使用了。
-甚至在group_vars/和host_vars/下的文件中都可以使用
-#+BEGIN_EXAMPLE yml
----
-# group_vars/lbservers
-mode: http
-
-listenport: 8888
-
-daemonname: myapplb
-
-balance: roundrobin
-
-iface: '{{ ansible_default_ipv4.interface }}'
-#+END_EXAMPLE
-
+   
 ** 任务的公用参数
 任务中包含一些公用参数处理每个任务的执行结果。
 register: myresult ，将任务的执行结果保存到myresult中后续可以使用
-ignore_errors: True，表示这个任务执行失败不会影响后续任务的执行
 
 ** 高级语法
 
@@ -559,8 +518,8 @@ mysql_port: 3306
 ---
 # This playbook deploys LAMP application.
 
-- include_playbook: webserver.yml
-- include_playbook: dbserver.yml
+- import_playbook: webserver.yml
+- import_playbook: dbserver.yml
 #+END_EXAMPLE
 #+BEGIN_EXAMPLE webserver.yml
 ---
@@ -574,18 +533,144 @@ mysql_port: 3306
 ---
 # This playbook deploys webserver tier.
 
-- include_playbook: install_httpd.yml
-- include_playbook: copy_code.yml
+- import_playbook: install_httpd.yml
+- import_playbook: copy_code.yml
 #+END_EXAMPLE
 ** QA
 1) 对多个管理节点运行Playbook时，默认情况下是所有管理节点执行完一个任务后再执行下一个任务。
+** 进阶
+*** delegate_to
+任务委派：定义任务将交给非当前play的hosts指定的目标主机执行．
+#+BEGIN_EXAMPLE
+---
+- hosts: 10.1.1.1 10.1.1.2
+  tasks:
+    - name: Ping
+      ping:
+    
+    - name: Ping 10.1.2.3
+      ping:
+      delegate_to: 10.1.2.3 # 由于hosts有2台目标主机，那么执行2次 ping 10.1.2.3
+     
+     - name: Create file local
+       shell: 'touch /temp/test.txt'
+       delegate_to: localhost
+       run_once: yes
+#+END_EXAMPLE
+
 * 插件
 用于增强Ansible核心功能。
+
+** 性能监控
+1) [[https://github.com/jlafon/ansible-profile][ansible-profile]]
+   - 用于统计每个任务的耗时
+   - 已经集成到Ansible2.x，只要在ansible.cfg中加入 ~callback_whitelist = profile_tasks~ 即可
 
 ** Callback插件
 对任务执行响应事件进行处理的插件。
 
 * Jinja2
+
+* 执行顺序
+1) 变量加载
+2) Facts收集
+3) pre_tasks执行
+4) pre_tasks通知的handlers执行
+5) roles执行
+6) tasks执行
+7) handlers执行
+8) post_tasks执行
+9) post_tasks通知的handlers执行
+
+* 变量
+Playbook运行前会读取所有相关变量，若不存在则会报错．
+
+** 优先级
+| 优先级 | 变量类型                                                    |
+|--------+-------------------------------------------------------------|
+| 高     | 外部变量, --extra-vars                                      |
+|        | inventory主机清单中内置变量(ansible_ssh_user等)             |
+|        | play的vars和vars_files                                      |
+|        | invertory主机清单中自定义变量,group_vars和host_vars下的变量 |
+|        | 系统facts变量                                               |
+| 低     | 角色定义的默认变量(roles/rolename/defaults/main.yml         |
+
+** 内置变量
+~inventory_hostname~ Ansible当前执行任务的定义在inventory清单中的主机名，若定义为server1.test.com，则返回server1.test.com
+~inventory_hostname_shortname~ 若inventory_hostname返回server1.test.com，那么inventory_hostname_shortname则返回server1
+~hostvars~ 获取某台主机的facts信息，通过 ~hostvars[inventory_hostname]~ 获取当前执行任务的facts信息
+~group_names~ 获取当前执行任务的主机所属的主机组的主机名列表
+~groups~ 所有主机组的字典，如 ~groups.web~ 获取 ~[web]~ 这组主机组的所有主机facts信息
+#+BEGIN_EXAMPLE hosts
+[web]
+server1
+server2
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE j2
+upstream backend {
+{% for host in groups.web %}
+    server {{host.inventory_hostname}} {{host.ansible_default_ipv4.address}}:80;
+{% endfor %}
+}
+#+END_EXAMPLE
+~inventory_dir~ inventory清单所在目录
+~inventory_file~ inventory清单
+
+** Facts变量
+为远程目标主机的IP/OS/以太网设备/MAC地址等系统/硬件信息.
+默认情况下每次执行play时会先执行收集Facts变量,如同先执行 ~ansible all -m setup~ ,并将返回结果保存到内存中,直到playbook结束.
+
+两种方式优化:
+1) 在playbook的每个play中添加 ~gather_facts: no~, 禁止收集Facts变量
+2) Ansible1.8+可缓存Facts变量
+#+BEGIN_EXAMPLE ansible.cfg
+# 启用缓存
+# smart, 默认收集Facts,但有缓存时则不收集
+# implicit, 不收集Facts
+# explicit, 强制收集Facts
+gathering = smart
+
+# 缓存到Redis
+fact_caching_timeout = 86400
+fact_caching = redis
+fact_caching_connection = 127.0.0.1:6379
+
+# 缓存到本地文件
+# fact_caching = jsonfile
+# fact_caching_connection = /tmp/mycachedir
+#+END_EXAMPLE
+若缓存到Redis后报
+#+BEGIN_QUOTE
+TypeError: the JSON object must be str, not 'bytes'
+#+END_QUOTE
+则将ansible/plugins/cache/redis.py中90行
+#+BEGIN_SRC
+self._cache[key] = json.loads(value)
+# 修改为
+self._cache[key] = json.loads(value.decode('utf-8'))
+#+END_SRC
+
+* 错误处理
+#+BEGIN_EXAMPLE
+# 忽略错误
+- name: this will not be counted as a failure
+  command: /bin/false
+  ignore_errors: yes
+
+# 自定义错误判定条件
+- name: this command prints FAILED when is fails
+  command: /usr/bin/xxx -x -y -z
+  register: command_result
+  failed_when: "'FAILED' in command_result.stderr"
+#+END_EXAMPLE
+
+* 任务执行状态
+#+BEGIN_EXAMPLE
+# 自定义changed判断条件
+- name: validate nginx conf
+  shell: "/usr/local/nginx/sbin/nginx -t"
+  changed_when: "command_result.stdout.find('successful')"
+#+END_EXAMPLE
 * QA
 1) 部署代码时中文乱码
    解决方法：在Ansible配置文件的defaults section下修改为

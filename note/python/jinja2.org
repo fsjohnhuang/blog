@@ -1,0 +1,9 @@
+* QA
+1) 将中文传递给Jinja2模板时报
+   - "UnicodeDecodeError: 'ascii' codec can't decode byte 0xe6 in position 0: ordinal not in range(128)"
+   - 解决办法：
+   #+BEGIN_EXAMPLE
+   import sys
+   reload(sys)
+   sys.setdefaultencoding('utf-8')
+   #+END_EXAMPLE

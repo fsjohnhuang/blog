@@ -33,17 +33,51 @@ Jenkins从SCM下载代码到本地的$JENKINS_HOME/jobs/<jobname>/workspace/
    1. 配置gitlab URL(external_url)
    2. 新增Kind为GitLab API token的Credential
 
-* 部署SSH密钥
 
-*** 生成公钥和密钥
-在Jenkins服务器上执行
-#+BEGIN_EXAMPLE bash git-bash
+* 集成Git
+
+** 网络拓扑
+服务器A: 部署Git
+服务器B: 部署Jenkins
+
+** 构建过程
+Jenkins通过ssh协议从Git拉取代码
+git地址: ~ssh://git@服务器A:/home/git/repo.git
+
+** 集成过程
+1) 在服务器B生成ssh钥匙对
+#+BEGIN_EXAMPLE bash
+# 一直按Enter下去，若在Enter passphrase中输入密码，那么每次向GitLab提交时都要输入密码
+# id_rsa和id_rsa.pub将生成在~/.ssh/下
 ssh-keygen -t rsa -C '<填写便于管理的注释>' -b 4096
 #+END_EXAMPLE
-一直按Enter下去，若在Enter passphrase中输入密码，那么每次向GitLab提交时都要输入密码。
+2) 将服务器B的公钥id_rsa.pub复制到服务器A
+#+BEGIN_EXAMPLE bash
+# 在服务器B上执行以下命令，将公钥复制到 服务器A:/home/git/.ssh/authorized_keys中
+ssh-copy-id ~/.ssh/id_rsa.pub git@服务器A
+#+END_EXAMPLE
+3) 用服务器B的密钥id_rsa内容在Jenkins中创建Credential
 
-*** 配置公钥
-将公钥(/root/ssh/id_rsa.pub)文本复制到GitLab/User Settings/SSH Keys下
+** QA
+1) 构建时需要输入passphrase和Git服务器登录密码．
+场景：若构建时服务器B中提示输入
+#+BEGIN_EXAMPLE bash
+Enter passphrase for key '~/.jenkins/workspace/repo@tmp/ssh1232313213.key':
+#+END_EXAMPLE
+解决办法：
+#+BEGIN_EXAMPLE bash
+# 在服务器B上执行
+
+# 若执行ssh-add报'Could not open a connection to your authentication agent'，则需要先执行以下命令
+sudo ssh-agent bash
+
+# 将密钥加入到ssh-agent的高速缓存中
+sudo ssh-add ~/.ssh/id_rsa
+#+END_EXAMPLE
+
+
+
+
 
 * 构建触发器
 
@@ -69,16 +103,15 @@ MINUTE HOUR DOM MONTH DOW
 ***** 示例
 #+BEGIN_EXAMPLE
 15分钟构建一次：H/15 * * * *
-每天8点构建一次：0 8 * * *
-每天8点~17点，两小时构建一次：0 8-17/2 * * *
-周一到周五，8点~17点，两小时构建一次：0 8-17/2 * * 1-5
+每天8点构建一次：H 8 * * *
+每天8点~17点，两小时构建一次：H 8-17/2 * * *
+周一到周五，8点~17点，两小时构建一次：H 8-17/2 * * 1-5
 每月1号、15号各构建一次，除12月：* * 1,15 1-11 *
 #+END_EXAMPLE
 
 * 构建后动作（Post-build Actions）
 1) 配置邮件
 2) 配置返回构建状态给GitLab
-
 
 * 时区
 启动Jenkins时添加如下配置调整时区
@@ -92,6 +125,7 @@ Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ
 http://<jenkins-server>/<command>
 command: exit | restart | reload
 #+END_EXAMPLE
+
 
 * 内置的环境变量
 BUILD_NUMBER，构建的唯一数字标识
@@ -148,3 +182,35 @@ java.lang.Exception: The server rejected the connection: None of the protocols w
 并发现右JNPL4字样，表示Master和Slave间通过JNPL4协议通信失败，那么就作如下操作：
 1) 打开Manage Jenkins/Configure Global Security/Agents/Agent Protocols...
 2) 将JNLP1/2/3都启用即可
+
+* SVN集成
+
+* 邮件通知
+
+** 配置发送方
+默认情况下会使用Jenkins Master Node所在服务器的SMTP服务。
+发送邮箱地址：nobody@nowhere.localdomain
+
+** Post-build action - E-mail Notification
+发送内容如下：
+#+BEGIN_QUOTE
+See <http://10.16.25.167:1080/job/qmsspv2-uat/78/display/redirect>
+#+END_QUOTE
+
+** Post-build action - Editable Email Notification
+* LDAP集成
+* 权限管理
+* QA
+** 代理异常
+通过shell运行ansible-playbook时报如下异常
+#+BEGIN_QUOTE
+UNREACHABLE! => {"changed": false, "msg": "plaintext: HTTPConnectionPool(host='10.73.175.152', port=8888): Max retries exceeded with url: http://10.18.39.30:5985/wsman (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x7f23d3c3cd90>, 'Connection to 10.73.175.152 timed out. (connect timeout=30)'))", "unreachable": true}
+#+END_QUOTE
+
+场景重现：
+1) 设置环境变量 ~http_proxy~ 和 ~https_proxy~ 为10.73.175.152:8888
+2) 启动Jenkins
+这时Jenkins已将将这两个环境变量的值读取到内存中，即使后续 ~unset http_proxy~ 和 ~unset https_proxy~ 也无法更新Jenkins的配置。
+因此需要清理这两个环境变量后，重启Jenkins才能生效。
+
+

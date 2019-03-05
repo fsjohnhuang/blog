@@ -1,0 +1,69 @@
+* 修饰符
+用于定义类、方法和变量，通常放在语句的最前端
+
+** 访问控制修饰符
+1) default 在同一个包内可见。使用对象：类、接口、方法、变量
+2) public 公开。使用对象：类、接口、方法、变量
+3) protected 对同一包内的类和所有子类可见。使用对象：方法、变量、内部类
+4) private 在同一个类内可见。使用对象：方法、变量、内部类
+
+*** 接口的默认访问修饰符
+1) 变量默认为 ~public static final~
+2) 方法默认为 ~public~
+
+** 非访问控制修饰符
+1) final 用来修饰类、方法和变量，类不能被继承、方法不能被重定义、变量为常量
+2) abstract 用来修饰抽象类和抽象方法
+   1) 抽象类不能同时声明为final
+   2) 抽象方法不能同时声明为final或static
+   3) 若一个类包含抽象方法，那么该类也必须声明为抽象类
+3) static 用来修饰类方法和类变量
+4) synchronized 声明方法同一时间只能被一个线程访问
+   - 示例 ~public synchronized void showDetails() {}~
+5) volatile 修饰成员变量在每次线程访问时均强制从共享内存中重新读取值，并且当发生变化时强制线程将变化值回写到共享内存
+6) transient 修饰变量不参与类的序列化
+
+* 枚举
+1) 可单独声明或在类中声明
+2) 枚举中可定义方法、变量和构造函数 ???
+#+BEGIN_EXAMPLE java
+class FreshJuice {
+  enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
+  FreshJuiceSize size;
+}
+
+public class FreshJuiceTest {
+  public static void main(String []args) {
+    FreshJuice juice = new FreshJuice();
+    juice.size = FreshJuice.FreshJuiceSize.LARGE;
+  }
+}
+#+END_EXAMPLE
+
+* 源文件声明规则
+1) 一个源文件中只能有一个public类
+2) 一个源文件中可以有多个非public类
+3) 源文件名称必须和public类名称保持一致
+4) 如果类定义在某个包中，那么源文件首行必须为package语句
+5) import语句需放在package语句之后
+
+* Java包
+用于对类和接口进行分类
+
+** import语句
+通过完全限定名（包名+类名）引用指定类，而Java编译器就定位到对应的源文件。
+#+BEGIN_EXAMPLE java
+import java.io.*;
+#+END_EXAMPLE
+
+* 异常处理
+
+** 异常/错误
+
+* 集合类型
+
+** Dictionary
+
+** HashMap
+
+** Hashtable

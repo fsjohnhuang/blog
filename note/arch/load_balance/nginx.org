@@ -1,0 +1,464 @@
+读音：engine x
+
+开源版： http://nginx.net
+商业版nginx plus： http://nginx.com
+第三方模块： http://wiki.nginx.org/3rdPartyModules
+
+* 特点
+1) 单个服务器支持5W并发量
+2) CPU、内存等资源消耗低
+3) 支持HTTP/IMAP/POP3/SMTP
+4) 采用异步非阻塞方式处理请求
+5) 多个连接可以对应一个进程
+6) 工作进程数和CPU核数相同
+7) 支持热部署、热加载和在线升级
+8) 模块化开发(非DSO，加入新模块要重新编译整个Nginx)
+   1) http和location这些核心模块则定义在 http://nginx.org/en/docs/http/ngx_http_core_module.html 上
+9) 支持FastCGI(LNMP)和uWSGI(Python)等协议
+
+AIO是IBM发明的
+NIO是ORACLE发明的
+
+* 功能
+1) 虚拟主机
+2) 支持keep-alive和管道连接
+3) 访问日志（支持基于日志缓冲提高其性能）
+4) url rewrite
+   - 请求的是　http://www.test.com/bbs ,让用户重定向到 http://www.test.com/forum
+5) 路径别名
+   - 定义/test/dir1的别名为dir1，那么请求/dir1/index.html时实际解析到/test/dir1/index.html上
+6) 基于IP及用户的访问控制
+7) 支持速率限制及并发数限制
+8) Memcached的GET接口
+
+* 反向代理（reverse proxy）
+根据URI将请求转发到不同功能的服务器(集群)
+#+BEGIN_EXAMPLE
+location ~* \.go$ {
+  # proxy_pass ip:port[uri]
+  # 注意：
+  # 假如请求为http://127.0.0.1/abc.go
+  # 不设置uri时，那么会将请求转发到http://123.0.0.1/abc.go
+  # 设置uri为/时，那么会将匹配的uri删掉得到http://123.0.0.1/，而这种情况时不允许使用正则匹配的，只能使用普通匹配
+  proxy_pass http://123.0.0.1;
+}
+#+END_EXAMPLE
+
+* 负载均衡
+ISO第7层的负载均衡方案
+
+** 内置均衡策略
+#+BEGIN_EXAMPLE
+http {
+  # 做负载均衡时要把这个设置为0
+  keeplive_timeout 0;
+
+  # 轮询(RR,Round-Robin)
+  # 后端宕机会自动剔除
+  upstream balance1{
+    server 123.0.0.1;
+    server 123.0.0.2;
+  }
+
+  # 加权轮询
+  upstream balance2{
+    server 123.0.0.1 weight=2; # 权重2/3
+    server 123.0.0.2 weight=1; # 权重1/3
+  }
+
+  # 源地址散列
+  upstream balance3{
+    ip_hash;
+    # max_fails 连续请求失败n次后，后续请求不转发到该后端
+    # fail_timeout max_fails条件符合后，多少秒不转发请求到后端
+    server 123.0.0.1 max_fails=1 fail_timeout=10s;
+    server 123.0.0.2;
+    server 123.0.0.3 backup; # 当其他非backup后端down或忙时则将请求转发到backup后端服务
+  }
+
+
+  # 第三方负载策略
+  # fair，按后端服务器的响应时间来分配请求，响应时间短的优先分配。但由于实际网络环境复杂，因此要慎用。
+  # url_hash，位于upstream_hash这个模块中
+
+  server {
+    listen 80;
+    server_name www.john.com;
+
+    location /abc.go {
+      proxy_pass http://balance1;
+
+      # ???
+      proxy_redirect off;
+      proxy_set_header Host $host:$server_port; # 设置转发到后端服务的请求头主机名为客户端请求头的主机名，而不是转发的主机名
+      proxy_set_header X-Real-IP $remote_addr; 
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 向后端服务传输实际客户端IP
+　　　proxy_connect_timeout 60s; # Nginx连接到后端服务的连接超时时间
+      proxy_timeout 10m; # Nginx接收后端服务响应超时时间
+
+      # 返回后端ip和响应状态码
+      add_header backendIP $upstream_addr;
+ 　　 add_header backendCode $upstream_status;
+    }
+  }
+}
+#+END_EXAMPLE
+
+** 第三方增强均衡策略
+
+*** nginx-sticky
+基于Cookie来实现会话保持均衡策略，相对ip_hash优点如下
+1) 可设置会话保持时间
+2) 若前端有其他代理服务，则仍然可以实现负载均衡
+
+缺点：
+1) 不支持Cookie生命周期续期(Tenginx的session_sticky则支持空闲超时和强制超时等更灵活的策略)
+
+注意：
+1) 不能和ip_hash一起使用
+2) 客户端第一次并发多个请求时，以最后一个响应的cookie作为转发凭证
+
+**** 安装
+#+BEGIN_SRC
+wget https://bitbucket.org/nginx-goodies/nginx-sticky-module-ng/get/master.tar.gz
+
+# nginx添加模块需要重新编译
+cd nginx-1.14
+./configure --prefix=/usr/nginx　--add-module=../nginx-sticky-module --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module
+./make
+./make install
+#+END_SRC
+
+**** 配置
+#+BEGIN_EXAMPLE
+upstream backend_with_sticky {
+    # name Cookie键名，默认为route
+　　# expires 设置cookie的生存期，默认不设置，浏览器关闭即失效，需要是大于1秒的值
+    # domain $host
+    # path /
+　　# secure 设置启用安全的cookie，需要HTTPS支持
+    # httponly 允许cookie不通过JS泄漏，没用过
+    # hash index|md5|sha1，值加密算法
+    # no_fallbackup　如果设置了这个，cookie对应的服务器宕机了，那么将会返回502（bad gateway 或者 proxy error），建议不启用
+    sticky name=route expires=1h domain=.test.com path=/ no_fallbackup hash=index;
+
+    server backend1.example.com;
+    server backend2.example.com;
+}
+
+# Tenginx的session_sticky策略
+upstream backend_with_session-sticky {
+   # mode设置cookie的模式:
+　 # insert: 在回复中本模块通过Set-Cookie头直接插入相应名称的cookie。
+　 # prefix: 不会生成新的cookie，但会在响应的cookie值前面加上特定的前缀，当浏览器带着这个有特定标识的cookie再次请求时，模块在传给后端服务前先删除加入的前缀，后端服务拿到的还是原来的cookie值，这些动作对后端透明。如：”Cookie: NAME=SRV~VALUE”。
+　 # rewrite: 使用服务端标识覆盖后端设置的用于session sticky的cookie。如果后端服务在响应头中没有设置该cookie，则认为该请求不需要进行session sticky，使用这种模式，后端服务可以控制哪些请求需要sesstion sticky，哪些请求不需要。
+   # option设置用于session sticky的cookie的选项，可设置成indirect或direct。indirect不会将session sticky的cookie传送给后端服务，该cookie对后端应用完全透明。direct则与indirect相反。
+   # maxidle设置session cookie的最长空闲的超时时间
+   # maxlife设置session cookie的最长生存期
+   # maxage是cookie的生存期。不设置时，浏览器或App关闭后就失效。下次启动时，又会随机分配后端服务器。所以如果希望该客户端的请求长期落在同一台后端服务器上，可以设置maxage。
+   # hash不论是明文还是hash值，都有固定的数目。因为hash是server的标识，所以有多少个server，就有等同数量的hash值。
+    session_sticky [cookie=name] [domain=your_domain] [path=your_path] [maxage=time] [mode=insert|rewrite|prefix] [option=indirect] [maxidle=time] [maxlife=time] [fallback=on|off] [hash=plain|md5]
+
+    server backend1.example.com;
+    server backend2.example.com;
+}
+#+END_EXAMPLE
+
+** 网络通信流程
+#+BEGIN_EXAMPLE
+client <-TCP/IP-> nginx <-TCP/IP-> web app
+#+END_EXAMPLE
+
+** Upstream服务宕机
+
+
+检测机制：
+1) Nginx将请求转发到后端服务时，才发起后端服务检测；
+2) 若后端服务有问题，则再次将请求转发到另一个健康的后端服务．
+
+
+*** IP Hash
+默认不会自动剔除，需要设置配置如下
+#+BEGIN_EXAMPLE
+upstream backend {
+    ip_hash;
+    server 192.1.2.1 down; # 设置这台后端状态为down，即不再转发这台后端
+    server 192.1.2.2;
+}
+#+END_EXAMPLE
+通过插件如health check监控和修改配置
+
+** QA
+1) 熔断机制
+
+* 安装
+#+BEGIN_SRC
+# 安装依赖
+yum install gcc openssl-devel pcre-devel zlib-devel
+
+# 创建用户组和不带家目录的用户
+groupadd -r nginx
+useradd -r -g nginx -M nginx
+
+# 源码安装
+
+# 配置
+# --prefix 用于指定nginx编译后的安装目录
+# --add-module 为添加的第三方模块，此次添加了fdfs的nginx模块
+# --with..._module 表示启用的nginx模块，如此处启用了http_ssl_module模块
+./configure --prefix=/usr/nginx　--add-module=../nginx-sticky-module --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module
+
+# 编译
+./make
+
+# 安装
+./make install
+#+END_SRC
+
+** 安装过程问题
+1) 报 ~./configure:  error: the HTTP rewrite module requires the PCRE library.~
+   - 安装 pcre-devel
+2) 报 ~SSL modules require the OpenSSL library~
+   - 安装　openssl-devel
+
+* 配置讲解
+
+** 组成
+主配置文件：/etc/nginx/conf/nginx.conf
+子配置文件： ~include conf.d/*.conf~
+
+** 变量
+1) 内置变量：由Nginx模块引入，可直接使用
+   - ~$uri~ 不含query string的以/开头的请求路径
+   - ~$document_uri~ 与 ~$uri~ 一样
+   - ~$args~ query-string
+   - ~$query_string~ 与 ~$args~ 一样
+   - ~$is_args~ 若请求中带有query_string则返回 ~?~, 否则返回空字符串
+   - ~$request_uri~ 含query-string的完整的客户端请求路径
+   - ~$request_method~ 请求方式
+   - ~$request~ 请求头部信息, 如 ~HEAD /main/index?a=1 HTTP/1.1~
+   - ~$scheme~ 协议,返回HEAD/POST/GET/PUT/DELETE等
+   - ~$request_filename~ 表示用户请求通过root或alias转换后的文件路径,默认为index.html
+   - ~$host~ 不含端口的域名/主机名/IP
+   - ~$remote_addr~ 客户端IP
+   - ~$remote_port~ 客户端端口号
+   - ~$remote_user~ 使用Auth Basic Module时定义的用户名
+   - ~$http_user_agent~ 客户端代理信息
+   - ~$hostname~ nginx所在机器的主机名n
+   - ~$server_addr~ 服务器IP
+   - ~$server_name~ 服务域名
+   - ~$server_port~ 服务端口号
+   - ~$server_protocol~ 服务器向客户端响应的协议,返回HTTP/1.1 或 HTTP/1.0
+   - ~$time_local~ 服务器本机时间
+   - ~$status~ 响应返回码
+   - ~$request_time~ TTFB
+   - ~$response_time~ nginx与upstream建立连接到关闭连接的时间
+
+
+2) 自定义变量：用户通过 ~set variable_name value;~ 定义
+3) 使用变量： ~$variable_name~
+
+** 全局配置
+对下面的http/mail/stream等都起作用，主要分为
+1) 正常运行必备的配置
+2) 优化性能的配置
+   - ~limit_rate 50k~ 限速50k,设置为0则表示没有限速
+3) 用于调试及定位问题的配置
+4) 事件驱动的配置
+
+** 示例
+#+BEGIN_EXAMPLE
+# 工作进程的启用用户，当工作进程被黑掉时也只能操作nobody用户能操作的文件而已
+user nobody;
+# 工作进程数，默认为auto，和CPU物理核数相同
+worker_processes 1;
+
+# 全局错误日志
+error_log /var/log/nginx/error.log;
+# PID文件
+pid /var/run/nginx.pid;
+
+# 工作模式和连接数上限
+events {
+  # use [kqueue|rtsig|epoll|/dev/poll|select|poll]
+  # epoll是Linux 2.6+的高性能网络I/O模型
+  # kqueue是FreeBSD的高性能I/O模型
+  # select是轮询
+  # 默认会自动选择最优的模型
+  use epoll;
+  # 单进程最大连接数（最大连接数=连接数*进程数/4），除以4是经验值来的
+  # 连接为一种文件描述符，因此受到系统文件描述相关设置的限制
+  worker_connections 1024;
+}
+
+http {
+  # 引入外部的配置项目，若设置相对路径时，则是相对于当前配置文件
+  include /etc/nginx/mime.type;
+  # 默认mime类型
+  default_type application/octet-stream;
+  # 访问日志
+  access_log /var/log/nginx/access_log;
+
+  # 零拷贝: 数据直接在内核态从源拷贝到目的文件描述符，不必经过用户态
+  sendfile on;
+  # 启用buffer: 数据先保存到buffer中，若buffer满或调用flush时才向网络写入
+  # 默认关闭，当传输大文件时可能会有问题
+  tcp_nopush on;
+  # TCP连接保持时间 
+  keepalive_timeout 65;
+  # 内容压缩
+  gzip on;
+
+  # 虚拟服务器配置节点
+  server {
+    listen 80; # 多个虚拟服务器可以指向同一个端口，然后通过server_name来区分由哪个虚拟服务器响应
+    server_name www.domain1.com;
+    
+    location / {
+      root html; # 本地目录路径，相对路径为相对于nginx的安装目录而言
+      autoindex on; # 显示目录结构
+    }
+  }
+
+  server {
+    listen 80;
+    server_name www.domain2.com;
+
+    location / {
+      root /mnt;
+      index index.html index.htm; # 默认首页
+    }
+
+    location /abc {
+      try_files / 
+    }
+    
+    error_page 500 505 /50x.html;
+
+    location = /50x.html {
+      root /mnt/50x;
+      index index.html;
+    }
+
+    # 响应静态文件
+    location ~ ^/(images|javascript|js|css|flash|media|static)/ {
+      root /var/www/virtual/htdocs;
+      expires 30d; # 缓存30天
+    }
+
+    # 查看Nginx状态
+    location /NginxStatus {
+      stub_status on;
+      access_log on;
+      auth_basic "NginxStatus";
+      auth_basic_user_file conf/htpasswd;
+    }
+
+    # 禁止访问.hxxx文件
+    location ~ /\.ht {
+      deny all;
+    }
+
+    # 允许部分IP访问
+    location /private/ {
+      deny 127.0.0.1;
+      allow 180.0.0.1;
+  
+      root /var/www/virtual/htdocs/private;
+      index index.html;
+    }
+  }
+}
+#+END_EXAMPLE
+URI: /abc/test.html
+URL: http://www.baidu.com/abc/test.html
+
+** Location请求处理匹配
+1) 通过请求的ip、端口(listen)和域名(server_name)匹配虚拟服务器
+2) 通过URI匹配location
+   1) 普通匹配
+      1) 匹配顺序与定义顺序无关
+      2) 最大前缀匹配
+      3) 从上之下匹配，匹配所有普通匹配后选择最符合最大前缀匹配的
+   2) 正则匹配
+      1) 从上至下匹配，匹配成功马上应用，不再往下匹配
+   3) 整体匹配流程
+      1) 普通匹配
+         1) 当命中 ~^~~ 和 ~=~ 匹配时就结束整个匹配流程
+         2) 其他情况为最大前缀匹配，则转入正则匹配的子流程
+      2) 正则匹配
+#+BEGIN_SRC
+location [=|~|~*|^~] URI {
+}
+#+END_SRC
+#+BEGIN_EXAMPLE
+# 匹配当前路径及子路径下的所有对象
+location URI {}
+# 精确匹配指定路径
+location = URI {}
+# 不使用正则，不再匹配后续的正则location配置
+location ^~ URI {}
+# 大小写敏感正则匹配
+location ~ URI {}
+# 大小写不敏感正则匹配
+location ~* URI {}
+#+END_EXAMPLE
+
+** Rewrite
+通过使用nginx内置变量和自定义变量,结合正则表达式和标志位实现在同一域名下的URI重写和重定向.
+使用范围: 在server/location/if块中使用.
+执行顺序:
+1) 执行server块的rewrite命令
+2) 执行location匹配
+3) 执行匹配的location中的rewrite命令
+
+*** flag
+last, 表示完成rewrite, 一般写在server和if中
+break, 停止执行当前虚拟主机后续的rewrite指令, 一般写在location中
+redirect, 返回302临时重定向
+permanent, 返回301永久重定向
+
+** index指令
+1) index指令后跟多个文件路径
+2) 多个文件路径间用空格分隔
+3) 相对路径在前绝对路径在后
+4) Nginx从左至右检查文件是否存在,若存在则发起内部重定向
+
+#+BEGIN_EXAMPLE
+index index.html index.0.html /index.htm;
+#+END_EXAMPLE
+
+
+** 文件描述符
+1) 文件描述符的数量跟内存有关（1G内存大概支持10W个文件描述符）
+   1) 查看系统支持的最大文件描述符数量 ~cat /proc/sys/fs/file-max~
+2) 每个进程也有可以打开的文件描述符数限制
+   1) 查看 ~ulimit -a~ 回显中 open files 或 file descriptors行的数字
+   2) 修改 ~ulimit -SHn 123~
+3) 异步IO会产生两个文件描述符
+
+** IO模型
+1)
+
+* 模块
+1.9.11版本后支持DSO（动态装载和卸载模块）
+
+分类：
+1) 核心模块：core module
+2) 标准模块：
+   1) HTTP：ngx_http_*
+      1) HTTP Core modules 默认功能
+      2) HTTP Optional modules 编译时指定
+   2) Mail：ngx_mail_*
+   3) Stream：ngx_stream_*　TCP/IP转发
+3) 第三方模块：
+   1) https://www.nginx.com/resources/wiki/modules/index.html
+
+
+分为handler,filter,upstream
+
+FastCGI转发请求到PHP，导致并发瓶颈在FastCGI+PHP上，因此通过ngx_lua处理动态内容提高并发数．
+
+map模块
+
+shared memory

@@ -1,0 +1,71 @@
+
+* 查看系统信息
+
+** 查看系统版本
+#+BEGIN_EXAMPLE
+# 查看内核版本
+uname -a
+
+# 查看发行版版本
+cat /etc/issue
+cat /etc/redhat-release
+#+END_EXAMPLE
+
+
+* 中断
+定义：当需要时，CPU暂停执行当前程序转而执行其他程序的机制。
+
+** 硬中断
+
+帧振器通电后以某频率振动，CPU通过计数器计算振动次数，当达到一个数量后即触发一个硬中断，CPU暂停执行当前程序，调用调度程序去执行其他程序。
+执行其他程序前，需要调用系统调度去保存内存、各级缓存数据以便后续恢复现场。
+
+
+** 软中断
+
+* 服务
+
+** System V
+#+BEGIN_SRC
+serivce <service_name> <operation>
+#+END_SRC
+1) ~<service_name>~ 为位于/etc/init.d下的脚本文件名
+2) ~<operation>~ 为 ~<service_name>~ 接受的参数
+
+#+BEGIN_SRC
+chkconfig <service_name> on
+#+END_SRC
+1) 服务启动、关闭顺序和描述位于 ~/etc/init.d/<service_name>~ 中
+#+BEGIN_EXAMPLE
+# chkconfig: - 85 15
+# description: Nginx is an HTTP(s) server, HTTP(s) reverse \
+#              proxy and IMAP/POP3 proxy server
+#+END_EXAMPLE
+
+
+* 常用命令
+
+** ps
+#+BEGIN_EXAMPLE
+# 查看进程正在在序号为多少的CPU物理核上运行
+ps axo pid,cmd,psr
+#+END_EXAMPLE
+
+** pstree
+
+** tail
+#+BEGIN_EXAMPLE
+# 监控文件内容变化，并实时输出
+tail -f <filepath>
+#+END_EXAMPLE
+
+** watch
+
+** ab
+
+** md5sum
+根据一个或多个文件内容生成MD5编码．
+
+* 定时任务
+
+** at

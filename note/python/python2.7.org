@@ -1,0 +1,559 @@
+* Python虚拟机
+1) CPython
+2) PyPy，用Python实现的虚拟机
+3) Jython，用Java实现的虚拟机
+4) IronPtython，用C#实现的虚拟机
+5) RPython，带静态类型的Python
+
+** 虚拟机运行机制
+1) 完成模块（源码或字节码）的加载和链接
+2) 将源码编译为字节码，写入内存供CPU读取
+3) 从内存中读取字节码并执行，结束后将字节码回写到硬盘（文件后缀为.pyc或.pyo）
+
+后续再次执行该脚本时，虚拟机会先检查字节码文件是否和源码一致（通过修改时间），一致则直接执行字节码。
+
+* 包机制
+Python代码按照模块(module)划分，一个模块可以是一个文件或一个包含一个或多个子模块的目录。而模块同时可以视作包(package)
+
+** 模块检索
+~str, len 和 Exception~ 等存在于全局作用域，在Python中被称为builtin scope；其他模块则通过 ~import~ 语句引入。
+
+*** import语句
+1) import语句可导入如下对象
+   1) 模块文件(.py文件)
+   2) C或C++扩展（已编译为共享库.so或DLL文件）
+   3) 包（包含多个模块）
+   4) 内建模块（使用C编译并已链接到Python解释器中）
+2) 运行原理
+   - Python解释锡会根据 ~sys.path~ 和 环境变量 ~PYTHONPATH~ 中定义的本地目录路径，按顺序依次检索模块，而 ~sys.path~ 默认第一元素为空字符串，即表示运行目录。
+   - 运行目录：执行程序时程序所在的目录，固定不变。
+   - 当前工作目录（Current Working Directory）：可通过环境变量等修改，作为读写本地文件系统中文件/目录的当前目录。
+   - 导入的模块会以模块名和模块对象对的形式保存到 ~sys.modules~ 中，因此对于多次导入同一模块时，默认情况下仅第一次导入生效。
+
+    
+
+    ~site~ 模块控制着模块检索路径设置的方式，Python虚拟机初始化时，会自动被引用。？？？？？
+
+** 模块和包的区别
+包为一个或多个模块的集合，一般压缩打包为tarball的文件形式，内含
+1) 依赖关系说明
+2) 将文件复制到标准的模块检索路径的说明（复制到 ~sys.path~ 下的某个路径）
+3) 编译说明（内含平台相关的源码，需要按需编译）
+
+** 第三方包安装
+Python Package Index(PyPi)为Python资源中心仓库。
+
+*** 安装过程
+1) 安装依赖包；
+2) 按需编译源码；
+3) 将包中模块复制到标准模块检索路径。
+
+*** Linux自带的包管理器(deb,rpm等)
+#+BEGIN_EXAMPLE bash
+# 在Ubuntu中通过apt-get安装
+sudo apt-get install python-simplejson
+#+END_EXAMPLE
+
+*** easy_install
+官网: http://peak.telecommunity.com/DevCenter/EasyInstall#downloading-and-installing-a-package
+作为setuptools的一部分，安装setuptools后会在 ~$PYTHON_HOME/Scripts~ 下生成程序入口。
+而Windows下设置环境变量 ~setx PATH "%PATH%;%PYTHON_HOME%\Scripts"~ 即可在cmd中直接调用。
+
+*特点*
+1) 只支持安装, 不提供卸载和显示已安装列表的功能
+2) 会自动安装依赖包
+3) 安装事物非原子性，即有可能只安装一半
+4) 不支持导出依赖清单(requirements.txt)，和根据依赖清单安装包
+5) 默认从 https://pypi.python.org/simple 下载第三方egg包。
+
+**** 使用
+#+BEGIN_EXAMPLE bash
+easy_install <package>  # 从源仓库安装包
+easy_install -f http://pythonpaste.org/package_index.html <package>  # 从指定源仓库安装包
+easy_install <local_package_path>  # 安装本地包
+#+END_EXAMPLE
+
+*** pip
+作为easy_install的替代品，可从源仓库搜索、下载和安装包及相关依赖包。
+Windows平台下模块安装到 ~%PYTHON_HOME%/Lib/site-packages~, Linux平台下模块安装到 ~$PYTHON_HOME/site-packages~ 下。
+
+*特性*
+1) 支持安装,卸载和显示已安装列表
+2) 支持虚拟环境(virtualenv)
+3) 支持通过requirements.txt集中管理依赖
+4) 能够安装二进制格式(.whl)
+5) 安装失败会清理干净,不会留下中间状态
+
+*Python版本对pip版本的限制*
+Python2.6只能用pip10以下的版本。
+
+**** 安装pip
+1) 通过get-pip安装
+   - get-pip.py为pip的在线安装引导程序
+
+   - 下载方式 ~wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py~
+
+   - 安装
+      #+BEGIN_EXAMPLE bash
+      # 默认安装setuptools和wheel
+      python get-pip.py
+
+      # 只安装pip
+      python get-pip.py --no-setuptools --no-wheel
+
+      # 安装指定版本的pip
+      python get-pip.py pip==9.0.2 wheel==0.30.0 setuptools=28.8.0
+
+      # 从本地/local/copies目录安装pip、setuptools和wheel
+      python get-pip.py --no-index --find-links=/local/copies
+
+      # 设置网络代理
+      python get-pip.py --proxy="http://[user:passwd@]proxy.server:port"
+      #+END_EXAMPLE
+
+   - 上述操作会将pip、setuptools和wheel安装到python对应的 ~$PYTHON_HOME/site-packages~ 下，若存在多个版本的Python，那么通过get-pip方式安装可控性更高。
+
+   - Windows平台则通过源码方式安装，下载地址 https://pypi.org/project/pip/#downloads
+
+2) 通过easy_install安装
+
+   - 安装
+      #+BEGIN_EXAMPLE
+      sudo easy_install pip
+      #+END_EXAMPLE
+
+   - QA-若执行pip报"AttributeError: 'module' object has no attribute 'SSL_ST_INIT'"则执行
+     #+BEGIN_EXAMPLE
+     sudo easy_install --upgrade pip
+
+     # 若执行上述语句后，执行pip还是报错，则执行如下
+     rm -rf $PYTHON_HOME/dist-packages/OpenSSL
+     rm -rf $PYTHON_HOME/dist-packages/pyOpenSSL-xx.xx.xx.egg-info
+     sudo pip install pyopenssl
+     #+END_EXAMPLE
+
+3) 通过Linux自带的包管理器安装
+   #+BEGIN_EXAMPLE
+   yum install python-pip
+   apt install python 
+   #+END_EXAMPLE
+
+**** 使用pip
+#+BEGIN_EXAMPLE bash
+pip list  # 列出所有已安装的包
+pip show <package>  # 显示某个已安装的包的详细信息
+pip check <package>  # 显示某个已安装的包的依赖信息
+
+pip search <package>  # 从源仓库搜索包
+
+pip install <package>  # 从源仓库安装包
+pip install <package>==<version>  # 从源仓库安装指定版本的包
+pip install <package> -i <repo_source_url>  # 从指定源仓库安装包
+pip install <local_package_path>  # 安装本地包
+pip install -r requirements.txt  # 根据依赖清单，从源仓库安装指定版本的包
+pip install --no-index -f file://`pwd` -r requirements.txt  # 根据依赖清单，从本地文件系统安装指定版本的包
+pip install -U <package>   # 从源仓库升级包
+
+# 从CVS中安装包
+sudo yum install git-core subversion  # 先安装CVS工具
+pip install git+http://path/to/git-repo#egg=<package>  # 从git仓库中安装包
+pip install git+git://path/to/git-repo#egg=<package>  # 从git仓库中安装包
+pip install git+file:///path/to/git-repo  # 从本地git仓库中安装包
+pip install svn+http://path/to/git-repo#egg=<package>  # 从svn仓库中安装包
+
+pip install --user <package>  # 将包安装到~/.local/下，而不是$PYTHON_HOME/site-packages/下
+
+pip uninstall <package>  # 卸载
+
+pip freeze > requirements.txt  # 导出依赖清单
+
+pip download <package>  # 从源仓库下载包
+pip install --download=`pwd` -r requirements.txt  # 根据依赖清单，从源仓库下载包，下载的多以.whl文件为主
+#+END_EXAMPLE
+
+**** 配置pip
+1) 配置源仓库地
+   #+BEGIN_EXAMPLE bash
+   # Windows下在%APPDATA%pip\pip.ini文件中写入
+   #  Linux下在~/.pip/pip.conf文件中写入
+   [global]
+   index-url=https://pypi/douban.com/simple/
+   #+END_EXAMPLE
+2) 命令补全
+   #+BEGIN_EXAMPLE bash
+   pip completion --bash >> ~/.profile
+   source ~/.profile
+   #+END_EXAMPLE
+
+
+
+   egg文件是经过压缩的Python包，其中包含源码和元数据。pip安装包前，会先构建该包的egg信息，而 ~setup.py~ 文件中的 ~name~ 是项目名称也是egg名称。
+
+   对于Python包中包含的或依赖的c/c++代码，则最好用Linux自带的包管理器来安装；然后通过pip安装Python包剩余部分来使用。
+   若要通过pip安装c/c++代码，那么要先安装编译环境
+   #+BEGIN_EXAMPLE bash
+   sudo apt-get install build-essential
+   sudo aptitude install python-dev-all python-dev python2.X-dev
+   #+END_EXAMPLE
+   不是所有c/c++代码都可以通过pip安装的。
+
+*** 从源码安装distuitls打包的包
+#+BEGIN_EXAMPLE
+python setup.py install
+#+END_EXAMPLE
+
+** 打包和部署
+
+*** setuptools(不支持Python3.x)
+官网： https://pypi.org/project/setuptools/
+为PEAK(Python Enterprise Application Kit)开发的Python的基于distutils工具的增强工具，提供依赖项管理机制，更方便地创建和发布Egg包。
+
+Egg文件实质上就是Zip文件
+
+
+*** distribute(支持Python3.x)
+
+* .pyc、.pyo和.pyd文件
+.pyc为.py的字节码(byte code)文件，内部保存的是PyCodeObject的序列化信息，不是二进制代码。
+.pyd为Python的动态链接库文件。
+
+注意：
+1) .pyc会保存在源码相同的目录下；
+2) .pyc的内容与Python版本有关，因此Python2.4生成的.pyc不能在Python2.5上运行；
+3) .pyo是优化版的.pyc文件，体积更小。
+
+** 禁止生成.pyc文件
+当仅有一个py文件时，并不会产生.pyc文件。
+
+1) 方式1 ~export PYTHONDONTWRITEBYTECODE=1~
+2) 方式2 通过 ~python -B 脚本.py~
+3) 方式3 在导入的地方写
+   #+BEGIN_EXAMPLE python
+   import sys
+
+   sys.dont_write_bytecode = True
+   #+END_EXAMPLE
+
+** 手动生成.pyc文件
+
+#+BEGIN_EXAMPLE python
+import py_compile
+import compileall
+
+# 对单个源码文件生成字节码文件
+"""
+Args:
+    file: 源码文件路径
+    cfile: 目标文件路径
+    dfile: 编译失败时，将报错信息中的名字'file'替换为'dfile'
+    doraise: 布尔值，True当编译失败时则抛出PyCompileError，False则输出到sys.stderr
+"""
+py_compile.compile('/path/to/source.py')
+
+# 对目录下所有源码文件生成字节码文件
+"""
+Args:
+    dir: 目录路径
+    maxlevels: 递归最大层数
+    ddir: 路径前缀，编译每个文件时会添加到文件路径前，从而改变tracebacks和其他相关消息
+    force: 布尔值，表示无论是否存在最新的.pyc也进行编译
+    rx: 正则表达式，表示排除编译的路径
+    quiet: 布尔值，表示不打印编译过程中的信息
+"""
+compileall.compile_dir('/path/to/dir')
+#+END_EXAMPLE
+
+** 生成.pyo文件
+~python -O -m py_compile /path/to/source.py~ ，将.pyc优化为.pyo文件。
+~python -OO -m py_compile /path/to/source.py~ ，将.pyc优化移除了文档字符串的.pyo文件。
+* 异常处理
+Python的错误分为语法错误 和 异常，语法错误是解析器报的错误，而异常是虚拟机运行时报的错误。
+BaseException为所有异常的基类，Exception为常规异常的基类。
+
+** 捕获异常
+ #+BEGIN_EXAMPLE python
+ try:
+     <语句>
+ except <异常类>:
+     <语句>
+ except (<异常类1>, <异常类2>):
+     # 捕获多种异常
+     <语句>
+ except <异常类>, <异常实例>:
+     <语句>
+ else:
+     <不抛出异常时执行的语句>
+ finally:
+     <总会执行的语句>
+ #+END_EXAMPLE
+
+** 自定义异常
+#+BEGIN_EXAMPLE python
+class MyError(Exception):
+    def __init__(self, *args):
+        self.args = args
+   
+    def __str__(self):
+        return repr(self.args)
+
+# 抛出异常
+raise MyError("arg1", "arg2")
+#+END_EXAMPLE
+
+** with语句预定义捕获处理异常
+Python2.5开始引入with关键字语句块。
+关键字with后仅跟 *上下文管理器实例* ，异常捕获处理逻辑均定义在 *上下文管理器* 中。
+
+*** 使用示例
+ #+BEGIN_EXAMPLE python
+ # try...except...finally语句
+ file = None
+ content = ''
+ try:
+     file = open('/path/to/file', 'r')
+     content = file.read()
+ except Exception:
+     pass
+ finally:
+     if file:
+         file.close()
+
+ # with语句
+ content = ''
+ with open('/path/to/file', 'r') as file:
+     content = file.read()
+ #+END_EXAMPLE
+
+*** 自定义上下文管理器
+上下文管理器就是遵循了上下文管理协议（Context Management Protocol）的类， 即实现了 ~__enter__~ 和 ~__exit__~ 方法的对象。
+
+#+BEGIN_EXAMPLE python
+import sys
+import cx_Oracle
+
+class OracleContext(object):
+    def __init__(self, uri, schema, passwd, err={}):
+        self.connstr = '%s/%s@%s' % (schema, passwd, uri)
+        self.err = err
+        self.err['value'] = None
+
+    def __enter__(self,):
+    """进入with语句块时会调用上下文管理器实例的__enter__函数，并将其返回值绑定到as子句后的变量上。
+  
+    返回值为列表或元组时，as子句为 as (a,b,c) 进行解构
+    """
+        self.conn = cx_Oracle.connect(
+            self.connstr, encoding='utf-8', nencoding='utf-8')
+
+        return self.conn
+
+    def __exit__(self, ex_type, ex_value, ex_traceback):
+    """退出with语句块时会掉用上下文管理器实例的__exit__函数，无论with语句块是否抛出异常。
+
+    若with语句块中没有抛出异常，或者执行break/continue/return语句，那么以None作为参数调用context_manager.__exit__(None, None, None)
+    若抛出异常则会以sys.exc_info()的作为参数调用context_manager.__exit__(*sys.exc_info())
+
+    Args:
+        ex_type: 异常类型
+        ex_value: 异常实例
+        ex_traceback: 异常发生时的调用堆栈信息
+
+    Returns:
+        当with语句块中抛出异常时，返回True表示忽略异常，False则重新抛出异常
+    """
+        if ex_type:
+             self.err['value'] = str(ex_value)
+        
+        if self.conn:
+            if ex_type:
+                self.conn.rollback()
+            else:
+                self.conn.commit()
+
+            self.conn.close()
+
+        return True
+
+# 使用
+rows = []
+with OracleContext('','','') as conn:
+    cursor = conn.cursor()
+    cursor = cursor.execute('select 1 from dual')
+    rows = cursor.fetchall()
+
+# 虚拟机会将上述语句翻译为
+rows = []
+context_manager = OracleContext('', '', '')
+exit = type(context_manager).__exit__
+conn = type(context_manager).__enter__(context_manager)
+try:
+    cursor = conn.cursor()
+    cursor = cursor.execute('select 1 from dual')
+    rows = cursor.fetchall()
+except:
+    if not exit(context_manager, *sys.exc_info()):
+        raise
+else:
+    exit(context_manager, None, None, None)
+#+END_EXAMPLE
+
+*** 通过contextlib模块定义上下文管理器
+contextlib模块提供一些帮助方法和修饰器去定义用于with语句块的对象。
+
+1) contextmanager修饰符
+#+BEGIN_EXAMPLE python
+from contextlib import (
+    contextmanager,
+)
+import cx_Oracle
+
+@contextmanager
+function db_transaction(connstr):
+    """yield前的代码作为__enter__方法，yield后的代码作为__exit__方法。
+    with语句块的异常将通过yield语句传递到生成器函数中。
+    """
+    conn = cx_Oracle(connstr)
+    try:
+        yield conn
+    except:
+        conn.rollback()
+    else:
+        conn.commit()
+    finally:
+        conn.close()      
+
+rows = []
+with db_transaction('') as conn:
+    cursor = conn.cursor()
+    cursor = cursor.execute('select 1 from dual')
+    rows = cursor.fetchall()
+#+END_EXAMPLE
+
+2) nested函数
+语法糖，避免嵌套with语句块
+#+BEGIN_EXAMPLE python
+from contextlib import nested
+
+with nestsed(X(),Y(),Z()) as (x, y, z):
+    pass
+
+# 相当于
+with X() as x:
+    with Y() as y:
+        with Z() as z:
+            pass
+#+END_EXAMPLE
+
+3) closing上下文管理器
+#+BEGIN_SOURCE python
+class closing(object):
+    def __init__(self, thing):
+        self.thing = thing
+
+    def __enter__(self,):
+        return self.thing
+
+    def __exit__(self, *exc_info):
+        self.thing.close()
+#+END_SOURCE
+
+* 迭代器/游标
+当迭代器取完数据后，再次尝试取元素时会抛出 ~StopIteration~ 异常。
+
+** 可迭代对象
+1) 列表
+2) 元组
+3) 字符串
+4) 字典
+5) 文件
+
+** 操作
+#+BEGIN_EXAMPLE python
+# 迭代器
+a = [1,2,3,4,5]
+ia = iter(a)  # iter函数会将可迭代对象转换为迭代器
+
+print(ia.next())  # 1
+print(next(ia))   # 2
+for x in ia:
+    print(x)      # 3,4,5
+
+# 生成器函数
+def gen():
+  yield 1
+  yield 2
+  yield 3
+  yield 4
+  yield 5
+
+ib = gen()
+print(ib.next())  # 1
+print(next(ib))   # 2
+for x in ib:
+    print(x)      # 3,4,5
+
+# 生成器表达式
+ic = (i for i in range(1,6))
+print(ic.next())  # 1
+print(next(ic))   # 2
+for x in ic:
+    print(x)      # 3,4,5
+#+END_EXAMPLE
+
+* 修饰器
+面向切面编程，对原有函数进行增强。
+
+#+BEGIN_EXAMPLE python
+from functools import wraps
+
+def add1_missing_attrs(func):
+    """定义个普通的修饰器
+    """
+    def inner(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return result + 1
+
+    return inner
+
+def add1_leaving_attrs(func):
+    """由于装饰器实际是高阶函数，因此原函数的__name__,__doc__和__module__等函数特性会被外层函数替换掉， 通过functools.wraps复制原函数特性到外层函数特性。
+    """
+    @wraps(func)
+    def inner(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return result + 1
+
+    return inner    
+
+def addx(x):
+    def tmp(func):
+        def inner(*args, **kwargs):
+            return x + func(*args, **kwargs)
+        
+        return inner
+    
+    return tmp
+
+@add1_missing_attrs
+def add2(n):
+    return n + 1
+
+@add1_leaving_attrs
+def add3(n):
+    return n + 2
+
+@addx(4)
+def add4(n):
+    return n
+#+END_EXAMPLE
+
+* 面向对象编程
+
+* 日志
+
+* 兼容性开发
+#+BEGIN_EXAMPLE python
+from __future__ import (
+    with_statement,  # Python2.5中引入才能使用with statement
+)
+#+END_EXAMPLE

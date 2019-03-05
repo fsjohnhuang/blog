@@ -1,0 +1,7 @@
+* 卡死
+在bin/idea64.vmoptions中修改配置
+#+BEGIN_EXAMPLE
+-Xms128m
+-Xmx2048m  # max heap size 设置为2G+
+-XX:MaxPermSize=1024m 
+#+END_EXAMPLE

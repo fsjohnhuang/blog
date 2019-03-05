@@ -1,6 +1,6 @@
 baseurl = "/"
 languageCode = "en-us"
-title = "Hugo Future Imperfect"
+title = "^_^肥仔John"
 theme = "hugo-future-imperfect"
 preserveTaxonomyNames = true
 paginate = 3
@@ -13,9 +13,9 @@ canonifyURLs = true
 
 [params]
   # Sets the meta tag description
-  description          = "HTML5 UP theme, Future Imperfect with some extra goodies, ported by Julio Pescador. Powered by Hugo"
+  description          = "^_^肥仔John的博客, fsjohnhuang blog, tech, javascript, css, css3, html, html5, vue, react, python, java, c#, devops, jenkins"
   # Sets the navbarTitle that appears in the top left of the navigation bar
-  navbarTitle          = "Future Imperfect"
+  navbarTitle          = "^_^肥仔John"
   # Sets where "View More Posts" links
   viewMorePostLink     = "/blog/"
 
@@ -87,9 +87,9 @@ canonifyURLs = true
   # These are optional params related to the sidebar. They are recommended, but not
   # required for proper functionality. HTML is supported within the params.
 [params.intro]
-  header    = "Hugo Future Imperfect"
+  header    = "^_^肥仔John"
 
-  paragraph = "Another fine responsive site template by <a href=\"http://html5up.net\">HTML5 UP</a>. Ported by Julio Pescador with some extra goodies <i class='fa fa-hand-peace-o'></i>"
+  paragraph = "临栈工程师@Midea/QMS<br>阿里云栖社区认证专家<br><a href='https://segmentfault.com/bookmark/1230000015597754'>《CSS魔法堂》专题作者</a>"
 
   about     = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent tellus lacus, auctor vehicula molestie quis, tempor quis velit. Quisque in quam ac leo efficitur vulputate. Phasellus ullamcorper aliquam sodales. Maecenas sit amet condimentum ipsum. Proin sit amet ligula elit. Mauris."
 
@@ -102,7 +102,7 @@ canonifyURLs = true
     # Sets Image to be Future Imperfect's hexagon
     imperfect = true
     width     = ""
-    alt       = "Hugo Future Imperfect"
+    alt       = "^_^肥仔John"
 
 [params.postAmount]
 # Sets the number of recent posts to show in the sidebar. The default value is 5.
@@ -151,47 +151,47 @@ canonifyURLs = true
 # and socialAppearAtBottom.
 [social]
   # Coding Communities
-  github           = "jpescador/hugo-future-imperfect"
-  gitlab           = ""
-  stackoverflow    = "" # User Number
-  bitbucket        = ""
-  jsfiddle         = ""
-  codepen          = ""
+  github           = "fsjohnhuang"
+  #gitlab           = ""
+  #stackoverflow    = "" # User Number
+  #bitbucket        = ""
+  #jsfiddle         = ""
+  #codepen          = ""
   # Visual Art Communities
-  deviantart       = ""
-  flickr           = "example"
-  behance          = ""
-  dribbble         = ""
+  #deviantart       = ""
+  #flickr           = "example"
+  #behance          = ""
+  #dribbble         = ""
   # Publishing Communities
-  wordpress        = ""
-  medium           = ""
+  #wordpress        = ""
+  #medium           = ""
   # Professional/Business Oriented Communities
-  linkedin         = "example"
-  linkedin_company = "examplebusiness"
-  foursquare       = ""
-  xing             = ""
-  slideshare       = ""
+  #linkedin         = "example"
+  #linkedin_company = "examplebusiness"
+  #foursquare       = ""
+  #xing             = ""
+  #slideshare       = ""
   # Social Networks
-  facebook         = "example"
-  googleplus       = ""
-  reddit           = "example"
-  quora            = ""
-  youtube          = ""
-  vimeo            = ""
-  whatsapp         = "" # WhatsApp Number
+  #facebook         = "example"
+  #googleplus       = ""
+  #reddit           = "example"
+  #quora            = ""
+  #youtube          = ""
+  #vimeo            = ""
+  #whatsapp         = "" # WhatsApp Number
     # WeChat and QQ need testing.
-    wechat         = ""
-    qq             = "" # User ID Number
-  instagram        = "example"
-  tumblr           = ""
-  twitter          = "example"
-  skype            = ""
-  snapchat         = ""
-  pinterest        = "example"
-  telegram         = "example"
-  vine             = ""
-  googlescholar    = ""
-  orcid            = ""
-  researchgate     = "example"
+    wechat         = "fsjohnhuang"
+    qq             = "87052635" # User ID Number
+  #instagram        = "example"
+  #tumblr           = ""
+  #twitter          = "example"
+  #skype            = ""
+  #snapchat         = ""
+  #pinterest        = "example"
+  #telegram         = "example"
+  #vine             = ""
+  #googlescholar    = ""
+  #orcid            = ""
+  #researchgate     = "example"
   # Email
-  email            = "example"
+  email            = "fsjohnhuang@hotmail.com"
