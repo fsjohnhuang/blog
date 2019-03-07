@@ -455,7 +455,17 @@ class closing(object):
 
     def __exit__(self, *exc_info):
         self.thing.close()
-#+END_SOURCE
+#+END
+
+** 抛出FileNotFoundError
+FileNotFoundError是OSError的子类
+#+BEGIN_EXAMPLE
+import errno
+import os
+
+filename = '/path/to/file'
+raise FileNotFoundError(errno.ENOENT, os.stderror(errno.ENOENT), filename)
+#+END_EXAMPLE
 
 * 迭代器/游标
 当迭代器取完数据后，再次尝试取元素时会抛出 ~StopIteration~ 异常。
@@ -500,6 +510,29 @@ for x in ic:
     print(x)      # 3,4,5
 #+END_EXAMPLE
 
+** 自定义迭代器
+迭代器就是实现了next方法的类
+#+BEGIN_EXAMPLE python
+class Text(object):
+    def __init__(self, text):
+        self.__cursor = 0
+        self.__text = text
+
+    def __iter__(self,):
+        return self
+
+    def next(self,):
+        if self.__cursor == len(self.__text):
+            raise StopIteration()
+        else:
+            i = self.__cursor
+            self.__cursor += 1
+            return self.__text[i]
+
+for char in Text('abcd'):
+    print(char)
+#+END_EXAMPLE
+
 * 修饰器
 面向切面编程，对原有函数进行增强。
 
@@ -527,6 +560,7 @@ def add1_leaving_attrs(func):
 
 def addx(x):
     def tmp(func):
+        @wraps(func)
         def inner(*args, **kwargs):
             return x + func(*args, **kwargs)
         
@@ -549,7 +583,665 @@ def add4(n):
 
 * 面向对象编程
 
+~__~ 开头为private属性或方法，只在当前类可见。但实例可以通过后门访问，形如 ~obj._className__attrName~
+~_~ 开头为protected属性或方法，只能当前类和派生类可见。但语言上没有限制访问。
+~__foo__~ 为特殊方法，一般是系统定义名字。
+
+** 经典类和新式类
+类定义分为经典类和新式类(new-style classes)， ~super~ 和 ~property~ 等都只在新式类中生效，而且Python3只支持新式类，因此建议均使用新式类。
+#+BEGIN_EXAMPLE python
+# 经典类
+class OldStyleClass:
+    pass
+
+# 新式类
+class NewStyleClass(object):
+    pass
+#+END_EXAMPLE
+
+** 定义类
+Python解释器将类定义语句解释为元组后作为入参调用 ~type~ 方法来创建出对应的class对象。
+
+#+BEGIN_EXAMPLE python
+ class Person(object):
+     def __init__(self, name):
+         """构造函数
+         """
+         self.__name = name  # private实例属性
+
+     def get_name(self,):
+         """实例方法
+         """
+         return self.__name
+
+ class VIP(object):
+     def __init__(self,):
+         self.isvip = True
+
+ class Employee(Person, VIP):
+     ”“”支持多重继承，因此一般采用Mixin模式。
+     “”“
+
+     empCount = 0  # 类属性，所有实例共享
+
+     def __init__(self, name, position):
+         """构造函数。
+         
+         若派生类没有写构造函数，那么实例化时会直接调用父类的构造函数；
+         若派生类写了构造函数，那么必须显示调用父类的构造函数才能可以。
+         """
+         super(Employee, self).__init__(name)  # 调用父类构造函数
+         self.position = position  # 实例属性
+         self.__class__.empCount += 1  # 通过实例的__class__特性，获取其所属的类型
+
+     @property
+     def age(self):
+         """通过property修饰符定义属性getter。
+         此时会自动创建age.setter修饰符，可以用于定义对应的属性setter；
+         自动创建age.deleter修饰符，可以用于定义对应的属性deleter，当调用del 和delattr时会调用属性deleter。
+         """
+         return self.__age
+
+     @age.setter
+     def age(self, value):
+         """定义属性setter。
+         """
+         self.__age = value
+
+     @age.deleter
+     def age(self):
+         """定义属性deleter。
+         """
+         del self.__age
+
+     def __del__(self,):
+         """析构函数，进行垃圾回收实例时执行。
+         """
+         self.__class__.empCount -= 1
+
+     def __repr__(self,):
+         """返回供解释器读取的字符串描述。一般在REPL中显示实例时调用。
+         如调用repr(obj)则调用obj.__repr__()
+         """
+         return '<Employee %s>' % self.name
+
+     def __iter__(self,):
+         """让实例可用于for...in循环语句中。如 for i in obj:
+         
+         Returns: 迭代器
+         """
+         return [1,2,3]
+
+     def __getitem__(self, n):
+         """为实例提供如list/tuple/dict的操作方式，如obj[1],obj[1:3],obj['name']
+         """
+         if isinstance(n, int):
+            return [1,2,3][n]
+
+         if isinstance(n, slice):
+            start = n.start
+            end = n.end
+            return [3,2,1][start:end]
+
+
+     def __setitem__(self, n, value):
+         """为实例提供如list/tuple/dict的操作方式，如obj[1],obj[1:3],obj['name']
+         """
+         pass
+
+     def __delitem__(self, n):
+         """为实例提供如list/tuple/dict的操作方式，如obj[1],obj[1:3],obj['name']
+         """
+         pass
+
+     def __getattr__(self, name):
+         """当调用实例不存在的属性和方法时，默认会抛出AttributeError。而定义__getattr__方法后，当调用不存在的属性和方式时会调用该方法，实现动态调用。
+         """
+         if name == 'sex':
+             return self.__sex
+         elif name == 'set_sex':
+             def __(x):
+                 self.__sex = x
+
+             return __
+        
+         raise AttributeError('\Employee\' object has no attribute \'%s\'' % name)
+
+     def __setattr__(self, key, value):
+         """设置实例的属性。
+         """
+         pass
+
+     def __str__(self,):
+         """返回供解释器读取的字符串描述。
+         如调用str(obj)则调用obj.__str__()
+         如调用print(obj)则调用print(obj.__str__())
+         """
+         return 'Employee %s in %s' % (self.name, self.position)
+
+     def __cmp__(self, x):
+         """对象比较。
+         如调用cmp(obj, x)
+         """
+         return cmp(obj.name, x.name)
+
+     def __call__(self, *args, **kwargs):
+         """以函数方式调用实例时执行。如 obj(1,2,3)
+         """
+         print("obj(1,2,3)")
+
+     def __len__(self,):
+         """实例作为len函数入参时调用
+         """
+         return len(self.name)
+
+     def __add__(self, x):
+         """运算符+重载。
+         如 obj1 + obj2
+         """
+         return self.__class__(self.name + x.name, 'joke')
+
+     def get_name(self,):
+         """实例方法。
+         第一个入参必须为self。
+         """
+         return self.name
+
+     @staticmethod
+     def get_company():
+         """静态方法。
+         入参任意。
+         """
+         return 'whatever'
+
+     @classmethod
+     def get_company_fullname(cls):
+         """类方法。
+         第一个入参必须为cls。
+         """
+         return '%s company.' % cls.get_company()
+#+END_EXAMPLE
+
+** 多继承和调用父类方法
+从Python2.2开始引入super类，super对象在搜索命名空间时是基于类实例的mro进行。
+
+*** 什么是MRO
+#+BEGIN_EXAMPLE c
+/* mro就是Method Resolution Order
+ * Tuple containing the expanded set of base types, starting with the type itself and ending with object, in Method Resolution Order.
+ * This field is not inherited; it is calculated fresh by PyType_Ready().
+ */
+PyObject* tp_mro
+#+END_EXAMPLE
+在python中可通过 ~self.__class__.mro()~ 查看。
+
+*** super签名
+#+BEGIN_EXAMPLE python
+"""返回指定类型的父类。
+Args:
+    type: 类型
+    object-or-type: 可选入参。
+                    1. 若为None则返回值非绑定的super对象
+                    2. 若为实例则必须符合isinstance(obj, type)；
+                    3. 若为类型则必须符合issubclass(type2, type)。
+
+Returns: super object
+"""
+super(type[, object-or-type])
+#+END_EXAMPLE
+
+*** 示例
+#+BEGIN_EXAMPLE python
+class A(object):
+    def __init__(self):
+        print('A')
+        print(type(self))
+        print(self.__class__.mro())
+        super(A, self).__init__()
+
+class B(A):
+    def __init__(self):
+        print('B')
+        super(A, self).__init__()
+
+class C(object):
+    def __init__(self):
+        print('C')
+
+class D(B, C):
+    def __init__(self):
+        print('D')
+        super(D, self).__init__()
+
+# 回显如下
+"""
+D
+B
+A
+<class '__main__.D'>
+[<class '__main__.D'>, <class '__main__.B'>, <class '__main__.A'>, <class '__main__.C'>, <type 'object'>]
+C
+"""
+#+END_EXAMPLE
+Q：为什么在类型A中调用 ~super(A, self).__init__()~ 却调用了类型C的 ~__init__~ 方法？
+A：因为super进行方法搜索时会基于当前对象所属类的mro，而 ~super(A, self)~ 找到就是 ~<class '__main__.C'>~ ；另外，mro是按深度遍历的算法构建的。
+
+** 运行时扩展实例和类
+由于Python为动态语句因此很容易在运行时为实例和类追加属性和方法。
+
+#+BEGIN_EXAMPLE python
+class Person(object):
+    pass
+
+# 新增类属性
+Person.age = None
+# 新增实例属性
+john = Person()
+john.job = 'developer'
+
+from types import MethodType
+def get_job(self):
+    return self.job
+
+# 新增对单个实例有效的实例方法
+john.get_job = MethodType(get_job, john, Person)
+
+# 新增所有类实例有效的实例方法
+Person.get_job = MethodType(get_job, None, Person)
+
+# 限制当前类实例可扩展的属性（不限制派生类）
+class Person(object):
+    __slots__ = ('age', 'name')
+
+mary = Person()
+mary.age = 1  # 正常
+mary.sex = 'female'  # 抛出AttributeError异常
+#+END_EXAMPLE
+
+** 操作属性
+#+BEGIN_EXAMPLE
+john = Employee('john', 'TL')
+
+john.age = 32  # 设置/新增属性
+print(job.age) # 访问属性
+del john.age   # 删除属性
+
+hasattr(john, 'addr')  # 检查是否含某个属性
+getattr(john, 'addr', 'default value')  # 获取某个属性值，可设置默认值
+setattr(john, 'addr', 'random')  # 设置/新增属性
+delattr(john, 'addr')  # 删除属性
+#+END_EXAMPLE
+
+** 内置类属性
+#+BEGIN_EXAMPLE
+john = Employee('john', 'TL')
+john.__dict__ : 类的属性（包含一个字典，由类的数据属性组成）
+john.__doc__ :类的文档字符串
+john.__name__: 类名
+john.__module__: 类定义所在的模块（类的全名是'__main__.className'，如果类位于一个导入模块mymod中，那么className.__module__ 等于 mymod）
+john.__bases__ : 类的所有父类构成元素（包含了一个由所有父类组成的元组）
+#+END_EXAMPLE
+
+** 派生类/基类帮助方法
+#+BEGIN_EXAMPLE
+issubclass(sub, sup)，返回布尔值，表示sub是否为sup的派生类
+isinstance(obj, Class)，返回布尔值，表示obj是否为Class的实例
+type(obj)，返回实例所属类，和类所属的类型类
+dir(obj)，返回实例的所有公开属性和方法（包含特殊方法）
+callable(obj)，返回布尔值，判断该对象是否为Callable对象，即是否实现了__call__方法
+#+END_EXAMPLE
+
+** 通过__getattr__实现动态SDK
+#+BEGIN_EXAMPLE python
+class SDK(object):
+    """1. API为/users/:users/status对应的SDK为SDK().users('john').status。
+       2. API为/users/status对应的SDK为SDK().users.status。
+    """
+    params = ('users')
+
+    def __init__(self, path=''):
+        self.__path = path
+
+    def __getattr__(self, seg):
+        if params.count(seg) > 0:
+            return lambda v: SDK('%s/%s/%s' % (self.__path, seg, v))
+        else:
+            return SDK('%s/%s' % (self.__path, seg))
+
+    def __str__(self,):
+        return self.__path
+
+    def __repr__(self,):
+        return '<SDK %s>' % self.__path
+#+END_EXAMPLE
+
+** 通过type动态创建class对象
+#+BEGIN_EXAMPLE python
+"""
+Args:
+    class: 类名称
+    bases: 元组类型，父类列表
+    attrs: 字典类型，属性和方法
+"""
+A = type('A', (object,), {"age": 1,
+                          "get_age": lambda self: self.age})
+a = A()
+print(a.age)
+a.age += 1
+print(a.get_age())
+#+END_EXAMPLE
+
+** 通过metaclass实现ORM框架
+metaclass为类型类,用于定义创建类的行为。
+ORM框架中具体的数据模型由框架使用后期制定，因此要在ORM框架中获取数据模型属性再映射到数据表，若通过反射方式则需要在save、delete或显示调用映射等才能获取，但通过metaclass则在定义数据模型时会提取。
+
+*** 框架使用者
+#+BEGIN_EXAMPLE python
+class User(Model):
+    id = StringField('id')
+    name = StringField('username')
+
+user = User(id='1', name='john')
+user.save()
+#+END_EXAMPLE
+
+*** 框架
+#+BEGIN_EXAMPLE python
+from pprint import pprint
+
+class ModelMetaclass(type):
+    """自定义类型类。
+    必须继承type，并且约定俗成名称以Metaclass结尾。
+    """
+    def __new__(cls, name, bases, attrs):
+        """创建类型时会调用__new__方法来创建。
+        
+        Args:
+            cls: 准备创建的类对象
+            name: 类名称
+            bases: 元组类型，父类列表
+            attrs: 字典类型，属性和方法
+
+        Returns: 类型
+        """
+        if name == 'Model':
+            return type.__new__(cls, name, bases, attrs)
+        
+        mappings = dict()
+        for k, v in attrs.iteritems():
+            if isinstance(v, Field):
+                mappings[k] = v
+                pprint('Found mapping: %s ==> %s' % (k, v))
+
+        for k in mappings.iterkeys():
+            attrs.pop(k)
+
+        attrs['__table__'] = name
+        attrs['__mappings__'] = mappings
+        return type.__new__(cls, name, bases, attrs)
+
+
+class Model(dict):
+    __metaclass__ = ModelMetaclass
+
+    def save(self,):
+        tpl_sql = 'insert into %s(%s) values(%s)'
+ 
+        fields = []
+        params = []
+        args = []
+        for k, v in self.__mappings__.iteritems():
+            fields.append(v.name)
+            params.append('?')
+            args.append(getattr(self, k, None))
+
+        sql = tpl_sql = % (self.__table__, ','.join(fields), ','.join(params))
+        pprint('SQL: %s' % sql)
+        pprint('ARGS: %s' % str(args))
+
+
+class Field(object):
+    def __init__(self, name):
+        self.name = name
+#+END_EXAMPLE
+
+* 垃圾回收机制
+引用计数 + 循环垃圾收集器
+
 * 日志
+官网： https://docs.python.org/2/library/logging.html
+
+** 概念
+日志类型：诊断日志、审计日志。
+诊断日志：记录与应用操作相关的日志，如异常日志（用于线上排查问题）
+审计日志：为商业分析而记录的日志，如Apache的访问记录日志（统计PV、UV和最热资源、出错率等信息）
+
+Logger，调用的接口，自身带日志级别特性，一个Logger可对应0~N个Handler；
+LogRecord，将从Logger得到的日志传递到Handler；
+Handler，用于配置日志输出地点和保存时间，自身带日志级别特性，一个Handler对应一个Formatter；
+Filter，用于配置输出日志的级别（debug,info,warn,error和critical）；
+Formatter，用于配置日志的输出格式。
+默认输出格式： ~<日志级别>:<Logger实例名称>:<日志消息内容>~ ，如 ~WARNING:root:warn message~ 。
+
+日志级别
+1) notset，最低日志级别；
+2) debug，详细信息，只有开发调试时需要关注；
+3) info，证明事件按预期工作，突出强调应用的运行过程；
+4) warn/warning，发生可容忍的错误，但需要修复；
+5) error，严重错误，但程序可以继续运行，需要马上修复；
+6) critical/fatal，严重错误，程序已经不能继续运行。
+
+logging日志记录流程
+1) 判断当前Logger的日志级别是否可用，不可用则不输出日志，并流程结束；
+2) 创建LogRecord，判断是否符合注册到当前Logger的Filter条件，不符合则不输出日志，并流程结束；
+3) 将LogRecord交给当前Logger的Handler（若没有配置Handler则进入第四步），判断Handler的日志级别是否可用，若可用则判断是否符合注册到该Handler的Filter条件，若符合则输出日志；
+4) 若当前Logger是否含父日志对象，有则将LogRecord传递给父日志对象，递归执行第一步直至到根日志对象。
+
+若产生了LogRecord但整个流程都没有找到Handler进行判断Handler的日志级别是否可用，若可用则判断是否符合注册到该Handler的Filter条件等后续操作，那么会向sys.stdout输出提示信息。
+
+** 通过默认logger向sys.stdout输出warn级别及以上的日志
+#+BEGIN_EXAMPLE python
+import logging
+
+logging.debug('debug message')
+logging.info('info message')
+logging.warn('warn message')
+logging.error('error message')
+logging.critical('critical message')
+
+logging.log(logging.DEBUG, 'debug message')
+logging.log(logging.INFO, 'info message')
+logging.log(logging.WARN, 'warn message')
+logging.log(logging.ERROR, 'error message')
+logging.log(logging.FATAL, 'critical message')
+#+END_EXAMPLE
+
+** 通过默认logger和基本配置输出日志到文件
+#+BEGIN_EXAMPLE python
+import logging
+
+logging.basicConfig(# filename='test.log',  日志文件路径，若日志存在中文直接使用filename设置文件路径，那么中文将为乱码
+                    filemode='w',         # 文件模式,w为覆盖、a为追加
+                    format='%(asctime)s %(name)s:%(levelname)s:%(message)s',  # 日志输出格式
+                    datefmt='%d-%M-%Y %H:%M:%S',  # 日志输出格式中%(asctime)s 的日期格式
+                    level=logging.DEBUG           # 输出的日志级别
+                    # , style 格式占位符，默认为%和{}
+                    # , stream 定义输出流，用于初始化StreamHander对象，不能和filename参数一起使用，否则会抛ValueError
+                    , handlers=logging.FileHandler(filename='test.log', encoding='utf-8') # 定义处理器，用于创建Handler对象，不能和stream、filename参数一起使用，否则会抛ValueError
+                    )
+
+logging.debug('debug message')
+
+try:
+    kv = {}
+    print(kv['name'])
+except Exception:
+    logging.exception('global error')
+    # 等价于 logging.error('global error', exc_info=True)，记录traceback信息到日志
+#+END_EXAMPLE
+
+** 自定义日志对象
+实际项目中会先定义根日志对象，然后在各模块中创建子日志对象（有需要时定制子日志对象的Handler等属性）输出日志记录。
+#+BEGIN_EXAMPLE python
+# yuri/__init__.py
+import logging
+import .db as db
+
+# 定义名为yuri的日志对象（非根日志对象），那么名称以yuri.开头的日志对象均为该日志对象的子日志对象，
+# 当子日志对象没有配置Handler时则采用yuri日志对象的Handler配置。
+app_logger = logging.getLogger(‘yuri’)
+app_logger.setLevel(logging.NOTSET) # 日志对象默认的日志级别为logging.NOTSET
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(name)s:%(levelname)s:%(message)s'))
+console_handler.setLevel(logging.INFO)
+
+file_handler = logging.FileHandler(filename='log.txt', encoding='utf-8') # 若为日志记录含中文，那么必须设置encoding='utf-8'
+file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)s:%(levelname)s:%(message)s'))
+file_handler.setLevel(logging.DEBUG)
+
+app_logger.addHandler(console_handler)
+app_logger.addHandler(file_handler)
+
+db.execute()
+
+# yuri/db.py
+import logging
+
+# 创建模块的日志对象，
+logger = logging.getLogger(__name__)
+
+def execute():
+    logger.info('info message')   # 向sys.stdout和文件中输出日志
+    logger.debug('debug message') # 仅向文件中输出日志
+#+END_EXAMPLE
+
+** 通过配置文件自定日志对象
+
+*** 从dict获取配置
+#+BEGIN_EXAMPLE python
+import logging
+import logging.config
+
+cfg = {
+  "version": 1,
+  "formatters": {
+    "simple": {
+      "format": '%(asctime)s %(name)s:%(levelname)s:%(message)s',
+      "datefmt": '%d-%M-%Y %H:%M:%S'
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": 'logging.StreamHandler',
+      "level": 'INFO',
+      "formatter": 'simple'
+    },
+    "file": {
+      "class": 'logging.FileHandler',
+      "filename": 'log.txt',
+      "encoding": 'utf-8',
+      "level": 'DEBUG',
+      "formatter": 'simple'
+    }
+  },
+  "loggers": {
+    "root": {
+      "handlers": ['console', 'file'],
+      "level": 'NOTSET'
+    },
+    "yuri": {
+      "handlers": ['console'],
+      "level": 'DEBUG'
+    }
+  }
+}
+
+logging.config.dictConfig(cfg)
+logger = logging.getLogger()
+yuri_logger = logging.getLogger('yuri')
+#+END_EXAMPLE
+上述可将配置写到YML文件，然后读取出来转换为dict就可以了。
+
+*** 从ini文件获取配置
+#+BEGIN_EXAMPLE logging.ini
+[loggers]
+keys=root, yuri
+
+[formatters]
+keys=simpleFormatter
+
+[handlers]
+keys=consoleHandler
+
+[logger_root]
+level=DEBUG
+handlers=consoleHandler
+
+[handler_consoleHandler]
+class=StreamHandler
+formatter=simpleFormatter
+level=DEBUG
+args=(sys.stdout,)
+
+[formatter_simpleFormatter]
+format=%(asctime)s %(name)s:%(levelname)s:%(message)s
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE python
+import logging
+import logging.config
+
+logging.config.fileConfig(fname='logging.ini', disable_existing_loggers=False)
+logger = logging.getLogger()
+#+END_EXAMPLE
+
+** 禁止日志输出
+1) 默认日志对象采用 ~logging.disable(logging.INFO)~ 禁止输入某一级别的日志记录
+2) 自定义日志对象采用 ~logger.disabled = True~
+
+** 按日期、文件大小生成日志文件
+#+BEGIN_EXAMPLE python
+import logging
+import logging.handlers
+
+# 每隔 1000 Byte 划分一个日志文件，备份文件为 3 个
+file_handler = logging.handlers.RotatingFileHandler('test.log', mode='w', maxBytes=1000, backupCount=3, encoding='utf-8')
+
+# 每隔 1小时 划分一个日志文件，interval 是时间间隔，备份文件为 10 个
+handler2 = logging.handlers.TimedRotatingFileHandler('test.log', when='H', interval=1, backupCount=10, encoding='utf-8')
+#+END_EXAMPLE
+
+** 结合装饰器记录函数执行耗时
+#+BEGIN_EXAMPLE python
+import os
+import time
+import logging
+from functools import wraps
+
+logging.basicConfig(level=logging.DEBUG)
+
+def record_time(func):
+    @wraps(func)
+    def inner(*args, **kwargs):
+        # time.clock()获取当前程序占用的CPU时间（time.time会包含其他程序占用的CPU时间）
+        start = time.clock()
+        ret = func(*args, **kwargs)
+        end = time.clock()
+        logger.debug('function %s running with args %s and kwargs %s cost %s secs.'
+                    , func.__name__
+                    , str(args)
+                    , str(kwargs)
+                    , end-start)
+
+        return ret
+
+    return inner
+
+
+@record_time
+def add(a, b):
+    return a + b
+#+END_EXAMPLE
 
 * 兼容性开发
 #+BEGIN_EXAMPLE python
@@ -557,3 +1249,158 @@ from __future__ import (
     with_statement,  # Python2.5中引入才能使用with statement
 )
 #+END_EXAMPLE
+
+* 单元测试
+
+** 通过unittest模块进行单元测试
+
+*** 概念
+*TestCase* 测试用例，包含setUp、run和tearDown；
+*TestSuite* 针对某个功能的测试用例集合；
+*TestLoader* 将TestCase加载TestSuite中；
+*TestRunner* 执行TestSuite或TestCase，并将执行结果保存到TestResult中。根据保存形式分为TextTestRunner、HTMLTestRunner和XMLTestRunner；
+*TestFixture* 执行测试前后的工作，包括setUp、tearDown、setUpClass和tearDownClass。
+
+*** 执行单个测试用例类下的所有测试用例
+#+BEGIN_EXAMPLE python
+# test_case_qrs.py
+# -*- coding: utf-8 -*-
+import unittest
+
+class TestQRS(unittest.TestCase):
+    @staticmethod
+    def setUpClass():
+        print('\nsetUpClass')
+
+    @staticmethod
+    def tearDownClass():
+        print('\ntearDownClass')
+
+    def setUp(self, ):
+        print('\nsetUp')
+
+    def tearDown(self, ):
+        print('\ntearDown')
+    
+    def test_a(self):
+        self.assertTrue(False)
+
+    def test_b(self):
+        with self.assertRaises(AttributeError):
+            a = {}
+            a.c = 1
+
+    @unittest.skip('ignore this testcase')
+    def test_c(self):
+        self.assertEqual(1,2)
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE bash
+python -m unittest test_case_qrs
+#+END_EXAMPLE
+
+*** 执行测试套件
+#+BEGIN_EXAMPLE python
+# test_case_qrs.py
+# -*- coding: utf-8 -*-
+import unittest
+
+class TestQRS(unittest.TestCase):
+    def test_a(self):
+        self.assertTrue(False)
+
+    def test_b(self):
+        self.assertTrue(True)
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE python
+# test_case_git.py
+# -*- coding: utf-8 -*-
+import unittest
+
+class TestGit(unittest.TestCase):
+    def test_a(self):
+        self.assertTrue(False)
+
+    def test_b(self):
+        self.assertTrue(True)
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE python
+# run_test.py
+# -*- coding: utf-8 -*-
+import os
+import sys
+import unittest
+
+def gen_test_suite_partially():
+    """选择部分TestCase加入TestSuite
+    """
+    from test_case_git import TestGit
+
+    test_suite = unittest.TestSuite()
+    test_suite.addTest(TestGit('test_a'))
+
+    return test_suite
+
+def gen_test_suite_from_class():
+    """选择一个类的TestCase加入TestSuite
+    """
+    from test_case_git import TestGit
+
+    test_suite = unittest.TestSuite()
+    test_suite.addTest(unittest.makeSuite(TestGit))
+
+    return test_suite
+
+def gen_test_suite_fully():
+    """从目录下加载TestCase到TestSuite.
+    """
+    case_path = os.getcwd()
+    test_suite = unittest.defaultTestLoader.discover(case_path, pattern='test_case*.py')
+
+    return test_suite
+
+def gen_text_runner():
+    """使用默认的TextTestRunner.
+    """
+    runner = unittest.TextTestRunner(verbosity=2)  #  verbosity控制输出的执行结果的详细程度，可为0，1，2，其中0最简单，1是默认值，2最详细
+    return runner
+
+def gen_html_runner():
+    """使用HTMLTestRunner.
+    """
+    from HTMLTestRunner import HTMLTestRunner
+    fp = open('test_result.html', 'wb')
+    runner = HTMLTestRunner(stream=fp, title='Test Report', description='Test Description')
+    return runner
+
+def gen_xml_runner():
+    """使用XMLTestRunner.
+    Jenkins只认识xml格式的测试报告。
+    pip install xmlrunner
+    """
+    from xmlrunner import XMLTestRunner
+    runner = XMLTestRunner(output='report')
+    return runner
+
+if __name__ == '__main__':
+   num = sys.argv[1]
+   runner_type = sys.argv[2]
+
+   test_suite = None
+   if num == 1:
+       test_suite = gen_test_suite_partially()
+   else:
+       test_suite = gen_test_suite_fully()       
+
+   if runner_type == 1:
+       runner = gen_text_runner()
+   elif runner_type == 2:
+       runner = gen_html_runner()
+   else:
+       runner = gen_xml_runner()
+
+   runner.run(test_suite)
+#+END_EXAMPLE
+
+
