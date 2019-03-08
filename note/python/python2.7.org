@@ -33,6 +33,45 @@ Python代码按照模块(module)划分，一个模块可以是一个文件或一
 
     ~site~ 模块控制着模块检索路径设置的方式，Python虚拟机初始化时，会自动被引用。？？？？？
 
+*** 相对路径和绝对路径导入
+#+BEGIN_EXAMPLE python
+"""
+项目结构如下：
+|- yurid/
+    |- relative_import_supported.py
+    |- absolute_import_supported.py
+    |- string.py
+"""
+#+END_EXAMPLE
+
+1) 相对路径导入
+#+BEGIN_EXAMPLE python
+# relative_import_supported.py
+#-*- coding:utf-8 -*-
+
+# python yurid/relative_import_supported.py
+# 优先从当前文件所在目录下搜索模块，若找到则导入该模块，
+# 因此通过以下两种方式均无法导入内置string模块。
+import string
+from string import Formmater
+#+END_EXAMPLE
+
+2) 绝对路径导入
+#+BEGIN_EXAMPLE python
+# absolute_import_supported.py
+#-*- coding:utf-8 -*-
+from __future__ import absolute_import
+
+# python yurid/absolute_import_supported.py
+# 以下两种方式均为导入内置string模块。
+import string
+from string import Formmater
+
+# 若要导入自定义的string模块，则需要使用绝对路径或显式的相对路径
+import yurid.string
+from .string import member_in_custom_string_module
+#+END_EXAMPLE
+
 ** 模块和包的区别
 包为一个或多个模块的集合，一般压缩打包为tarball的文件形式，内含
 1) 依赖关系说明
@@ -992,11 +1031,13 @@ Args:
     attrs: 字典类型，属性和方法
 """
 A = type('A', (object,), {"age": 1,
-                          "get_age": lambda self: self.age})
+                          "get_age": lambda self: self.age
+                          "info": staticmethod(lambda : 'hello'})
 a = A()
 print(a.age)
 a.age += 1
 print(a.get_age())
+print(A.info())
 #+END_EXAMPLE
 
 ** 通过metaclass实现ORM框架
@@ -1344,12 +1385,23 @@ def add(a, b):
 #+END_EXAMPLE
 
 ** 通过Filter将Warn及以上输出到stderr其他输出到stdout
-#+BEGIN_EXAMPLE
+#+BEGIN_EXAMPLE python
+import sys
 import logging
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
+handler_stdout = logging.StreamHandler(sys.stdout)
+handler_stdout.setLevel(logging.DEBUG)
+handler_stdout.addFilter(type('', 
+                              (logging.Filter,), 
+                              {"filter": staticmethod(lambda record: record.levelno <= logging.INFO)}))
+logger.addHandler(handler_stdout)
+
+handler_stderr = logging.StreamHandler(sys.stderr)
+handler_stderr.setLevel(logging.WARN)
+logger.addHandler(handler_stderr)
 #+END_EXAMPLE
 
 * 调试/性能优化
@@ -1362,7 +1414,15 @@ profile和pstats分析。
 * 兼容性开发
 #+BEGIN_EXAMPLE python
 from __future__ import (
-    with_statement,  # Python2.5中引入才能使用with statement
+    print_function,   # Python2.x中print为statement，而Python3.x中print为函数。
+    with_statement,   # Python2.5中引入才能使用with statement，2.5+则默认开启该特性。
+    absoute_import,   # Python2.x中支持相对路径和绝对路径导入，而Python3.x仅支持绝对路径导入。
+    division,         # Python2.x中3/2为整除，而Python3.x则为浮点数，若要整除则需要写作 3//2。
+    unicode_literals, # Python2.x中 '二进制字符串'的类型为str，u'Unicode字符串'的类型为unicode；
+                      # Python3.x中 'Unicode字符串'和u'Unicode字符串'的类型均为unicode，b'二进制字符串'的类型才是str。
+    generators,       # Python2.3中生成器才成为默认开启的特性。
+    nested_scopes,    # Python2.0中在函数内部定义lambda等嵌套函数时，嵌套函数内变量的解析流程是：嵌套函数作用域->模块作用域；
+                      # Python2.2开始函数内部定义lambda等嵌套函数时，嵌套函数内变量的解析流程是：嵌套函数作用域->父函数作用域->模块作用域。
 )
 #+END_EXAMPLE
 
@@ -1548,6 +1608,90 @@ unmatched
 1) 不要用print调试；
 2) 字符串都用unicode类型的。
 
+* 时间和日期
+挂钟时间(Wall clock time)：以某个固定时间为起点到现在的时间间隔。
+处理器时间(Processor clock time)：用于度量进程占用CPU的时间。
+
+** time模块
+#+BEGIN_EXAMPLE python
+import time
+
+time.time()  # 挂钟时间,sec
+time.clock() # 处理器时间,sec
+time.sleep(10) # 休眠10sec
+
+# 通过struct_time对象将挂钟时间分解为年月日时分秒
+st = time.gmtime() # 返回挂钟的UTC时间
+st = time.localtime() # 返回挂钟的当地时间
+s = time.mktime(st)  # 将struct_time对象转换为挂钟时间
+#+END_EXAMPLE
+
+** datetime模块
+datetime模块是基于time模块的高级包。内部分为datetime.date、datetime.time和两者结合的datetime.datetime，另外还有一个datetime.timedelta四部分。
+#+BEGIN_EXAMPLE python
+import datetime
+
+# datetime + timedelta = datetime
+t = datetime.datetime(2012,9,3,21,30)
+delta1 = datetime.timedelta(seconds=60)
+t_new = t + delta1
+
+# datetime > datetime
+t_next = datetime.datetime(2012,9,3,22,30)
+if t < t_next:
+    print('ok')
+
+# 字符串转换为datetime类型嗯
+date = 'output-1997-12-23-030000.txt'
+format = 'output-%Y-%m-%d-%H%M%S.txt'
+t = datetime.strptime(str, format)
+
+# datetime格式化输出
+print(t.strftime(format))
+#+END_EXAMPLE
+
+* 信号量 
+signal模块是针对xUNIX平台，包含以下操作：
+1) 设置信号量处理函数
+2) 暂停当前线程并等待响应指定信号
+3) 定时发出SIGALRM等信息号
+
+** 信号量名称
+和Linux一致，~man 7 signal~
+
+** 设置信号量处理函数
+1) Python解释器对信号量存在默认处理方式；
+2) 通过注册信号处理函数可以让Python解释器采用无视信号量(处理函数signal.SIG_IGN)、默认响应(处理函数signal.SIG_DFL)和自定义响应的操作。
+
+#+BEGIN_EXAMPLE python
+import signal
+
+def sigtstp_handler(signum, frame):
+    print('received: ', signum)
+
+# Ctrl-z会发送signal.SIGTSTP
+# 注册信号量处理函数
+signal.signal(signal.SIGTSTP, sigtstp_handler)
+# 暂停当前进程，等待响应信号量
+signal.pause()
+#+END_EXAMPLE
+
+** 定时发送SIGALRM信号量
+#+BEGIN_EXAMPLE python
+import signal
+
+"""
+等待n秒后向自身进程发送SIGALRM信号量
+
+Args:
+    seconds: 等待秒数
+"""
+signal.alarm(5)
+#+END_EXAMPLE
+
+** 其他方式发送信号量
+~os.kill~ 和 ~os.killpg~ 都可向其他进程发送信号量。
+
 * 并发编程
 CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
 因此thread模块是轻量级，而threading模块是对thread模块的封装。
@@ -1565,3 +1709,59 @@ CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个P
 5) 设置线程为休眠状态
 6) 解锁GIL
 7) 回到步骤1
+
+* 开发环境
+
+https://jeffknupp.com/blog/2013/08/16/open-sourcing-a-python-project-the-right-way/
+** 项目结构
+#+BEGIN_EXAMPLE
+|- LICENSE
+|- README.md
+|- CHANGES.md
+|- TODO.md
+|- docs/
+|   |- index.rst
+|   |- installation.rst
+|   |- quickstart.rst
+|   |- generated/     # sphinx将生成的文档存放在这里
+|- yuri/
+|   |- __init__.py
+|   |- yuri.py
+|- test/
+|   |- __init__.py
+|   |- test_yuri.py
+|- requirements.txt
+|- setup.py
+#+END_EXAMPLE
+
+** setuptools和setup.py文件
+#+BEGIN_EXAMPLE python
+from __future__ import print_function
+from setuptools import setup
+
+import yuri
+
+# long_description值将作为PyPi中的描述，统一从README等文件中获取
+def read(*filenames, **kwargs):
+    encoding = kwargs.get('encoding', 'utf-8')
+    sep = kwargs.get('sep', '\n')
+    buf = []
+    for filename in filenames:
+        with open(filename, encoding=encoding) as f:
+            buf.append(f.read())
+
+    return sep.join(buf)
+
+long_description = read('README.md', 'CHANGES.md')
+
+setup(
+    name='yuri',                               # 包名称
+    version=yuri.__version__,                  # 版本号
+    url='http://github.com/fsjohnhuang/yuri/', # 主页
+    license='Apache Software License',         # 证书
+    author='fsjohnhuang',                      # 作者
+    author_email='fsjohnhuang@hotmail.com',    # 作者邮箱地址
+    description='项目的简要描述',
+    long_description=long_description,
+)
+#+END_EXAMPLE
