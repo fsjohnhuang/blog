@@ -29,8 +29,7 @@ Python代码按照模块(module)划分，一个模块可以是一个文件或一
    - 运行目录：执行程序时程序所在的目录，固定不变。
    - 当前工作目录（Current Working Directory）：可通过环境变量等修改，作为读写本地文件系统中文件/目录的当前目录。
    - 导入的模块会以模块名和模块对象对的形式保存到 ~sys.modules~ 中，因此对于多次导入同一模块时，默认情况下仅第一次导入生效。
-
-    
+   - import实际上会调用__import__导入模块。
 
     ~site~ 模块控制着模块检索路径设置的方式，Python虚拟机初始化时，会自动被引用。？？？？？
 
@@ -212,6 +211,32 @@ Egg文件实质上就是Zip文件
 
 
 *** distribute(支持Python3.x)
+
+** ~from xxx import *~ 的陷阱
+#+BEGIN_EXAMPLE python
+# bar.py
+from datetime import datetime
+
+# __main__.py
+import datetime
+from bar import *
+
+# 由于from bar import *会将bar.py中通过from datetime import datetime也导入到__main__.py中，
+# 而bar.py导入的type类型的datetime替代了__main__.py需要的类型为module的datetime，
+# 因此下列语句会报错。
+print(datetime.datetime.now())
+#+END_EXAMPLE
+因此导入模块时拒绝 ~*~ ，最佳实践为
+#+BEGIN_EXAMPLE
+# 形式1
+from xxx import (
+  xxx,
+  xxx,
+)
+
+# 形式2
+import xxx
+#+END_EXAMPLE
 
 * .pyc、.pyo和.pyd文件
 .pyc为.py的字节码(byte code)文件，内部保存的是PyCodeObject的序列化信息，不是二进制代码。
@@ -536,6 +561,8 @@ for char in Text('abcd'):
 * 修饰器
 面向切面编程，对原有函数进行增强。
 
+注意： 模块加载时马上执行修饰器生成新函数。
+
 #+BEGIN_EXAMPLE python
 from functools import wraps
 
@@ -579,6 +606,26 @@ def add3(n):
 @addx(4)
 def add4(n):
     return n
+#+END_EXAMPLE
+
+* 函数
+
+* Lambda函数
+Lambda函数又称为匿名函数，Python中的Lambda函数有以下限制：
+1) 函数体中必须仅包含一个表达式，表达式的返回值作为函数的返回值；
+2) 闭包/周围全局作用域(surrounding global scope)采用延迟绑定。
+#+BEGIN_EXAMPLE python
+def bug():
+    return [lambda x: x * i for i in xrange(0, 5)]
+
+def bingo():
+    return [lambda x, i=i: x * i for i in xrange(0, 5)]
+
+bug_results = map(lambda f: f(1), bug())
+bingo_results = map(lambda f: f(1), bingo())
+
+print(bug_results)   # 回显 [4,4,4,4,4]
+print(bingo_results) # 回显 [0,1,2,3,4]
 #+END_EXAMPLE
 
 * 面向对象编程
@@ -1243,6 +1290,15 @@ def add(a, b):
     return a + b
 #+END_EXAMPLE
 
+** 通过Filter将Warn及以上输出到stderr其他输出到stdout
+#+BEGIN_EXAMPLE
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+#+END_EXAMPLE
+
 * 兼容性开发
 #+BEGIN_EXAMPLE python
 from __future__ import (
@@ -1403,4 +1459,31 @@ if __name__ == '__main__':
    runner.run(test_suite)
 #+END_EXAMPLE
 
+* str和unicode
 
+** 类型不同导致正则匹配失败
+#+BEGIN_EXAMPLE python
+#-*- coding:utf-8 -*-
+import re
+
+data = u'测试'
+pattern = '测试'
+print(data)
+print(pattern)
+
+if re.search(pattern, data, re.I):
+    print('matched')
+else:
+    print('unmatched')
+
+"""
+回显为：
+测试
+测试
+unmatched
+"""
+#+END_EXAMPLE
+由于data和pattern类型不同，造成正则匹配失败，但通过print打印出来时却显示一致。
+因此：
+1) 不要用print调试；
+2) 字符串都用unicode类型的。

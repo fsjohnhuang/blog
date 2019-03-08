@@ -1,0 +1,28 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/blog/note/python/python2.7.org
+
+
+* ~from xxx import *~ 的陷阱
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2019-03-08 Fri 10:19
+  :ARCHIVE_FILE: ~/blog/note/python/python2.7.org
+  :ARCHIVE_OLPATH: 包机制
+  :ARCHIVE_CATEGORY: python2.7
+  :END:
+#+BEGIN_EXAMPLE python
+# bar.py
+from datetime import datetime
+
+# __main__.py
+import datetime
+from bar import *
+
+# 由于from bar import *会将bar.py中通过from datetime import datetime也导入到__main__.py中，
+# 而bar.py导入的type类型的datetime替代了__main__.py需要的类型为module的datetime，
+# 因此下列语句会报错。
+print(datetime.datetime.now())
+#+END_EXAMPLE
+
+
