@@ -610,7 +610,28 @@ def add4(n):
 
 * 函数
 
-* Lambda函数
+** 可变默认参数
+可变参数的默认值是在创建函数时实例化，而不是在函数调用时实例化，也就是说多次函数调用共享默认值。因此当默认值为可变引用类型时，会出现串值的问题。
+#+BEGIN_EXAMPLE python
+def bug(a, b=[]):
+    b.append(a)
+    return b
+
+bug(1)  # 期望的是[1]，实际返回为[1]
+bug(2)  # 期望的是[2]，实际返回为[1, 2]
+
+def bingo(a, b=None):
+    if b is None:
+        b = []
+
+    b.append(a)
+    return b
+
+bingo(1)  # 期望的是[1]，实际返回为[1]
+bingo(2)  # 期望的是[2]，实际返回为[2]
+#+END_EXAMPLE
+
+** Lambda函数
 Lambda函数又称为匿名函数，Python中的Lambda函数有以下限制：
 1) 函数体中必须仅包含一个表达式，表达式的返回值作为函数的返回值；
 2) 闭包/周围全局作用域(surrounding global scope)采用延迟绑定。
@@ -1055,6 +1076,38 @@ class Field(object):
 * 垃圾回收机制
 引用计数 + 循环垃圾收集器
 
+将生命周期不同的对象划分到3种代（generation0-年轻代、generation1-老年代）去管理和回收。
+#+BEGIN_EXAMPLE python
+import gc
+
+"""
+触发垃圾回收。
+
+Args:
+    generation: 可选，缺省为Full GC。
+
+Returns: unreachable object的数量
+"""
+gc.collect()
+
+"""
+设置各代回收频率。
+
+Args:
+    threadhold0: 年轻代的回收频率
+    threadhold1: 老年代的回收频率
+    threadhold2: ？？代的回收频率
+"""
+gc.set_threadhold(threadhold0, threadhold1, threadhold2)
+
+gc.enable()    # 激活GC
+gc.disable()   # 禁用GC
+gc.isenabled() # 检查GC是否启用
+
+gc.set_debug(gc.DEBUG_LEAK)  # 调试内存泄漏
+gc.set_debug(gc.DEBUG_SAVEALL)  # 让回收的对象保存在gc.garbage中，以便检查
+#+END_EXAMPLE
+
 * 日志
 官网： https://docs.python.org/2/library/logging.html
 
@@ -1299,6 +1352,13 @@ logger.setLevel(logging.DEBUG)
 
 #+END_EXAMPLE
 
+* 调试/性能优化
+pdb和ipdb
+追踪模块trace用于追踪打印运行路径， ~python -m trace --trace foo.py~ 。
+pycallgraph用于追踪性能问题，可以创建函数调用时间和次数的图表。
+objgraph用于查找内存泄漏。
+profile和pstats分析。
+
 * 兼容性开发
 #+BEGIN_EXAMPLE python
 from __future__ import (
@@ -1487,3 +1547,21 @@ unmatched
 因此：
 1) 不要用print调试；
 2) 字符串都用unicode类型的。
+
+* 并发编程
+CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
+因此thread模块是轻量级，而threading模块是对thread模块的封装。
+Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
+
+** GIL(Global Interpreter Lock)
+CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个Python线程执行。
+因此Python线程在多核服务器上，运行IO密集型计算性能好，但运行计算密集型则性能下降。
+
+多线程环境下，虚拟机执行流程：
+1) 设置GIL
+2) 切换到某个线程并执行
+3) 运行指定的字节码集合
+4) 线程主动让出控制
+5) 设置线程为休眠状态
+6) 解锁GIL
+7) 回到步骤1
