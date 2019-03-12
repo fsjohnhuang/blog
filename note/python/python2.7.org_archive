@@ -26,3 +26,56 @@ print(datetime.datetime.now())
 #+END_EXAMPLE
 
 
+
+* Linux下的进程
+:PROPERTIES:
+:ARCHIVE_TIME: 2019-03-11 Mon 11:42
+:ARCHIVE_FILE: ~/blog/note/python/python2.7.org
+:ARCHIVE_OLPATH: 并发编程/多进程
+:ARCHIVE_CATEGORY: python2.7
+:END:
+1) *会话(Session)* ，是一组 *进程组* 的集合，当用户通过ssh或其它终端接入Linux时就会创建一个会话，其下的所有进程组默认属于该会话
+   1) *进程* 创建新 *会话* 时会同时创建一个 *默认进程组* ，并且该进程将作为默认进程组的组长进程，会话ID和进程组ID与进程该进程ID一致；
+   2) 组长进程不能创建其他会话。
+2) *进程组(Process Group)* ，是一组 *进程* 的集合，可以接收来自同一个会话的 *信号*
+   1) 每个进程必须属于一个进程组；
+   2) 子进程默认从属于父进程所属的进程组；
+   3) 进程组的生存期为从进程组创建到最后一个进程离开（进程终止或挪到其他进程组）；
+   4) 每个进程仅能修改自身或子进程所属的进程组；
+   5) 进程只能挪到同一个会话下的其它进程组；
+   6) 每个进程组必须有一个组长进程，且进程组ID和组长进程ID一致；
+   7) 进程组分为 *后台进程组* 和 *前台进程组*
+      1) *前台进程组* 
+         1) 同一个时间最多存在1个前台进程组；
+         2) 在终端进行如下操作只会发送到前台进程组
+            1) ~C-c~ SIGINT(kill foreground process)
+            2) ~C-d~ (terminate input or exit shell)
+            3) ~C-z~ SIGTSTP(suspend foreground process)
+            4) ~fg~ 恢复被挂起的前台进程
+            5) ~C-/~ SIGQUIT，终止前台进程组并生成core文件
+      2) *后台进程组* 
+         1) 可以同时存在多个；
+         2) 创建方式： 命令后添加 ~&~ 即可，如 ~ping 127.0.0.1 &~ 。
+      3) *守护进程(Daemon)*
+         - 特殊类型的后台进程，随系统启动而启动。
+   8) 同一个管道的命令属于同一个进程组
+      - 在bash中执行 ~ps aux | grep 123~ 涉及3个进程
+        1) bash(pid=1, pgid=1, sid=1)
+        2) ps(ppid=1, pid=2, pgid=2, sid=1)，创建一个新的进程组，执行第一个命令的进程作为组长进程
+        3) grep(ppid=1, pid=3, pgid=2, sid=1)
+3) 进程状态转移逻辑
+   | >>>>>>> | CREATED | READY                   | RUNNING            | WAITING           | TERMINATED |
+   |---------+---------+-------------------------+--------------------+-------------------+------------|
+   | CREATED |         | admitted                |                    |                   |            |
+   | READY   |         |                         | scheduler dispatch |                   |            |
+   | RUNNING |         | interrupt               |                    | I/O or event wait | exit       |
+   | WAITING |         | I/O or event completion |                    |                   |            |
+4) 
+
+
+
+
+
+
+Windows下进程的创建成本比Unix/Linux高。
+

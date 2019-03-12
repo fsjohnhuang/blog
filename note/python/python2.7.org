@@ -1651,6 +1651,8 @@ print(t.strftime(format))
 #+END_EXAMPLE
 
 * 信号量 
+异步
+
 signal模块是针对xUNIX平台，包含以下操作：
 1) 设置信号量处理函数
 2) 暂停当前线程并等待响应指定信号
@@ -1693,9 +1695,377 @@ signal.alarm(5)
 ~os.kill~ 和 ~os.killpg~ 都可向其他进程发送信号量。
 
 * 并发编程
-CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
-因此thread模块是轻量级，而threading模块是对thread模块的封装。
-Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
+
+** 多进程
+
+*** Linux下的进程
+1) *会话(Session)* ，是一组 *进程组* 的集合，当用户通过ssh或其它终端接入Linux时就会创建一个会话，其下的所有进程组默认属于该会话
+   1) *进程* 创建新 *会话* 时会同时创建一个 *默认进程组* ，并且该进程将作为默认进程组的组长进程，会话ID和进程组ID与进程该进程ID一致；
+   2) 组长进程不能创建其他会话。
+2) *进程组(Process Group)* ，是一组 *进程* 的集合，可以接收来自同一个会话的 *信号*
+   1) 每个进程必须属于一个进程组；
+   2) 子进程默认从属于父进程所属的进程组；
+   3) 进程组的生存期为从进程组创建到最后一个进程离开（进程终止或挪到其他进程组）；
+   4) 每个进程仅能修改自身或子进程所属的进程组；
+   5) 进程只能挪到同一个会话下的其它进程组；
+   6) 每个进程组必须有一个组长进程，且进程组ID和组长进程ID一致；
+   7) 进程组分为 *后台进程组* 和 *前台进程组*
+      1) *前台进程组* 
+         1) 同一个时间最多存在1个前台进程组；
+         2) 在终端进行如下操作只会发送到前台进程组
+            1) ~C-c~ SIGINT(kill foreground process)
+            2) ~C-d~ (terminate input or exit shell)
+            3) ~C-z~ SIGTSTP(suspend foreground process)
+            4) ~fg~ 恢复被挂起的前台进程
+            5) ~C-/~ SIGQUIT，终止前台进程组并生成core文件
+      2) *后台进程组* 
+         1) 可以同时存在多个；
+         2) 创建方式： 命令后添加 ~&~ 即可，如 ~ping 127.0.0.1 &~ 。
+      3) *守护进程(Daemon)*
+         - 特殊类型的后台进程，随系统启动而启动。
+   8) 同一个管道的命令属于同一个进程组
+      - 在bash中执行 ~ps aux | grep 123~ 涉及3个进程
+        1) bash(pid=1, pgid=1, sid=1)
+        2) ps(ppid=1, pid=2, pgid=2, sid=1)，创建一个新的进程组，执行第一个命令的进程作为组长进程
+        3) grep(ppid=1, pid=3, pgid=2, sid=1)
+3) 进程的7个状态
+   1) R可执行状态(TASK_RUNNING)
+      - 意味进程进入某个CPU的可执行队列中，并不一定正在运行，而进程调度器将从各个CPU的可执行队列中选择一个进程在对应的CPU上运行；
+      - 操作系统教材中描述的进程状态READY和RUNNING在Linux中统一为TASK_RUNNING状态。
+   2) S可中断的睡眠状态(TASK_INTERRUPTABLE)
+      - 意味进程因等待某事件发生（Socket连接、信号量等）而被挂起，此时进程被放进对应事件的等待队列中，当这些事件发生时（由外部中断触发或由其他进程触发），那么对应等待队列中的进程将被唤醒。
+      - 大部分进程都处于该状态
+   3) D不可中断的睡眠状态(TASK_UNINTERRUPTABLE)
+      - 和S相似进程处于睡眠状态，但CPU仅响应外部硬件的中断，而不响应异步信号量的中断。也就是执行 ~kill -9~ 无法杀死处于该状态的进程。
+      - TASK_UNINTERRUPTABLE的意义在于内核在执行某些操作时不能被异步信号量打断，如调用系统调用read从某个设备文件读取数据，那么流程为 read->执行设备驱动代码->与物理设备进行交互，若中途响应异步信号量中断，那么有可能造成设备状态混乱的情况。
+      - 进程处于TASK_UNINTERRUPTABLE状态的过程非常短暂，因此通过ps命令很难发现处于此状态的进程。
+      - 系统调用vfork被调用后当前进程会处于TASK_UNINTERRUPTABLE状态，直到子进程调用exec或exit为止。
+   4) T暂停或跟踪状态(TASK_STOPPED or TASK_TRACED)
+      - TASK_RUNNING/TASK_INTERRUPTABLE -> TASK_STOPPED，向进程发送SIGSTOP信号量（SIGSTOP和SIGKILL一样都是强制性的，不允许进程trap该信号量自定义处理函数来忽略默认行为）。
+      - TASK_STOPPED -> TASK_RUNNING，向进程发送SIGCONT信号量。
+      - TASK_TRACED意味着进程被暂停下来，等待跟踪它的进程对其进行操作。处于TASK_TRACED状态的进程不响应SIGCONT信号量，只有跟踪进程调用系统调用ptrace执行PTRACE_CONT、PTRACE_DETACH等操作，或跟踪进程退出时，它才会恢复为TASK_RUNNING状态。
+   5) Z退出-僵尸状态(TASK_DEAD-EXIT_ZOMBIE)
+      - 进程退出时，进程处于TASK_DEAD状态，此时进程所占用的资源将被释放，最后剩下仅包含退出码和一些统计信息的task_struct结构体的壳供父进程获取子进程的退出信息。由于保留task_struct结构体的壳，因此此时的状态为EXIT_ZOMBIE。
+      - 子进程退出过程中会向父进程发送SIGCHLD信号量，通知父进程来收尸进入EXIT_DEAD状态完成退出。
+      - 父进程可以通过 ~wait(wait4,waitid)~ 系列的系统调用来等待子进程退出和收尸，并获取子进程退出信息。
+      - 若父进程在子进程退出前已经退出，那么父进程在退出前会将其子进程转移给同一进程组的下一个进程或init进程。
+      - 僵尸进程的危害
+        - 进程不再执行任务，但仍然占用PCB进行维护，浪费内存资源。
+   6) X退出-进程即将被销毁(TASK_DEAD-EXIT_DEAD)
+      - 当进程为多线程程序中被detach过的进程，或父进程通过clone创建的将SIGCHLD的处理函数设置为SIG_IGN的子进程，那么该进程退出时将不保留task_struct来等待父进程收尸，即不转移为EXIT_ZOMBIE状态，直接转移为EXIT_DEAD状态释放进程资源。
+      - 这个状态很短暂，无法通过ps命令查看。
+4) 进程状态转移
+   1) 从非TASK_RUNNING转移为TASK_RUNNING
+      - 由别的进程或中断处理程序执行唤醒操作。
+   2) 从TASK_RUNNING转移为非TASK_RUNNING
+      - 响应信号量进入TASK_STOPPED或TASK_DEAD状态
+      - 主动执行系统调用进入TASK_INTERRUPTABLE状态(通过sleep函数)或TASK_DEAD状态(如exit函数)
+      - 因资源不满足进入进入TASK_INTERRUPTABLE状态或TASK_UNINTERRUPTABLE状态(如select函数)
+   3) 示例：向一个处于task_interruptable状态的进程发送信号量SIGKILL来结束进程
+      1) 将进程状态从TASK_INTERRUPTABLE转移为TASK_RUNNING；
+      2) 然后当该进程被CPU执行时响应SIGKILL，状态从TASK_RUNNING转移为TASK_DEAD。
+5) PCB
+   - 对于多道程序操作系统而言，内存中将存在多个进程，为管理这些进程操作系统内核为每个进程建立一个task_struct结构体保存该进程相关的信息，这个结构体就是PCB(Process Control Block)。
+   - Linux下采用链式方式组织PCB。
+   - PCB的组成
+     1) 标识符，每个进程都有进程标识符、用户标识符和组标识符。
+        1) PID是32位无符号有序正数；
+        2) 新创建的进程PID是最近创建的进程PID+1；
+        3) Linux下允许PID上限为32767，若超过这个数则会重新使用已闲置的PID。
+     2) 进程状态，7个进程状态。
+     3) 进程优先级，整数，优先级高的进程则会更早获取CPU时间。
+     4) 程序计数器，用于记录将被执行的下一条指令的地址。
+     5) 内存指针
+        1) 程序代码和进程相关的指针；
+        2) 和其他进程共享内存的指针。
+     6) 上下文数据
+        - 进程得到CPU时间时寄存器中的数据。当进程失去CPU时间时会将寄存器中的数据暂存到相应的PCB中，待重新获取CPU时间时再次恢复到寄存器和堆栈中。
+     7) I/O状态信息
+        - 显式的I/O请求
+        - 分配给进程的I/O设备
+        - 被进程使用的文件列表等
+     8) 审计信息
+        - CPU时间总和
+        - 使用的时钟总和
+        - 时间限制
+        - 审计号等
+6) 进程创建的方式
+   1) fork
+   2) system
+   3) exec
+7) 进程的运行环境
+   - 进程的运行环境就是进程启动时的环境变量，而这些环境变量是由 *系统环境变量副本* 和 *父进程的环境变量副本* 组成。
+   - 特点是
+     1) 只允许本进程修改自身的运行环境，父进程和子进程都无权修改；
+     2) 增删改运行环境不影响父进程和已创建的子进程。
+   - 系统环境变量 ~PYTHONPATH~ 将决定模块查找路径
+8) 进程结构
+   1) 代码段
+   2) 数据段
+   3) 堆栈段
+9) 进程间通信(IPC)
+   - 由于操作系统隔离各个进程可以访问的的内存地址空间，因此进程间需要交换数据时，需要通过IPC或如文件/数据库等其他方式进行。
+   - 方式
+     1) 管道
+     2) 消息队列
+     3) 共享内存
+     4) 信号量
+     5) Socket
+
+
+Windows下进程的创建成本比Unix/Linux高。
+
+*** 进程创建方式——system
+system函数会通过启用 ~/bin/sh~ 进程执行入参指定的shell命令，shell命令执行期间信号量SIGCHID会被阻塞（即告知内核不要在发送SIGCHID信号量），而SIGINT和SIGQUIT会被忽略。
+system函数内部逻辑为：
+1) 通过系统调用fork创建一个子进程，失败则返回-1，正常则执行第2步；
+2) 然后在子进程中调用系统调用excl执行 ~/bin/sh -c <command>~ 执行入参指定的命令，若excl执行失败则返回127，成功则返回入参命令的返回值；
+3) 而父进程进入TASK_INTERRUPTABLE状态，等待子进程结束后恢复为TASK_RUNNING，并返回子进程的返回状态；
+4) 若父进程在休眠状态被信号量终端时，则返回-1。
+
+而Python中的 ~os.system~ 则是对C标准库中的 ~system~ 函数的封装。
+#+BEGIN_EXAMPLE python
+import os
+
+# 返回值为0则表示命令执行成功，其他值表示执行失败。
+# 若有异常则抛出OSError。
+ret_code = os.system('ls')
+#+END_EXAMPLE
+
+*** 进程创建方式——exec函数族
+  在Linux系统中创建进程分为两步：创建进程实例 和 加载进程映像。
+而exec函数族则用于在当前进程实例上加载新的进程映像替代原有的进程映像，即将代码段换成新的程序代码，废弃原有的数据段和堆栈段，保留进程其他信息（PID/PPID/PGID/SID）。
+  os.exec*函数族为对Linux下exec函数族的封装。因此Python程序通过os.exec*函数族创建新进程时，Pyton程序将马上退出，因此os.exec*函数族没有返回值。
+#+BEGIN_EXAMPLE python
+import os
+
+"""
+v，表示第二参为tuple或list，用于输入要执行的命令和参数。
+l，表示采用*args输入要执行的命令和参数。
+p，表示第一参数为命令名，将从环境变量PATH中搜索；否则第一参数为命令的绝对路径。
+e，表示最后一个参数为环境变量，类型为mapping或dict。
+"""
+os.execv('/bin/echo', ('echo', 'helloworld'))
+# $ bash -c "/bin/echo $TEST"
+os.execve('/bin/bash', ('bash', '-c', '/bin/echo $TEST'), {"TEST": 'test1'})
+os.execvp('echo', ('echo', 'helloworld'))
+os.execvpe('bash', ('bash', '-c', '/bin/echo $TEST'), {"TEST": 'test1'})
+
+os.execl('/bin/echo', 'echo', 'helloworld')
+# $ bash -c "/bin/echo $TEST"
+os.execle('/bin/bash', 'bash', '-c', '/bin/echo $TEST', {"TEST": 'test1'})
+os.execlp('echo', 'echo', 'helloworld')
+os.execlpe('bash', 'bash', '-c', '/bin/echo $TEST', {"TEST": 'test1'})
+#+END_EXAMPLE
+os.exec*函数族底层都是调用os.execve。
+
+*** 进程创建方式——fork
+  Unix/Linux系统下提供一个 ~fork()~ 的系统调用，该函数会复制当前进程映像创建子进程，然后分别在父进程和子进程中各返回一次（一共返回两次），其中在父进程的返回值为子进程的PID，而在子进程的返回值恒为0。
+  os模块封装了很多系统调用，如 ~os.fork()~ 就封装了UNIX系列的系统调用 ~fork~ 因此返回值也和系统调用fork一致，只是报错时会抛出OSError异常。而Windows下没有fork调用，因此下列代码无法在Windows下运行。
+#+BEGIN_EXAMPLE python
+from __future__ import print_function
+import os
+
+print('Process (%s) start...' % os.getpid())
+pid = os.fork()
+
+if pid == 0:
+    print('I\'m child process (%s) and my parent process is %s.' % (os.getpid(), os.getppid()))
+else:
+    print('I (%s) just created a child process (%s).' % (os.getpid(), pid))
+
+# 输出：
+# Process (876) start...
+# I (876) just created a child process (877).
+# I am child process (877) and my parent is 876.
+#+END_EXAMPLE
+
+*** 获取进程信息
+#+BEGIN_EXAMPLE python
+import os
+
+# :returns os._Environ: 返回运行环境/环境变量
+os.environ
+
+# :returns int: 当前进程PID
+os.getpid()
+# :returns int: 当前进程的父进程PID
+os.getppid()
+# :returns int: 当前进程所属进程组ID
+os.getpgrp()
+# :param int pid: 进程PID
+# :returns int: 指定进程所属进程组ID
+os.getpgid(pid)
+# :param int pid: 进程PID
+# :returns int: 指定进程所属会话ID
+os.getsid(pid)
+#+END_EXAMPLE
+
+*** 退出进程
+#+BEGIN_EXAMPLE python
+import sys
+
+"""
+关闭当前进程，并设置返回码。
+返回码，0表示执行正常，其他值表示异常。
+关闭进程前会通知操作系统执行清理工作（即向父进程发送SIGCHLD信号量，清理stdio缓冲区）。
+返回码会传递给父进程。
+
+底层实际上是执行 raise SystemExit(ret_code)
+
+:param int|string ret_code: 返回码，默认为0.若为string则向stderr输出字符串，并返回非0。
+"""
+sys.exit(ret_code)
+
+"""
+强制关闭当前进程，不让操作系统执行清理工作。
+向当前进程发送SIGABRT信号量，可通过signal.signal注册SIGABRT处理函数修改默认行为。
+当遇到无法终止或终止时间过长时，则使用该方法。
+"""
+sys.abort()
+
+"""
+关闭当前进程，并设置返回码，不让操作系统执行清理工作。
+返回码，0表示执行正常，其他值表示异常。
+返回码会传递给父进程。
+一般只在通过fork创建的子进程中调用该方法，否则就使用os.exit方法。
+
+:param int ret_code: 返回码
+os.EX_OK - 执行正常
+os.EX_USAGE   - 命令执行不正确，如命令参数错误
+os.EX_DATAERR - 输入数据有误   
+os.EX_NOINPUT - 输入文件不存在或者不可读
+os.EX_NOUSER - 指定的用户不存在              
+os.EX_NOHOST - 指定的主机id不存在            
+os.EX_UNAVAILABLE - 请求的服务不可用         
+os.EX_SOFTWARE - 内部软件错误                
+os.EX_OSERR - 操作系统错误                   
+os.EX_OSFILE - 系统文件不存在                
+os.EX_CANTCREAT - 无法创建指定的输出文件     
+os.EX_IOERR - 在进行I/O操作时出错            
+os.EX_PROTOCOL - 协议切换操作非法，或者协议切换不可用
+os.EX_NOPERM - 没有权限执行该操作                     
+os.EX_CONFIG - 配置错误                               
+"""
+sys._exit(ret_code)
+#+END_EXAMPLE
+
+*** IPC——管道
+  管道分为 *匿名管道(限于父子进程间通信)* 和 *命名管道(任意进程间通信)* 。
+  管道的原理是在内存开辟一段区域供通信双方的进程读取和写入。原理类似于两个进程通过操作同一个文件来实现通信，但比操作文件更高效。
+
+单工管道：仅有一方可读、另一个方可写。
+双工管道：双方均可读可写，通过两个单工管道实现。
+
+**** 匿名管道
+匿名管道仅存活在内存中，进程退出时释放。
+#+BEGIN_EXAMPLE c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+
+#define INPUT 0  // 只读管道
+#define OUTPUT 1 // 只写管道
+
+void execute_subprocess(int* fds) {
+    printf("in the spawned/child process...\n");
+    // 由于子进程不从父进程读取信息，因此子进程关闭只读管道
+    close(fds[INPUT]);
+    // 子进程向只写管道写入数据，向父进程传递
+    char* message = "test data";
+    write(fds[OUTPUT], message, strlen(message));
+    _exit(0);
+}
+
+void execute_main_process(int* fds) {
+    printf("in the spawning/parent process...\n");
+    // 由于父进程不向子进程传递信息，因此父进程关闭只写管道
+    close(fds[OUTPUT]);
+    // 父进程从只读管道读取子进程传递过来的信息
+    char buf[256];
+    // read将阻塞当前进程，直到只读管道中有数据可读取位置。
+    int count = read(fds[INPUT], buf, sizeof(buf));
+    printf("%d bytes of data received from subprocess: %s\n", count, buf);
+    exit(0);
+}
+
+void main(){
+    // 文件描述符，用于保存只读管道和只写管道，从而构成双工管道
+    int fds[2];
+    pipe(fds);
+
+    pid_t pid;
+    pid = fork();
+
+    if (pid == -1){
+        printf("Error in fork\n");
+        exit(1);
+    }
+    else if (pid == 0){
+        execute_subprocess(fds);
+    }
+    else {
+        execute_main_process(fds);
+    }
+}
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE python
+
+#+END_EXAMPLE
+
+**** 命名管道
+命名管理使用文件系统，任意两个独立的进程都可以访问它。
+通过mkfifo创建只读和只写命名管道后，就可以向普通读写文件那样操作命令管道了。
+Python中的os.mkfifo就是对C语言mkfifo函数的封装，读写时只能采用只读只写模式。
+
+#+BEGIN_EXAMPLE python
+# server.py
+import os
+
+def create_named_pipes():
+    input_pipe = '/path/to/input.pipe'
+    output_pipe = '/path/to/output.pipe'
+
+
+# client.py
+#+END_EXAMPLE
+
+
+
+*** IPC——消息队列
+
+*** IPC——共享内存
+nmap模块
+
+*** IPC——信号量
+
+*** IPC——Socket
+
+*** multiprocessing模块
+multiprocessing模块是跨平台通用的多进程模块。
+#+BEGIN_EXAMPLE python
+from __future__ import print_function
+from multiprocessing import (
+    Process,
+    Queue,
+    Pool,
+    Value,    
+    Lock,
+)
+
+
+def job(
+#+END_EXAMPLE
+
+
+
+** 多线程
+
+ CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
+ 因此thread模块是轻量级，而threading模块是对thread模块的封装。
+ Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
 
 ** GIL(Global Interpreter Lock)
 CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个Python线程执行。
@@ -1705,10 +2075,13 @@ CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个P
 1) 设置GIL
 2) 切换到某个线程并执行
 3) 运行指定的字节码集合
-4) 线程主动让出控制
+4) 线程主动让出控制(调用time.sleep())
 5) 设置线程为休眠状态
 6) 解锁GIL
 7) 回到步骤1
+
+注意：当调用外部代码（如C/C++扩展函数）时会先释放GIL让其它线程运行。
+GIL源码在Python/ceval.c文件中。
 
 * 开发环境
 
@@ -1764,4 +2137,80 @@ setup(
     description='项目的简要描述',
     long_description=long_description,
 )
+#+END_
+* docstring风格
+** Epytext
+曾经比较流行，风格类似于javadoc。
+#+BEGIN_EXAMPLE python
+"""
+This is a javadoc style.
+
+@param param1: this is a first param
+@param param2: this is a second param
+@return: this is a description of what is returned
+@raise keyError: raises an exception
+"""
 #+END_EXAMPLE
+
+** reST
+Sphinx御用风格
+#+BEGIN_EXAMPLE python
+"""
+This is a reST style.
+
+:param int param1: this is a first param
+:param string param2: this is a second param
+:returns: this is a description of what is returned
+:raise keyError: raises an exception
+"""
+#+END_EXAMPLE
+
+** Goolge
+#+BEGIN_EXAMPLE python
+"""
+This is a google style.
+
+Parameters:
+  param1 - this is a first param
+  param2 - this is a second param
+
+Returns:
+  this is a description of what is returned
+
+Raises:
+  KeyError - raises an exception
+"""
+#+END_EXAMPLE
+
+** Numpydoc
+#+BEGIN_EXAMPLE python
+"""
+This is a Numpydoc style.
+
+Parameters
+----------
+first: array_like
+  the 1st param name `first`
+second:
+  the 2nd param
+third: {'value', 'other'}, optional
+  the 3rd param, by default 'value'
+
+Returns
+-------
+string
+  a value in a string
+
+Raises
+------
+KeyError
+  when a key error
+OtherError
+  when an other error
+"""
+#+END_EXAMPLE
+
+** pyment-风格转换
+https://github.com/dadadel/pyment
+
+** Sphinx使用
