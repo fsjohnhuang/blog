@@ -69,3 +69,46 @@ tail -f <filepath>
 * 定时任务
 
 ** at
+
+
+* 设置代理
+
+** 服务端tinyproxy设置
+#+BEGIN_EXAMPLE bash
+sudo apt install asciidoc # 安装依赖
+
+# 安装tinyproxy
+sudo wget https://github.com/tinyproxy/tinyproxy/releases/download/1.8.4/tinyproxy-1.8.4.tar.gz -O tinyproxy-1.8.4.tar.gz
+
+tar xf tinyproxy-1.8.4.tar.gz
+
+./configure --enable-transparent --prifix=/usr/local/tinyproxy
+
+./make && ./make install
+
+# 启动
+/usr/local/tinyproxy/sbin/tinyproxy -c /usr/local/tinyproxy/etc/tinyproxy.conf
+
+# 测试http
+curl url --proxy 10.10.10.10:8888
+
+# 测试https
+curl url --proxy 10.10.10.10:8888 -k
+#+END_EXAMPLE
+
+*** 配置
+#+BEGIN_EXAMPLE tinyproxy.conf
+# 添加白名单
+Allow 10.27.80.0/24
+Allow 11.65.48.0/24
+Allow 18.90.12.145
+#+END_EXAMPLE
+
+** 客户端设置
+| 环境变量    | 描述                                                         | 示例                                       |
+|-------------+--------------------------------------------------------------+--------------------------------------------|
+| http_proxy  | 设置http协议代理                                             | 10.0.0.51:8080、user:passwd@10.0.0.10.8080 |
+| https_proxy | 设置https协议代理                                            |                                            |
+| ftp_proxy   | 设置ftp协议代理                                              |                                            |
+| all_proxy   | 一次性设置所有协议的代理，设置这个后上述变量都不用设置了     |                                            |
+| no_proxy    | 设置无需代理的主机名或域名，可使用通配符，多个时使用逗号分隔 | *.aiezu.com, 10.*,*,*                      |

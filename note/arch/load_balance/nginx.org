@@ -51,7 +51,7 @@ ISO第7层的负载均衡方案
 #+BEGIN_EXAMPLE
 http {
   # 做负载均衡时要把这个设置为0
-  keeplive_timeout 0;
+  keepalive_timeout 0;
 
   # 轮询(RR,Round-Robin)
   # 后端宕机会自动剔除

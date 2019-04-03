@@ -1,0 +1,28 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/blog/note/devops/jenkins.org
+
+
+* Jenkins主目录
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2019-03-27 Wed 09:48
+  :ARCHIVE_FILE: ~/blog/note/devops/jenkins.org
+  :ARCHIVE_OLPATH: 安装配置Jenkins/配置
+  :ARCHIVE_CATEGORY: jenkins
+  :END:
+Jenkins配置、构建作业、构建产物、插件信息等都保存在Jenkins主目录。
+占大量磁盘空间。
+Jenkins主目录默认位于 ~$HOME/.jenkins~ ，但可以修改设置
+#+BEGIN_EXAMPLE /etc/bashrc
+export JENKINS_BASE=/usr/local/jenkins
+export JENKINS_HOME=/apps/jenksin-data
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE bash
+# 运行Jenkins
+nohup java -jar ${JENKINS_BASE}\jenkins.war --httpPort=1300 &
+#+END_EXAMPLE
+
+
+

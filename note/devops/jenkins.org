@@ -1,3 +1,226 @@
+* 持续集成作用
+1) 自动监控代码质量和代码覆盖率度量
+2) 降低技术债务和减少维护成本
+3) 作为一种沟通工具，清晰地发布和展现总体开发工作的当前状态
+4) 简化和加速交付过程
+
+持续集成促使大家保证优先修复有问题的构建
+
+* Devops阶段
+1) 无构建服务器
+   开发人员通过Ant/make等工具在各自开发环境构建，并且不采取定期提交代码变更而是计划发版前集中提交代码到中央代码仓库。
+2) 夜间构建
+   架设构建服务器，团队成员每个工作日至少提交一次代码到中央代码仓库，但可靠可重复的单元测试步骤可有可无，并且不关心构建服务器的状态(问题)，即使通过邮件或消息通知机制通知了开发人员。
+3) 夜间构建加自动化测试
+   自动化测试/集成测试作为必要步骤加入到持续集成流程中，通过邮件/消息通知/即时通信等工具即时告知开发人员构建服务器的状态，并且团队成员可以轻易地看到是哪些代码变化触发特定的构建。
+4) 加入度量指标
+   新增自动化代码质量和代码覆盖率检查，用于一定程度上评估代码仓库质量和测试质量。自动生成API文档，对测试质量下降到一定阀值时提出报警。通过“构建展示器”实时向团队成员展示构建状态。
+5) 更认真地对待测试
+   持续集成将可靠可重复的测试和构建过程紧密结合，促进了测试驱动开发的开发模式，当测试通过后代码会自动部署到一个应用服务器上进行更全面的端到端测试和性能测试。
+6) 自动化验收测试和自动话部署
+   采用行为驱动开发和验收测试驱动开发的方式作为交流和文档工具以及文档测试工具，最终用非开发人员可理解的业务术语来发布测试结果报告。并通过早期自动化测试清晰展示出各功能状态（已完成、待完成、开发中）。当QA团队测试通过后，手动发起部署流程。
+7) 持续部署
+   采用自动化部署技术将变更部署到生产环境。
+
+* 安装配置Jenkins
+
+** 安装
+*** 通过Java Web Start方式 
+   Java Web Start（JNLP，Java Network Launch Protocol）是一种通过URL链接运行Java桌面应用的发布技术，当应用发生更新时只需服务器版本，那么用户在下次通过Java Web Start运行应用时就会运行最新版的应用。
+   运行过程：
+   1) 下载JNLP文件
+   2) Java Web Start下载Java应用并运行应用
+
+*** 通过执行WAR文件
+Jenkins.war内置轻量级Winstone Servlet引擎来运行服务。
+
+#+BEGIN_EXAMPLE bash
+# --httpPort=1300 ，启用HTTP协议
+# --httpsPort=1300 ，启用HTTPS协议
+# --httpListenAddress=0.0.0.0 ，设置监听的IP范围，默认是监听所有
+# --ajp3Port=8010 ，如果Jenkins运行在另一个应用服务器上（Tomcat、Jetty或GlassFish等），则要覆盖ajp3Port
+# --prefix，默认运行在8080端口且没有上下文路径，通过prefix可设置Jenkins运行的上下文路径
+# --daemon，在Linux系统下作为一个守护进程运行
+# --logfile=/var/log/jenkins.log，默认把日志文件写到当前目录下，可通过这个设置
+# --controlPort=8001，若采用内置的Winstone服务器则可通过Winstone服务启用或关闭Jenkins，这时就要设置这个属性
+#   重启：java -cp ${JENKINS_HOME}/war/winstone.jar winstone.tools.WinstoneControl reload: --host=localhost --port=8001
+#   完全关闭：java -cp ${JENKINS_HOME}/war/winstone.jar winstone.tools.WinstoneControl shutdown: --host=localhost --port=8001
+nohup java -jar jenkins.war --httpPort=1300 --httpListenAddress=0.0.0.0 --controlPort=8001 > /var/log/jenkins.log 2>&1 &
+#+END_EXAMPLE
+
+** 配置
+
+*** 创建Jenkins服务专用用户
+便于监控Jenkins构建所使用的系统资源和排查问题。
+#+BEGIN_EXAMPLE bash
+# 创建jenkins用户和用户组
+useradd --create-home jenkins
+#+END_EXAMPLE
+然后使用jenkins登录系统后启用Jenkins，那么就会在 ~$HOME/.jenkins~ 生成Jenkins主目录。
+
+*** Jenkins主目录
+Jenkins配置、构建作业、构建产物、插件信息等都保存在Jenkins主目录，因此也占大量磁盘空间。
+Jenkins备份实质就是备份该目录即可。
+Jenkins主目录默认位于 ~$HOME/.jenkins~ ，但可以修改设置
+#+BEGIN_EXAMPLE /etc/bashrc
+export JENKINS_BASE=/usr/local/jenkins
+export JENKINS_HOME=/apps/jenksin-data
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE bash
+# 运行Jenkins
+nohup java -jar ${JENKINS_BASE}\jenkins.war --httpPort=1300 &
+#+END_EXAMPLE
+
+**** 目录结构
+ | 目录                 | 描述                                                                                                              |
+ |----------------------+-------------------------------------------------------------------------------------------------------------------|
+ | fingerprints         | 用于跟踪人工操作的痕迹                                                                                            |
+ | logs                 | 存放Jenkins服务自身的日志记录
+ | plugin               | 包含所有已安装的插件                                                                                              |
+ | updates              | 内部目录，用于存放可用的插件更新                                                                                  |
+ | userContent          | 存放自己为Jenkins服务器定制化的内容                                                                               |
+ | users                | Jenkins本地用户数据库                                                                                             |
+ | war                  | 存放扩展的war应用程序，若采用Jenkins.war单机应用启用时，那么Web应用会解压到这里                                   |
+ | jobs                 | 存放任务配置和构建结果细节信息（最后一个构建号、最后一个成功构建号等）                                            |
+ | jobs/job1/config.xml | 任务配置信息                                                                                                      |
+ | jobs/job1/builds     | 存放构建结果细节信息，包含JavaDoc文档、覆盖率文档和打包发布文件等。因此必须配置适当的保留时间，以免该目录一直变大 |
+ | workspace            | 在当前节点构建时的工作目录                                                                                        |
+
+*** 内存考虑
+除Jenkins自身程序所需的内存外，每个构建都会创建独立的Java子进程它们也需要构建用的内存空间。
+可通过设置环境变量调整内存上限。
+#+BEGIN_EXAMPLE bash
+# 应用到Jenkins进程中
+export JAVA_OPTS=-Djava.awt.headless=true -Xmx512m -DJENKINS_HOME=$HOME/.jenkins
+# 应用到Maven构建作业所创建新的JVM进程中
+export MAVEN_OPTS="-Xmx512m -XX:MaxPermSize=256m"
+# 应用到Ant构建作业所创建新的JVM进程中
+export ANT_OPTS="-Xmx512m -XX:MaxPermSize=256m"
+#+END_EXAMPLE
+
+*** 系统环境
+1) 静默期(Quiet Period)：Jenkins触发构建前等待多少秒。
+   - 当采用CVS等基于文件的SCM时，那么一个变更集会由多次单文件提交组成，那么需要等待一段时间待变更集完整后再执行构建流程；
+   - 当采用Git等基于变更集的SCM时，若团队成员习惯一个构建由多次变更集提交组成，那么需要等待一段时间待变更集完整后再执行构建流程。
+
+* 通知
+通知策略分为：被动策略(拉/pull)和主动策略(push)
+
+** 被动策略
+1) 邮件通知
+   - 作用：当Jenkins任务构建失败、不稳定和恢复正常时会通过邮件通知管理员。
+   - 步骤
+     1) 在Manage Jenkins/Configure System下的E-mail Notification配置邮件发送设置
+     2) 在任务配置的Post-build下配置E-mail Notification任务
+        1) 可配置必须接收构建状态异常的人员邮件
+        2) 可配置向触发构建异常的人员发送邮件
+   - 基于构建周期，构建任务类型和人员角色制定通知策略，例如
+     1) 快速构建（单元/集成测试，每隔5分钟构建）：通知开发组长和提交变更的开发人员
+     2) 慢速构建（验收测试，发生在快速构建后）：通知开发组长、测试人员和提交变更的开发人员
+     3) 夜间构建（QA度量、性能测试等，发生在慢速构建后）：通知所有成员，用于日常状态会议中提供项目健康状态的快照图
+   - 增强
+     - 插件Email-ext，提供内容可定制、发送条件更精准的邮件通知功能
+       - test
+2) 构建分发器(build radiator)
+   - 敏捷开发定义：信息分发器通常张贴在人们工作或步行通过时可以看到的地方，向读者展示他们关心的信息而无须向任何人提问。
+   - 插件Jenkins Radiator View
+
+** 主动策略
+1) Jenkins Eclipse插件
+   - 会通过Eclipse底部的通知栏告知成员Jenkins的构建状态
+
+* 安全配置
+当配置有误导致无法登录Jenkins页面时，可以先登录到Jenkins主目录下，然后将config.xml的 ~<useSecurity>~ 修改为false即可。
+
+Jenkins会自动收集每个触发构建的SCM提交附带的用户信息，我们可以在People界面看到而且还可以看到他们触发了哪些构建和构建过程信息。（但这些用户不一定配置为可登录Jenkins系统的）
+
+** 验证方式——Security Realm 
+1) Jenkins’ own user database（Jenkins内置用户数据库）
+   - 适合小团队，原来没有身份验证系统的团队
+   - 提供注册功能(sign up)
+2) LDAP
+   - 用于集成LDAP的身份验证功能
+3) Delegate to servlet container
+   - 当Jenkins托管到某应用服务上如Tomcat，而Tomcat又允许集成关系型数据库、JNDI、JAAS或一个XML配置文件进行用户身份认证。那么就可以采用这一方式。
+4) Unix user/group database
+   - 当Jenkins部署在Linux系统上，那么就可以使用系统用户和用户组作身份验证（使用到Pluggable Authentication Modules，也可集成NIS）
+5) CAS集成
+   - 插件CAS
+6) 其他
+   1) 通过插件Script Security Realm，自行编写验证程序、分组程序集成到Jenkins即可。
+
+** 授权方式——Authorization
+1) Matrix-based Security
+   - Overall，系统基础权限
+     - Administer，允许操作Manage Jenkins界面
+     - Read，只允许进入Jenkins首页。若没有这个权限，即使有Job下的其他权限也无法进入Jenkins系统。
+   - Slave，从节点权限
+     - Configure，创建、配置从节点
+     - Delete，删除从节点
+   - Job，作业权限
+     - Create
+     - Delete
+     - Configure
+     - Read，查看构建结果、构建成品等信息
+     - Build，运行构建
+     - Workspace，查看工作空间内容
+   - Run，构建历史
+     - Delete
+     - Update，为构建历史新增描述
+   - View，视图管理
+     - Create
+     - Delete
+     - Configure
+   - SCM，版本管理权限
+     - Tag，为某次构建打上新的Tag
+2) Project-based Matrix Authorization Strategy
+   - 基于Matrix-based Security增加针对项目细分的权限控制
+   - 分为 *系统级权限* 和 *项目级权限*
+   - 系统级权限和Matrix-based Security相同
+   - 项目级权限为基于系统级权限上新增权限（不能删减权限），因此系统级权限必须为最小化授权
+3) Role-based Strategy
+   - 安装插件Role-based Authorization Strategy
+   - 通过Manage Jenkins/Manage and Assign Roles创建组和为用户添加组，并按组设置权限
+     - 在Manage Jenkins/Manage and Assign Roles/Manange Roles下创建的Project roles，在Manage Jenkins/Manage and Assign Roles/Assign Roles下作为Item roles，而不是Global Roles使用。
+
+** 安全审计
+1) 审计跟踪
+   - 插件Audit Trail
+   - 安装插件后到Manage Jenkins/Configure System中配置日志路径
+   - 将用户对系统配置的变更记录保存到指定的日志记录路文件下，但记录没有细致到配置了什么内容的程度
+   - 并记录登录到服务器作的任何操作
+2) 配置变更记录
+   - 插件JobConfigHistory
+   - 详细记录系统级和作业级的配置变更，便于日后问题追查和回滚
+
+* Jenkins时间表
+采用UNIX cron语法。
+~MINUTE HOUR DOM MONTH DOW~
++ MINUTE： 一小时内多少分钟（0-59）
++ HOUR： 一天内多少小时（0-23小时）
++ DOM：一个月内多少天（1-31）
++ MONTH：每月（1-12）
++ DOW：星期几（0-7），其中0和7都表示周日
+
+** 特殊值
+'*'：可用来指定所有有效的值
+'M-N'：可以用来指定一个范围,比如“1-5”
+'M-N/X'或'*/X'：可用于在指定范围内跳跃一个X的值，比如在MINUTE字段中"*/15"表示"0,15,30,45"，"1-6/2"表示"1,3,5"
+'A,B,...,Z'：可以用来指定多个值，比如“0,30”或“1,3,5”
+
+任何空白行和以#开头的都为注释
+
+** 示例
+#+BEGIN_EXAMPLE
+15分钟构建一次：H/15 * * * *
+每天8点构建一次：H 8 * * *
+每天8点~17点，两小时构建一次：H 8-17/2 * * *
+周一到周五，8点~17点，两小时构建一次：H 8-17/2 * * 1-5
+每月1号、15号各构建一次，除12月：* * 1,15 1-11 *
+#+END_EXAMPLE
+
+
 原名为Hudson，同类产品有：CruiseControl,BuildBot,TeamCity和BuildForge等。
 支持Master/Slave分布式构建。
 
@@ -14,14 +237,205 @@ a84b7e78a5144d4ab43ef516a1fe1de0
 
 This may also be found at: /home/john/.jenkins/secrets/initialAdminPassword
 #+END_QUOTE
-* 配置
-Jenkins工作目录通过环境变量JENKINS_HOME设置。
-备份时只需备份$JENKINS_HOME下所有文件即可。
 
-Jenkins从SCM下载代码到本地的$JENKINS_HOME/jobs/<jobname>/workspace/
-构建日志保存在$JENKINS_HOME/jobs/<jobname>/builds/
+* 构建
+为跨操作系统，要将变量命名为全大写。
 
-网络代理：
+** Multi-configuration project
+可简单理解为自动地运行所有可能的参数组合的一个参数化构建作业，非常适合在多个环境（浏览器、数据库、操作系统等）使用一个单独的构建作业完成测试。
+例如：
+1) 通过Slaves Aixs定义选择分别安装了Windows、Linux和Mac操作系统的三个从从节点
+2) 通过User-defined Aixs定义Chrome、IE9和IE10三种浏览器标识
+那么该作业会将上述两个Aixs的入参作迪卡尔积作为入参执行构建作业，按上述参数应该执行9次构建作业。
+
+默认情况下为并发执行，但可以通过Run each configuration sequentially设置为逐个执行。
+另外可以通过Combination Filter来设置Aixs组合值过滤，仅过滤后的参数能触发构建，采用groovy语法。
+
+** 构建作业流程控制
+构建作业间可以存在带触发条件的先后流程顺序，和并行执行顺序。
+
+1) 依赖关系图
+   - 插件：Dependency Graph View(依赖graphviz画图，因此服务器要先安装)
+   - 通过在每一层/目录下Jenkins左侧仪表盘上的Dependency Graph可查看当前层级各作业的流程关系
+2) 并行等待
+   - 插件：Join
+   - 场景：作业A会触发并行运行的作业B和作业C，并当作业B和作业C均运行成功后运行作业D
+   - 使用方式
+     1) 在Build区域中设置Trigger/call builds on other projects
+     2) 在Post-build Actions区域设置Join Trigger
+        Projects to build once, after all downstream projects have finished这里仅用于设置等待Build区域的任务都执行完后，以无参数方式触发另一个构建作业运行。
+3) 加锁
+   - 插件：Locks and Latches
+   - 场景：多个并发运行的作业存在资源竞争时，可通过该插件添加悲观锁实现线性安全。
+   - 使用方式
+     1) 在Manage Jenkins/System Configuration的Locks下添加锁名称；
+     2) 然后在作业配置的Build Environment中选择需要获取的锁即可。
+4) 复制构建产物
+   - 插件：Copy Artifact
+   - 场景：将编译、功能测试和性能测试分别作为3个独立的作业，那么在功能测试和性能测试作业中从编译作业中复制构建产物过来进行下一步测试。
+   - 还可以从Multi-configuration project中复制构建产物。
+   - 注意：
+     1) 必须在上游作业在Post-build中执行Archive动作，然后在下游系统再通过Copy Artifact从上游的构建产物目录而非工作空间复制构建产物到下游作业的工作空间。
+     2) 为确保多个作业使用相同的构建产物，因此必须在每个作业中为构建产物生成指纹，从而作跟踪。
+5) 构建进阶
+   - 插件：Promoted Builds
+     - 在每个一个阶段的第一个构建作业中设置Promote builds when选项，设置通过特定条件从上一阶段进阶到下一个阶段。
+     - 在Promote build when/Acions中添加Trigger parameterized build on other project，在Predefined parameters中设置的Jenkins内置变量为Promote任务的值
+       - $BUILD_URL为http://10.16.86.133:1300/job/qmsv2/job/default/17/promotion/promote-to-uat2/promotionBuild/4/ ，而不是http://10.16.86.133:1300/job/qmsv2/job/default/17/
+       - 若要引用被Promote的任务的值则需要引用插件Promoted Builds提供的环境变量
+         - PROMOTED_URL
+         - PROMOTED_JOB_NAME
+         - PROMOTED_NUMBER
+         - PROMOTED_ID
+         - PROMOTED_TIMESTAMP, timestamp of the promotion. Format example: 2016-02-17T10:46:14Z
+         - PROMOTED_USER_NAME
+         - PROMOTED_USER_ID
+         - PROMOTED_JOB_FULL_NAME
+   - *注意：各阶段作业都不要依赖与其它作业的工作空间，因为工作空间是不稳定的*
+   - 任何进阶操作均可手动触发如Force Promotion(强制进阶，若这个构建作业没有被进阶)或Re-execute Promotion(重新执行进阶)
+   - 汇总测试结果
+     - 由于测试分散在多个上下游作业中，那么需要在最上游作业中勾选"Aggregate downstream test results"来汇总所有测试结果。
+     - *注意：Jenkins只会汇总包含具有相同指纹构建产物的下游构建测试结果*
+   - 构建进阶流程
+     1) 阶段1
+        1) 编译
+        2) 自动化测试(单元测试、集成测试)
+     2) 阶段2
+        1) 自动部署到SIT环境供QA进行手工测试
+     3) 阶段3
+        1) 经过审批后，手动部署到UAT环境供部分用户进行场景测试
+     4) 阶段4
+        1) 经过审批后，手动部署到生产环境
+6) 构建管道视图
+   - 插件：Build Pipeline
+   - 以视图形式构造可视整个构建进阶过程，并帮助设计和监控部署管道。
+
+* 代码质量
+
+分等级实施：
+1) IDE，通过插件将代码质量管控工具集成到IDE；
+2) 构建过程，将代码质量管控工具集成到构建过程，并产生检测报告和影响构建过程；
+   1) Jenkins插件[[https://wiki.jenkins.io/display/JENKINS/Violations][Violations]]生成代码质量报告
+      - 可同时汇总多个工具多个报告
+      - 可使用代码质量分析报告的结果去影响Jenkins仪表盘上的天气图标
+        - 第一列晴天的数量为保持晴天图标的不合规数量的上限
+        - 第二列暴风的数量为显示暴风图标的不合归数量
+        - 不合规数量介于两者时显示多云图标
+        - 第三列不稳定的数量表示不合规数量则标记为不稳定且会发送邮件通知
+   2) Jenkins插件Warnings Next Generation生成和集成多种报告
+      - 比插件Violations功能更强大
+3) KPI，将代码质量列入KPI当中。（更好地去评价各成员水平）
+
+** 度量指标
+1) 代码的行数(NLOC)
+2) 编译警告
+3) TODO List
+4) 代码平均复杂度
+5) 每个类的行数
+6) 静态分析
+   - 分析工具
+     - Java：Checkstyle、PMD、FindBugs、Cobertura和JDepend等
+     - .Net：fxcop、NCover、gendarme和StyleCop等
+     - Groovy： codenarc等
+     - JavaScript：Jslint等
+
+** 代码审查/代码评审(Code Review)
+检查内容：
+1) 代码风格
+2) 编码规范（命名、注释等）
+
+目的：The ultimate goal of source analysis is to allow you to produce elegant, consistent code that your team members and others who view your code will find highly readable.
+
+*** .Net
+1) [[https://github.com/StyleCop/StyleCop][StyleCop]]
+   提供200多条规则的代码风格和编码规范检查验证，采取one-size-fits-all的策略强制所有人采用统一套规则，因此不提供灵活的规则定义方案。[[https://blogs.msdn.microsoft.com/sourceanalysis/][官方博客]]
+   - 默认检查项如下：
+     - Layout of elements, statements, expressions, and query clauses
+     - Placement of curly brackets, parenthesis, square brackets, etc
+     - Spacing around keywords and operator symbols
+     - Line spacing
+     - Placement of method parameters within method declarations or method calls
+     - Standard ordering of elements within a
+     - Formatting of documentation within element headers and file headers
+     - Naming of elements, fields and variables
+     - Use of the built-in types
+     - Use of access modifiers
+     - Allowed contents of files
+     - Debugging text
+   - [[http://www.nichesoftware.co.nz/stylecopcmd.html][StyleCopCMD]]
+     命令行版本的StyleCop以便与NAnt、MSBuild和Jenkins等集成。
+     - 使用方法：
+       #+BEGIN_EXAMPLE cmd
+       usage: Net.SF.StyleCopCmd.Exe [-?] [-cs <arg>] [-d <arg>] [-f <arg>] [-ifp
+       <arg>] [-of <arg>] [-pf <arg>] [-r] [-sc <arg>] [-sf <arg>] [-tf <arg>]
+       -?,--help                          Print this help screen
+       -cs,--configurationSymbols <arg>   Configuration symbols to pass to
+                                          StyleCop (ex. DEBUG, RELEASE)
+       -d,--directories <arg>             Directories to check for CSharp files
+       -f,--files <arg>                   Files to check
+       -ifp,--ignoreFilePattern <arg>     Regular expression patterns that can
+                                          be used to ignore files
+       -of,--outputXmlFile <arg>          The file the XML output is written to
+       -pf,--projectFiles <arg>           Visual Studio project files to check
+       -r,--recurse                       Recursive directory search
+       -sc,--styleCopSettingsFile <arg>   Use the given StyleCop settings file
+       -sf,--solutionsFiles <arg>         Visual Studio solutions files to check
+       -tf,--xslFile <arg>                The transform file
+       #+END_EXAMPLE
+     - 目录(选项 ~-d~)或多文件检查(选项 ~-f~)时在生成报告结果时会出错，因此需要逐个文件执行命令分析。
+       #+BEGIN_EXAMPLE cmd 集成Jenkins
+       rem 对于每个文件创建结果报告目录，并进入此目录后执行StyleCopCmd命令，生成报告
+       mkdir stylecop/abc && cd stylecop/abc && Net.SF.StyleCopCmd.Exe -f ../../src/abc.cs
+       #+END_EXAMPLE
+
+** 静态代码检查
+
+*** .Net
+1) FxCop
+   由微软提供的.net平台代码审查工具，针对托管代码Assembly（DLL和EXE）进行静态代码检查，从而发现源码层面无法发现的问题。
+   1) FxCop violations might include warning related to: Globalization, tight coupling, cyclomatic complexity, potential null dereferences.
+   2) 默认采用《Framework DesignGuidelines》相对严格的规则
+   3) 托管代码Assembly包含
+      1) Assembly清单
+      2) 通过metadata存储的类型描述信息，包含版本信息与类的描述等
+      3) MSIL微软中间语言
+      4) 资源（图标等）
+   4) FxCop工作原理：使用内窥(introspection)而非之前版本的反射(reflection)，因此当检查过程中遇到异常不会中止整个检测过程。
+   5) 插件：FxCop Runner
+      - 将FxCopCmd路径配置到环境PATH中
+      - 然后关闭从节点cmd窗口后，重新打开cmd和启动从节点
+      - 然后通过Warnings Next Generation插件展示报告结果
+
+** 代码复杂度
+常用的度量方式为Cyclometric Complexity，通过测试不同路径（嵌套的条件判断、循环语句）的数量来评估代码复杂度。
+代码质量理论中把代码复杂度和代码覆盖率关联起来。
+
+*** Java
+1) 展示插件：Coverage/Complexity Scatter Plot
+
+** 报告未完成的任务
+通过分析源码中FIXME、TODO和@deprecated等标签数量，评估代码所处状态。
+插件：Warnings Next Generation Plugin
+在Post-build/Record compiler warnings and static analysis results/Static Analysis Tools下添加Tool为Open Tasks Scanner即可。
+
+
+
+* 默认内置的环境变量
+BUILD_NUMBER，构建的唯一数字标识
+BUILD_ID，构建的唯一字符串标识
+BUILD_TAG，构建的唯一标识
+JOB_NAME，任务名称
+NODE_NAME，slave节点名称
+NODE_LABELS，用于标识slave节点的用处
+WORKSPACE，当前job的工作目录
+HUDSON_URL=JENKINS_URL，jenkins的url
+BUILD_URL，构建url，如http://localhost:8000/job/JavaHelloWorld/23/
+JOB_URL，job的url，如http://localhost:8000/job/JavaHelloWorld/
+
+* 自动化测试
+
+** 冒烟测试
+从自动化验收测试的一个子集中抽取可在正式环境安全运行的测试用例进行冒烟测试。
 
 * 插件
 
@@ -34,7 +448,12 @@ Jenkins从SCM下载代码到本地的$JENKINS_HOME/jobs/<jobname>/workspace/
    2. 新增Kind为GitLab API token的Credential
 
 
+
+
+
+
 * 集成Git
+插件：Git Parameter Plug-In
 
 ** 网络拓扑
 服务器A: 部署Git
@@ -74,7 +493,6 @@ sudo ssh-agent bash
 # 将密钥加入到ssh-agent的高速缓存中
 sudo ssh-add ~/.ssh/id_rsa
 #+END_EXAMPLE
-
 
 
 
@@ -126,19 +544,6 @@ http://<jenkins-server>/<command>
 command: exit | restart | reload
 #+END_EXAMPLE
 
-
-* 内置的环境变量
-BUILD_NUMBER，构建的唯一数字标识
-BUILD_ID，构建的唯一字符串标识
-BUILD_TAG，构建的唯一标识
-JOB_NAME，任务名称
-NODE_NAME，slave节点名称
-NODE_LABELS，用于标识slave节点的用处
-WORKSPACE，当前job的工作目录
-HUDSON_URL=JENKINS_URL，jenkins的url
-BUILD_URL，构建url，如http://localhost:8000/job/JavaHelloWorld/23/
-JOB_URL，job的url，如http://localhost:8000/job/JavaHelloWorld/
-
 * Master/Slave
 https://wiki.jenkins.io/display/JENKINS/Step+by+step+guide+to+set+up+master+and+slave+machines
 Jenkins安装在Master服务器上，然后通过SSH、WMI+DCOM、JNLP等与Slave服务器通信。
@@ -184,6 +589,7 @@ java.lang.Exception: The server rejected the connection: None of the protocols w
 2) 将JNLP1/2/3都启用即可
 
 * SVN集成
+插件：Subversion
 
 * 邮件通知
 
@@ -214,3 +620,9 @@ UNREACHABLE! => {"changed": false, "msg": "plaintext: HTTPConnectionPool(host='1
 因此需要清理这两个环境变量后，重启Jenkins才能生效。
 
 
+
+目录
+插件：Folders,Folder Properties
+
+
+post-build中的archive默认会将构建物提取到Master的$JENKINS_HOME/jobs下对应构建任务下

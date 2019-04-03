@@ -5,6 +5,36 @@
 4) IronPtython，用C#实现的虚拟机
 5) RPython，带静态类型的Python
 
+** 在CentOS6.6下安装CPython2.7+
+CentOS6.6自带CPython2.6，并且rpm包的最高版本为CPython2.6，因此需要用源码安装。
+#+BEGIN_EXAMPLE shell
+# 设置代理
+export http_proxy=http://<proxy_host>:<port>
+export https_proxy=https://<proxy_host>:<port>
+
+# 设置yum repos
+wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-6.repo
+yum clean all
+yum makecache
+
+# 安装依赖
+yum groupinstall "Development tools"
+yum install zlib-devel bzip2-devel openssl-devel ncurses-devel sqite-devel
+
+# 下载CPython2.7源码
+cd /opt
+wget --no-check-certificate https://www.python.org/ftp/python/2.7.9/Python-2.7.9.tar.xz
+tar xf Python-2.7.9.tar.xz
+
+# 编译安装
+cd Python-2.7.9
+./configure --prefix=/usr/local
+make && make altinstall
+
+# 修改符号连接
+ln -s /usr/local/bin/python2.7 /usr/local/bin/python
+#+END_EXAMPLE
+
 ** 虚拟机运行机制
 1) 完成模块（源码或字节码）的加载和链接
 2) 将源码编译为字节码，写入内存供CPU读取
@@ -200,7 +230,10 @@ pip install git+git://path/to/git-repo#egg=<package>  # 从git仓库中安装包
 pip install git+file:///path/to/git-repo  # 从本地git仓库中安装包
 pip install svn+http://path/to/git-repo#egg=<package>  # 从svn仓库中安装包
 
-pip install --user <package>  # 将包安装到~/.local/下，而不是$PYTHON_HOME/site-packages/下
+# 将包安装到~/.local/下，而不是$PYTHON_HOME/site-packages/下
+# 然后将~/.local/bin添加到PATH中即可在shell中使用相关的命令
+# 通过python -m site --user-site查看具体的安装目的路径
+pip install --user <package> 
 
 pip uninstall <package>  # 卸载
 
@@ -1442,7 +1475,14 @@ from __future__ import (
 
 * 单元测试
 
-** 通过unittest模块进行单元测试
+** 通过unittest2模块进行单元测试
+unittest2模块是对unittest模块API的优化，并让测试用例书写上更符合pythonic。
+Python2.7内置的unittest模块就是unittest2模块；
+而Python2.6及以下版本则需要 ~pip install unittest2~
+#+BEGIN_EXAMPLE python
+# python2.6
+import unittest2 as unittest
+#+END_EXAMPLE
 
 *** 概念
 *TestCase* 测试用例，包含setUp、run和tearDown；
@@ -1710,6 +1750,15 @@ signal.alarm(5)
 
 * 并发编程
 
+** 操作系统简史
+1) 手工操作
+   没有操作系统的概念，必须逐个用户通过打孔卡片完成输入，然后等待CPU计算处理后，再将结果输出到卡片/纸条等媒介．
+2) 联机批处理
+   存在批处理程序，用户将作业(程序和数据)通过输入机输入，等待作业数达到一定量后批量传输给CPU计算处理，然后将结果输出到输出机．
+3) 离线批处理
+   输入机、输出机、卫星机和高速磁带组成一套与CPU独立的输入输出系统。用户将作业(程序和数据)通过输入
+
+
 ** 多进程
 
 *** Linux下的进程
@@ -1875,8 +1924,11 @@ os.execlpe('bash', 'bash', '-c', '/bin/echo $TEST', {"TEST": 'test1'})
 os.exec*函数族底层都是调用os.execve。
 
 *** 进程创建方式——fork
-  Unix/Linux系统下提供一个 ~fork()~ 的系统调用，该函数会复制当前进程映像创建子进程，然后分别在父进程和子进程中各返回一次（一共返回两次），其中在父进程的返回值为子进程的PID，而在子进程的返回值恒为0。
-  os模块封装了很多系统调用，如 ~os.fork()~ 就封装了UNIX系列的系统调用 ~fork~ 因此返回值也和系统调用fork一致，只是报错时会抛出OSError异常。而Windows下没有fork调用，因此下列代码无法在Windows下运行。
+Unix/Linux系统下提供一个 ~fork()~ 的系统调用，该函数会复制当前进程映像创建子进程，然后分别在父进程和子进程中各返回一次（一共返回两次），其中在父进程的返回值为子进程的PID，而在子进程的返回值恒为0。
+
+默认情况下子进程会集成父进程的所有文件描述符。
+ 
+os模块封装了很多系统调用，如 ~os.fork()~ 就封装了UNIX系列的系统调用 ~fork~ 因此返回值也和系统调用fork一致，只是报错时会抛出OSError异常。而Windows下没有fork调用，因此下列代码无法在Windows下运行。
 #+BEGIN_EXAMPLE python
 from __future__ import print_function
 import os
@@ -1962,34 +2014,32 @@ os.EX_PROTOCOL - 协议切换操作非法，或者协议切换不可用
 os.EX_NOPERM - 没有权限执行该操作                     
 os.EX_CONFIG - 配置错误                               
 """
-sys._exit(ret_code)
+os._exit(ret_code)
 #+END_EXAMPLE
 
 *** IPC——管道
-  管道分为 *匿名管道(限于父子进程间通信)* 和 *命名管道(任意进程间通信)* 。
-  管道的原理是在内存开辟一段区域供通信双方的进程读取和写入。原理类似于两个进程通过操作同一个文件来实现通信，但比操作文件更高效。
-
-半工管道：仅有一方可读、另一个方可写。
-双工管道：双方均可读可写，通过两个半工管道实现。
+管道是所有*nix系统均提供的一种古老的IPC方式。
+管道是一种半双工的通信机制，就是一端读，另一个端写。若要实现全双工通信，则要通过两个管道实现。
+管道遵循FIFO操作规则，并且数据只能被读取一次，读取后管道中这段数据会被清理掉。
+管道的原理是在内存开辟一段区域供通信双方的进程读取和写入。原理类似于两个进程通过操作同一个文件来实现通信，但比操作文件更高效。
+分为 *匿名管道(pipe，限于父子进程间通信)* 和 *命名管道(fifo，任意进程间通信)* 。
 
 **** 匿名管道
+在shell中输入 ~ls -al | grep test~ 创建一个匿名管道让 ~ls -al~ 和 ~grep test~ 两个进程父子进程进行通信。
+
 特点：
-1) 匿名管道仅存活在内存中，进程退出时释放；
-2) 管道为单向通信；
-3) 管道内部保证同步机制，保证数据访问一致性；
-4) 管道采用环形父进程向只写管道中写入的数据，将传递到子进程的只读管道中；
-5) 
+1) 匿名管道仅存活在内存中，父进程退出时释放；
+3) 管道内部采用阻塞同步机制，保证数据访问一致性；
 
-
-
+***** C程序
 #+BEGIN_EXAMPLE c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
-#define INPUT 0  // 只读管道
-#define OUTPUT 1 // 只写管道
+#define INPUT 0  // 管道的只读端
+#define OUTPUT 1 // 管道的只写端
 
 void execute_subprocess(int* fds) {
     printf("in the spawned/child process...\n");
@@ -2034,8 +2084,122 @@ void main(){
 }
 #+END_EXAMPLE
 
+***** Python程序
 #+BEGIN_EXAMPLE python
+# ./pp/blocking_anon_pipe.py
+# -*- coding: utf-8 -*-
+from __future__ import (
+    print_function,
+    unicode_literals,
+)
+import os
+import time
 
+
+class BlockingAnonPipe(object):
+    def __init__(self, ):
+        super(AnonPipe, self).__init__()
+        read_fd, write_fd = os.pipe()
+        self.read_fd = read_fd
+        self.write_fd = write_fd        
+
+    def write(self, content):
+        os.write(self.write_fd, content.encode('utf-8'))
+
+    def read(self, ):
+        b_content = os.read(self.read_fd, 1024)
+        return b_content.decode('utf-8')
+
+    def close_write(self, ):
+        os.close(self.write_fd)
+
+    def close_read(self, ):
+        os.close(self.read_fd)
+
+    def rdwr(self, message):
+        pid = os.fork()
+        if pid == 0:
+            time.sleep(2)
+            self.write(message)
+            os._exit(0)
+        else:
+            content = self.read()
+            os.wait()
+            return content
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE python
+# ./test/test_case_blocking_anon_pipe.py
+# -*- coding: utf-8 -*-
+from __future__ import (
+    print_function,
+    unicode_literals,
+)
+import unittest
+from pp.blocking_anon_pipe import BlockingAnonPipe
+
+class TestBlockingAnonPipe(unittest.TestCase):
+    def setUp(self, ):
+        self.inst = BlockingAnonPipe()
+    
+    def test_wrrd_in_proc(self, ):
+        """
+        在同个一个进程内向管道写入、读取数据。
+        """
+        src = 'Hello World'
+        self.inst.write(src)
+        content = self.inst.read()
+        
+        self.assertEqual(src, content)
+
+    @unittest.skip('timeout because of write blocking when pipe is not empty.')
+    def test_wr2rd2_in_proc_sync(self, ):
+        """
+        当管道中存在数据/写满，那么写入操作将被阻塞，直到管道可写入时才执行写入操作，并返回。
+        """
+        src1 = '1'
+        src2 = '2'
+        self.inst.write(src1)
+        self.inst.write(src2)
+             
+        content1 = self.inst.read()
+        content2 = self.inst.read()        
+
+        self.assertTrue(src1 == content1 and src2 == content2)
+
+    def test_rdwr_in_proc(self, ):
+        """
+        当管道中没有数据时，那么读取操作将被阻塞，直到管道可读时才执行读取操作，并返回内容。
+        """
+        src = 'from child process'
+        content = self.inst.rdwr(src)
+        self.assertEqual(src, content)
+
+    def test_wr_closing_rd(self, ):
+        """
+        C程序中：
+          读取端已关闭，但继续往管道写入数据时。那么执行写入的进程会收到信号量SIGPIPE，默认处理为中止执行写入的进程。
+        Python中：
+          读取端已关闭，但继续往管道写入数据时。那么执行写入时会抛出OSError Broken pipe的异常。          
+        """
+        self.inst.close_read()
+        with self.assertRaises(OSError):
+            self.inst.write('content')
+
+    def test_rd_closing_wr(self, ):
+        """
+        C程序中：
+          写端已关闭，但继续从管道执行读取操作。那么执行读取时返回0,如同读取到文件末尾一样。
+        Python中：
+          写端已关闭，但继续从管道执行读取操作。那么执行读取时返回空字符串，不会阻塞。
+        """
+        src = 'content'
+        self.inst.write(src)            
+        self.inst.close_write()
+        content = self.inst.read()
+        empty = self.inst.read()
+        
+        self.assertTrue(content == src and empty == '')
 #+END_EXAMPLE
 
 **** 命名管道
@@ -2179,7 +2343,7 @@ This is a javadoc style.
 """
 #+END_EXAMPLE
 
-** reST
+** reStructuredText
 Sphinx御用风格
 #+BEGIN_EXAMPLE python
 """

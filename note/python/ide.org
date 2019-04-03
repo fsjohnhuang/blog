@@ -1,0 +1,54 @@
+* 虚拟环境
+
+** 限制pip必须在一个激活的虚拟环境中执行安装
+#+BEGIN_EXAMPLE shell
+# 在~/.bashrc中加入
+export PIP_REQUIRE_VIRTUALENV=true
+
+# 要在虚拟环境外执行安装则需要使用gpip install
+gpip() {
+    PIP_REQUIRE_VIRTUALENV="" pip "$@"
+}
+#+END_EXAMPLE
+
+** pipenv
+pipenv是基于pip和virtualenv的更高级的集成虚拟环境的依赖管理器，在安装第三方依赖时自动生成Pipfile用于记录Python版本、开发依赖(dev-packages)、运行依赖(packages)和项目的基本信息，并且通过 ~pipenv run python <project.py>~ 启用一个虚拟环境运行项目。
+
+缺点：无法通过pip安装的第三方依赖，就比较难安装到虚拟环境了。
+
+*** 安装
+#+BEGIN_EXAMPLE shell
+# 将pipenv安装到~/.local下
+pip install pipenv --user
+# 将~/.local/bin加入到环境变量PATH中，后续在shell中可使用pipenv命令
+export PATH=$HOME/.local/bin:$PATH
+#+END_EXAMPLE
+
+*** 使用
+#+BEGIN_EXAMPLE shell
+# 创建并进入项目
+mkdir foo_project && cd foo_project
+
+# 创建虚拟环境
+pipenv --python 2.7
+
+# 安装第三方依赖
+pipenv install jenkins-job-builder
+
+# 安装当前目录下Pipfile、Pipfile.lock内的依赖
+# 若没有上述文件则根据当前目录下的requirements.txt生成Pipfile和Pipfile.lock在安装
+pipenv install
+
+# 在不激活虚拟环境下，临时在虚拟环境运行应用
+pipenv run python foo.py
+
+# 激活虚拟环境
+pipenv shell
+# 激活虚拟环境后在虚拟环境运行应用
+python foo.py
+# 退出虚拟环境
+exit
+
+# 查看依赖图
+pipenv graph
+#+END_EXAMPLE

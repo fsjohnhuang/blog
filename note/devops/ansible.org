@@ -1,6 +1,16 @@
-* 服务端
+* 服务端命令
+#+BEGIN_EXAMPLE shell
+# ansible，执行ad-hoc命令
 
-ansible
+ansible-doc -l # 列出所有已安装的模块
+ansible-doc -s win_iis_webapppool # 列出某模块的使用说明
+
+
+ansible-config      ansible-console     ansible-galaxy      ansible-playbook    ansible-test                                                              
+ansible-connection    ansible-inventory   ansible-pull        ansible-vault  
+#+END_EXAMPLE
+
+
 ansible-doc
 ansible-playbook
 ansible-vault
@@ -8,7 +18,30 @@ ansible-galaxy
 ansible-pull
 
 * 架构
-Ansible编排引擎由Inventory,API,Modules和Plugins组成
+Ansible编排引擎组成：
+1) Ansible Core，Ansible自身核心模块；
+2) Host Inventory，主机库，用于定义可管控的主机列表；
+3) Connection Plugins，连接插件，有local、SSH（默认，底层通过paramiko实现）和Omq（message bus）；
+4) Modules，任务模块，分为自带的Core Modules和自定义的Custom Modules；
+5) Playbook，剧本。
+
+* 工作流程
+1) 读取配置信息
+2) 抓取全量机器、分组列表和关联变量（可从多个静态文件、目录读取，或通过脚本读取从其他来源读取）
+3) 使用host-pattern过滤机器列表
+4) 根据参数确定执行模块和配置（从modules目录动态读取模块信息，自定义模块则放在modules目录下）
+5) Runner执行返回
+   1) Connection阶段，通过Connection Plugin连接控制节点
+   2) Action阶段，通过Lookup plugin获取Action所需的变量和文件等资源
+      1) 使用jinja2解释模板时，会调用filters目录下的Filter plugins（自定义Filter则放filters目录下）
+      2) 在执行各阶段会调用callbacks目录下的Callback plugins执行钩子函数调用
+6) 输出、结束
+
+* 安装
+
+** 通过pip安装
+注意：pip会将ansible-playbook等命令安装到~/.local/bin下，那么要通过 ~ln -s $HOME/.local/bin/ansible-playbook /usr/bin/ansible-playbook~ 才能在Jenkins中使用，否则在Jenkins下会报找不到该命令。
+
 * Inventory管理
 Inventory就是管理节点集合
 Inventory清单路径：
@@ -109,26 +142,39 @@ remote_user = lmx # 默认ssh登录帐号
 
 * 配置
 配置读取顺序为：
-1) ANSIBLE_CONFIG
-2) ./ansible.cfg
+1) 环境变量ANSIBLE_CONFIG
+2) 当前工作目录下的ansible.cfg
 3) ~/.ansible.cfg
 4) /etc/ansible/ansible.cfg
 
+内容采用ini格式
 
 ** 常用配置
-- inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)
-- remote_user，SSH的用户名
-- remote_port，SSH的端口号
-- log_path，日志文件路径
-- forks，并行进程的数量
-- gathering，控制收集Facts变量的策略
-- become，是否进行提权
-- become_method=sudo，提权方式
-- become_user=root，提权为哪个用户
-- become_ask_pass=no，提权是否需要密码
-- ssh_args，控制SSH连接参数
-- pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
-- control_path，保存ControlPath socket的路径
+#+BEGIN_EXAMPLE ansible.cfg
+[defualts]
+; inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)
+; library=/usr/share/my_modules/，指定模块地址
+; action_plugins=/usr/share/ansible/plugins/action，action模块存放的路径
+; callback_plugins=/usr/share/ansible/plugins/callback，callback模块存放的路径
+; connection_plugins=/usr/share/ansible/plugins/connection，connection模块存放的路径
+; lookup_plugins=/usr/share/ansible/plugins/lookup，lookup模块存放的路径
+; vars_plugins=/usr/share/ansible/plugins/vars，vars模块存放的路径
+; test_plugins=/usr/share/ansible/plugins/test，test模块存放的路径
+; strategy_plugins=/usr/share/ansible/plugins/strategy，strategy模块存放路径
+; remote_user，SSH的用户名
+; log_path=/var/log/ansible.log，日志文件路径
+; forks=5，并行进程的数量
+; gathering=implicit，控制收集Facts变量的策略
+; become，是否进行提权
+; become_method=sudo，提权方式
+; become_user=root，提权为哪个用户
+; become_ask_pass=no，提权是否需要密码
+; ssh_args，控制SSH连接参数
+; pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
+; control_path，保存ControlPath socket的路径
+; retry_files_enabled=False，当playbook失败得情况下，一个重试文件将会创建，默认为开启此功能
+; retry_files_save_path = ~/.ansible-retry，重试文件的路径，默认为当前目录下.ansible-retry
+#+END_EXAMPLE
 
 * 管理Windows服务器
 ** 前提条件
@@ -178,11 +224,21 @@ InvalidOperation: (:) [], ThreadStartException    + FullyQualifiedErrorId : Inva
    4) 确定右键点powershell图标，选择了管理员，权限运行powershell。
    5) 最后运行winrm quickconfig 命令。
 
+5) windows2008下使用win_iis_website时powershell4.0报”Get-Website : Could not load file or assembly 'Microsoft.IIS.PowerShell.Framework' or one of its dependencies. 系统找不到指定的文件。“
+
+资料：
+http://dllsearch.net/dlls/m/microsoft.iis.powershell.framework-dll-file
+https://www.cnblogs.com/jiangjun0817/p/4214660.html
+
+升级powershell5.0
+安装Microsoft .NET Framework 4.5
+https://www.microsoft.com/zh-cn/download/confirmation.aspx?id=30653
+安装Windows Management Framework 5.0，去这里下载，Windows 2008 R2选择安装【Win7AndW2K8R2-KB3134760-x64.msu】
+https://www.microsoft.com/en-us/download/confirmation.aspx?id=54616
 ** 管理端安装配置
 参考:
 1) https://www.cnblogs.com/kingleft/p/6391652.html
 2) http://www.ansible.com.cn/docs/intro_windows.html (内含Windows Server 2008 R2管理节点配置方式)
-
 
 - 安装Framework3.0
   - 下载地址 http://download.microsoft.com/download/B/A/4/BA4A7E71-2906-4B2D-A0E1-80CF16844F5F/dotNetFx45_Full_x86_x64.exe
