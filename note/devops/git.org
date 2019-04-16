@@ -1,0 +1,5 @@
+* 配置
+* 本地操作
+#+BEGIN_EXAMPLE shell
+# 将一系列变更合并为一个，让变更历史更加清晰，称为挤压(squashing)
+#+END_EXAMPLE

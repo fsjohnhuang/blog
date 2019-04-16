@@ -1,0 +1,363 @@
+* DevOps
+包含技术和非技术的文化两部分，作为敏捷开发的一部分。而另一个核心目标是自动化和持续交付。
+
+自动化和持续交付核心是让流程更快、更有效、更可靠地地加速交付效率，增加商业价值。高层次上为了抢占市场，低层次上为了盯紧任务。
+
+** 敏捷开发宣言
+个体、互动 高于 流程、工具
+工作的软件 高于 详细的文档
+客户合作   高于 合同谈判
+响应变化   高于 遵循计划
+
+虽然右侧项目均很有价值，但强调左侧项目更有价值。
+
+其中QA、开发、运维人员使用同一套系统工作、沟通也体现这一点。
+
+** DevOps和ITIL(信息技术基础架构库)
+ITIL中规定了配置管理系统和配置管理数据库，这些也是DevOps中必不可少的一部分。
+
+** DevOps流程和持续交付
+1) 开发人员
+   每台开发机都拥有类生产环境的开发环境，因此需要一套预打包的开发环境。如生产环境使用RedHat，那么开发环境可以使用CentOS或者Fedora。
+   - 工具：Vargrant虚拟机、AWS上的云实例或Docker容器等
+2) 版本控制系统
+3) 构建服务器
+4) 工件库
+   将通过测试的编译好的可执行文件存放到有别于版本控制系统的地方。
+   - 工具：
+     - Sonatype Nexus用于存放Jar、Ear和War等Java工件或RPM、JavaScript等工件；
+     - 包管理器本质上也是一个工件库。
+5) 包管理器
+   - Linux系统有yum、apt、dnf等
+   - Windows系统有chocolate
+   - Java有maven
+   - C#有Nuget
+6) 测试环境
+   测试人员进行集成测试、端到端测试和性能测试等
+7) 预发布/生产
+   蓝绿发布策略：将工件部署到预发布环境后经检查无误则将预发布环境和生产环境切换过来，这样预发布环境变为新的生产环境。（不是所有企业都有这样的条件）
+8) 发布管理（团队）
+   由于全流程自动化实现难度极高，并且业务和技术开发的节奏不一定相同，因此在发布过程中人工介入是必要的。
+
+** 康威定律
+   1968年Melvin Conway提出设计软件的组织架构等价于软件的组织架构。
+   例如：软件采用三层架构，那么企业架构一般为DBA团队、后台开发团队、前端开发团队和运维团队。
+
+** 如何保持服务接口向上兼容
+   采用Tolerant Reader模式，就是服务消费端应该忽略它无法识别的数据。缺点是服务提供端无法移除无效数据。
+
+* 虚拟化技术
+VMware、VMware Funsion
+KVM是Linux内置的开源虚拟化解决方案
+VirtualBox是Oracle的开源虚拟化解决方案，一般用于开发环境。
+Xen支持半虚拟化(paravirtualization)
+
+存来类似于[[https://libvirt.org/][libvirt]]这样的自动化虚拟机管理API来管理上述虚拟化技术实现的虚拟机。
+
+** Vagrant
+作为虚拟机的配置管理系统，根据模板文件(Vagrantfile)中定义的模式快速配置VM。一般用于搭建开发环境虚拟机。
+从DevOps角度看：
+   1) Vagrant+VirtualBox适合搭建开发环境；
+      - 开发环境，即开发人员在自己的OS（windows/mac/linux）上开发，然后将工件发布到开发环境（和正式环境版本一致的nginx、mysql等）运行。
+   2) Vagrant+VirtualBox适合搭建Ansible等部署管理系统的开发环境；
+   3) 支持集群架构，因此也适合搭建SIT、UAT
+
+Vagrant使用的基础镜像称为box，作为VM模板然后根据模板文件(Vagrantfile)中指定设置修改预安装操作系统实例配置。
+
+*** 命令
+#+BEGIN_EXAMPLE bash
+# 创建工作目录
+mkdir dev-env/ && cd dev-env
+
+# 在当前目录创建默认Vagrantfile
+vagrant init
+
+# 由于国内访问Vagrant Cloud网速慢，因此都是从清华大学镜像下载https://mirrors.tuna.tsinghua.edu.cn/
+# 使用指定镜像初始化虚拟机
+vagrant init http://files.vagrantup.com/precise64_vmware.box
+# 从HashiCorp的Atlas(Vagrant Cloud)在线镜像库下载镜像初始化虚拟机
+vagrant init hashicorp/precise64
+
+# 启动virtual box虚拟机运行镜像
+vagrant up --provider=virtualbox
+
+# 启动Vagrantfile中设置的所有虚拟机
+vagrant up
+
+# 启动指定name的虚拟机
+vagrant up node1 web2
+
+# 通过SSH连接入虚拟机
+# 注意：pwd必须为Vagrantfile所在目录时才能执行此命令
+vagrant ssh
+
+# 若存在多个角色的虚拟机，则要指明
+vagrant ssh <role-name>
+
+# 通过虚拟机IP连接入虚拟机
+# 帐号密码均为vagrant
+ssh vagrant@<guest ip>
+
+# 查看虚拟机的SSH配置
+vagrant ssh-config
+
+# 查看虚拟机状态
+vagrant status
+
+# 挂载虚拟机
+vagrant suspend
+
+# 从挂起状态恢复过来
+vagrant resume
+
+# 重启虚拟机
+vagrant reload
+
+# 重新执行Vargantfile中config.vm.provision的预安装指令
+vagrant reload --provision
+
+# 关闭虚拟机
+vargrant halt
+
+# 销毁虚拟机
+vagrant destroy
+
+vagrant box list # 罗列本地所有的已安装的box
+vagrant box add <box-name> <box-url> # 下载box到本地，下载到~/.vargrant.d/boxes/下
+vagrant box remove <box-name> # 从本地移除box
+vagrant box update <box-name> # 更新本地box
+vagrant box repackage <box-name> # 重新打包本地box
+
+vagrant package --output <package-name># 将当前虚拟机打包为box
+#+END_EXAMPLE
+
+*** Vagrantfile
+#+BEGIN_EXAMPLE ruby
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  # 指定镜像
+  config.vm.box = "base"
+  config.vm.box_version = "1.1.0" # 指定box版本
+  config.vm.box_url = "http://vagrant/base.box" # 指定box的资源URL
+
+  # 启动/关闭Vagrant镜像版本更新检测功能，手动更新采用vagrant box outdated
+  config.vm.box_check_udpate = false
+
+  # NAT端口转发，访问宿主机的8889端口将转发到虚拟机的80端口
+  # 不能使用宿主机小于1024的端口
+  # 官网：https://www.vagrantup.com/docs/networking/forwarded_ports.html
+  config.vm.network :forwarded_port, guest: 80, host:8889
+    
+  # host-only模式，仅宿主机和同一网段的其它虚拟机能访问，虚拟机能访问外网
+  # 官网：https://www.vagrantup.com/docs/networking/private_network.html
+  # 添加auto_config: true 那么在打包后网络IP有冲突就会自行解决
+  config.vm.network :private_network, ip: "192.1.1.2", auto_config: true
+
+  # 桥接
+  config.vm.network :public_network, bridge: "en1: Wi-Fi (AirPort)"
+  
+  config.vm.provider :virtualbox do |v|
+    v.name = "自定义虚拟机名称"
+    v.hostname = "自定义虚拟机主机名"
+
+    v.linked_clone = true # 优化项，仅在第一次使用box时才引入box，后续虚拟机都用同一个box，而磁盘则使用不同的区域
+
+    v.gui = false # 默认为headless模式，可通过设置为true启用gui模式
+    v.memory = 1024 # 内存容量，单位MB
+    v.cpus = 2   # CPU核数
+
+    # 初始执行vagrant up时会执行
+    v.provision "shell", inline: <<-SHELL
+        apt-get update
+        apt-get install -y apache2
+        # 解决采用public_network时每次重启网络都失效的问题
+        systemctl restart network
+        systemctl restart sshd
+    SHELL
+
+    # 在与Vagrangfile相同目录下创建bootstrap.sh文件
+    v.provision "shell", path: "bootstrap.sh"
+  end
+end
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE bash
+# ./bootstrap.sh
+#!/usr/bin/env bash
+
+apt-get update
+apt-get install -y apache2
+if ! [ -L /var/www ]; then
+  rm -rf /var/www
+  ln -fs /vagrant /var/www
+fi
+#+END_EXAMPLE
+
+*** 共享目录
+虚拟机中的/vagrant作为与宿主机间的共享目录
+
+*** 注意点  
+1) VirtualBox中Nginx必须在nginx.conf中设置 ~sendfile off~ ，否则静态文件会缓存起来。
+2) VirtualBox中Apache必须在httpd.conf中设置 ~EnableSendFile off~ ，否则静态文件会缓存起来。
+3) VirtualBox升级时可能导致VirtualBox Guest Additions失效，可通过安装Vagrant插件解决 ~vagrant plugin install vagrant-vbguest~
+4) 若要定义磁盘空间大小，那么要安装插件[[https://github.com/sprotheroe/vagrant-disksize][vagrant-disksize]] ~vagrant plugin install vagrant-disksize~
+   #+BEGIN_EXAMPLE ruby
+   config.disksize.size = "20GB"
+   #+END_EXAMPLE
+5) 初次启动时若想修改虚拟机磁盘位置，那么按如下步骤处理
+   1) 通过 ~vagrant up~ 启动虚拟机、安装操作系统并初始化
+   2) 然后通过 ~vagrant halt~ 关闭虚拟机
+   3) 到~/VirtualBox VMs下对应的虚拟机目录下将虚拟硬盘.vmdk文件剪切到目的路径下
+   4) 执行 ~VBoxManage internalcommands sethduuid "path/to/destination.vmdk"~ 生成唯一标识
+   5) 然后将该虚拟磁盘文件重新添加到对应虚拟机的SATA Contorller下即可
+   6) 为何不加入到Vagrantfile中呢？
+      1) 目标路径不具备可移植性，Vagrantfile中应设置四海通用的配置操作
+      2) 默认创建的虚拟磁盘虽然为动态分配40G，所以实际占用容量并没有40G
+6) VirtualBox虚拟磁盘扩容
+   1) 复制并将磁盘文件vmdk转为vdi格式， ~VBoxManage clonehd "source.vmdk" "cloned.vdi" --format vdi~
+   2) 通过 ~VBoxManage list hdds~ 获取磁盘UUID
+   3) 执行扩容 ~VBoxManage modifyhd 你的uuid --resize 40960~
+   4) 重新添加到到对应虚拟机的SATA Contorller下即可
+
+*** 搭建Ansible实验室
+#+BEGIN_EXAMPLE ruby
+Vagrant.config(2) do |config|
+    #common config
+    config.vm.box = "ubuntu/trusty64"
+    config.vm.provider "virtualbox" do |vb|
+        vb.memory = 256
+        vb.cpus = 1
+        # 设置宿主机和虚拟机间的共享目录
+        vb.synced_folder "~/host/share", "/guest/vagrant/share"
+    end
+    
+    # create some web server
+    (1..2).each do |i|
+        config.vm.define "web#{i}" do |web_config|
+            web_config.vm.hostname = "web#{i}"
+            web_config.vm.network "private_network", ip: "192.168.33.2#{i}"
+            web_config.vm.network "forwarded_port", guest: 80, host: "808#{i}"
+        end
+    end
+    
+    # create mgmt node
+    config.vm.define "mgmt" do |mgmt_config|
+        mgmt_config.vm.hostname = "mgmt"
+        mgmt_config.vm.network "private_network", ip: "192.168.33.11"
+        mgmt_config.vm.provision "shell", path: "bootstrap-mgmt.sh"
+    end
+end
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE
+#!/usr/bin/env bash
+
+#install ansible
+sudo apt-get install software-properties-common
+sudo apt-add-repository ppa:ansible/ansible
+sudo apt-get update
+sudo apt-get install -y ansible
+
+#configure hosts file
+cat >> /etc/hosts <<EOL
+#vagrant env node
+192.168.33.11 mgmt
+192.168.33.21 web1
+192.168.33.22 web2
+EOL>
+#+END_EXAMPLE
+
+** 容器
+应用隐藏的复杂性：外部依赖项（第三方软件包、语言运行时库、系统库和数据库）、配置项，和同一个服务器上其他应用程序的依赖性和配置冲突。
+
+示例：
+1) 服务器运行着两个不同版本的应用程序，并且这两个版本的应用程序分别依赖新旧版本的openssl。
+   原来的解决办法：新旧版本的openssl以/usr/lib/openssl.so和/usr/lib/openssl-1.0.1.so的形式共存，并且在编译两个版本的应用程序时修改配置。
+
+*** 容器与VM的对比
+    容器是分配给特定任务计算资源的的离散单元，与VM类似。VM有 *安全性隔离* 和 *基础设施部署速度* 等容器无法解决的使用场景，若应用程序需要root权限等则应将其部署到独立VM上。
+    架构：
+    - 物理裸机：通过Razor或Cobbler实现快速初始化和启动服务器
+    - VM：在一台物理机上部署多个VM
+    - 容器：通过容器在VM上运行应用程序
+
+*** Linux容器
+
+    - Linux控制组(cgroup)
+      作为内核为多个同组进程分配CPU和RAM等资源统一单元，容器对于内核而言与常规进程相似，因此必须通过cgroup试图公平分配资源。
+    - Linux内核的命名空间
+      Linux容器提供的隔离是由Linux内核的命名空间提供的。对于应用程序而言主要需要Mount、Network和UTS命令空间。而Linux容器本身并无法提供如如VMware等虚拟机那样的安全性级别。通过LXC等用户空间工具可以调用Linux命名空间的系统调用实现容器部署，但各发行版又不尽相同因此使用上十分不便。
+      1) IPC(进程间通信)
+      2) Mount(文件系统和挂载点)
+         位于不同Mount命令空间的进程将在各自拥有不与主机操作系统共享的文件系统，因此各应用程序可以无冲突地安装依赖项。当与chroots相结合时，可创建应用程序运行的全隔离Linux安装。
+      3) Network(联网)
+         位于不同Network命名空间的进程具有独立的网络栈，即可以各自指定网络地址和使用相同的端口号也不会产生冲突。
+      4) PID(进程)
+      5) User(用户ID)
+      6) UTS(主机名)
+         位于不同UTS命名空间的进程具有指定唯一主机名的能力(如Oracle就是通过主机名来识别来自不同客户机的会话)
+
+QA:
+1) 什么是chroots？
+2) 什么是tty？
+
+*** Docker容器
+Docker是基于cgroup、Linux命名空间和其他开源Linux项目，进一步简化容器部署的技术方案。
+由Docker守护进程和客户端组成。
+1) Docker守护进程：负责在单一主机上启动、停止和保存应用程序容器，并提供API供远程编程方式控制容器。
+2) Docker客户端：CLI工具，通过与Docker守护进程作远程通信来控制容器。
+
+默认保存在主机的/var/lib/docker上。
+
+**** 命令
+#+BEGIN_EXAMPLE bash
+
+# 运行容器
+# -d 创建容器后断开连接容器于后台运行
+# -p <container_port>:<host_port> 容器和主机的NAT
+# --name <container_port> 容器的唯一名字
+# 最后跟的是镜像名，默认会先从本地查找镜像，若没有则到Docker Hub上查找下载
+# 回显的最后一行是已创建的容器ID，它和容器的名字一一对应
+docker run -d -p 80:8080 --name redis redis
+
+# 显示已启动的容器
+docker ps
+
+# -i 创建容器后不断开连接，而是直接和容器交互
+# -t 容器为我们提供一个tty，用于运行命令
+# --link 将容器redis的IP地址、应用程序端口号等信息配置为这个容器的环境变量
+# /bin/bash 当以交互式启用容器时，自动进入/bin/bash命令进入 Bash Linux shell
+# 执行这个命令后我们就会进入容器的交互式环境，然后安装redis客户端，并输入redis-cli -h $REDIS_PORT_80_TCP_ADDR -p $REDIS_PORT_80_TCP_PORT连接redis服务
+docker run -it --link redis:redis --name redis-client ubuntu /bin/bash
+#+END_EXAMPLE
+
+**** Docker映像
+组成：
+1) 一个压缩文件系统
+   - aufs
+   - btrfs
+2) 一个元数据文件
+3) 容器配置文件Dockerfile
+   文本文档，包含一组用于构建容器的命令。
+   - ~#~ 行注释
+   - ~FROM <repository>:<tag>~ 定义基础镜像(~<tag>~ 默认为latest)，如 ~FROM ubuntu:14.04~
+   - ~MAINTAINER <name> <email>~ 定义镜像维护者
+   - ~RUN <cmd>~ 向Docker守护进程提供容器构建的命令
+
+**** 容器编排
+     大规模使用容器将面临如下问题：
+     1) 布置（亲和或者反亲和）
+     2) 可用性（容器状态管理：运行、停止、从故障中恢复）
+     3) 联网（容器间通信）
+
+**** k8s(Kubernetes)
+     源自Google用于管理多台机器上的容器。
+
+* 监控
+
+*** 日志收集分析-ELK
+    组成：
+    1) Logstash，用于接收如log4j等日志框架发送过来的日志记录
+    2) Elasticsearch，保存日志并建立索引
+    3) Kibana，日志搜索和可视化的Web界面

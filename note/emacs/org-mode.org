@@ -26,3 +26,51 @@ Symbol's function definition is void: org-link-types
         ("melpa" . "http://elpa.emacs-china.org/melpa/")
         ("org" . "http://orgmode.org/elpa/")))
 #+END_EXAMPLE
+
+* 代办列表
+
+** 基础
+#+BEGIN_EXAMPLE elisp
+; TODO项目：以1到多个*号开头的headline作为TODO项目
+
+; 操作
+M-x (org-todo) ; 选择关键字，快捷键 C-c C-t
+C-u C-c C-t    ; 按顺序循环加入或更新关键字
+(org-show-todo-tree) ; 显示存在关键字且关键字不为DONE的TODO项，快捷键 C-c / t
+(org-insert-todo-heading) ; 插入TODO项
+(org-insert-todo-subheading) ; 插入子TODO项
+#+END_EXAMPLE
+
+** 配置
+#+BEGIN_EXAMPLE elisp
+; 竖杆右侧关键字均表示结束状态
+; fast-access-todo
+;     自定义TODO项关键字和选择快捷键（括号中的字母）
+; multiple keyword sets
+;     通过C-u C-u C-c C-t在多个keyword sets之间切换
+; keywords as types
+;     通过type代替sequence，表示后续（竖杆左侧）关键字没有次序关系
+(setq org-todo-keywords
+    '((sequence "TODO(t)" "|" "DONE(d)")
+      (sequence "REPORT(r)" "BUG(b)" "KNOWNCAUSE(k)" "|" "FIXED(f)")
+      (sequence "|" "CANCELED(c)")
+      (type "Fred" "Jay" "|" "DONE")))
+
+; 配置关键字样式
+(setq org-todo-keyword-faces
+      '(("TODO" . org-warning) ("STARTED" . "yellow")
+        ("CANCELED" . (:foreground "blue" :weight bold))))
+#+END_EXAMPLE
+
+** 内联配置
+#+BEGIN_EXAMPLE elisp
+#内联multiple keyword sets
+#+TODO: TODO | DONE
+#+TODO: REPORT BUG KNOWNCAUSE | FIXED
+#+TODO: | CANCELED
+
+#内联keywords as types
+#+TYP_TODO: Fred Jay | DONE
+
+C-c C-c ; 在首行执行将刷新内联配置
+#+END_EXAMPLE

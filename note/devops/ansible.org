@@ -1,15 +1,32 @@
+自动化配置工具（提供配置管理、流程控制、资源部署等功能）
+
+蓝绿部署(blue/green deployments)
+滚动式部署(rolling deployments)
+金丝雀部署(canary deployments)
+灰度发布()
+
+等幂性(idempotent)，某动作执行结果为某事物已达到某目标状态，在执行该动作前先检查事物是否已达到某状态，若已达到某状态则不执行，若未达到则执行。
+收敛性，某动作可多次执行，每次执行都让状态更趋向于目标状态，并最终达到目标状态。由Mark Burgess在CFEngine中提出的。
+
+backport方式：将一个软件的补丁应用到比此补丁所对应的版本更老的版本的行为。
+
+* 服务器自动化搭建
+  | 交付产物： | 虚拟机     | 服务器                | OS镜像                | 已配置的服务器        | 已加固的服务器                                         | 应用就绪的服务器      | 服务器资源池          |
+  | 操作：     | 创建VM     | Provision             | 安装补丁              | 部署配置基线          | 部署安全基线，并执行安全验证后向信息安全员交付安全报告 | 交付给应用交付团队    | 运维                  |
+  | 角色：     | 系统管理员 | Ansible自动化运维平台 | Ansible自动化运维平台 | Ansible自动化运维平台 | Ansible自动化运维平台                                  | Ansible自动化运维平台 | Ansible自动化运维平台 |
+
 * 服务端命令
-#+BEGIN_EXAMPLE shell
+#+BEGIN_EXAMPLE bash
 # ansible，执行ad-hoc命令
 
 ansible-doc -l # 列出所有已安装的模块
 ansible-doc -s win_iis_webapppool # 列出某模块的使用说明
 
+ansible-galaxy install <role_name> # 从http://galaxy.ansible.com/list#/roles上下载role到/etc/ansible/roles/目录下
 
 ansible-config      ansible-console     ansible-galaxy      ansible-playbook    ansible-test                                                              
 ansible-connection    ansible-inventory   ansible-pull        ansible-vault  
 #+END_EXAMPLE
-
 
 ansible-doc
 ansible-playbook
@@ -21,9 +38,15 @@ ansible-pull
 Ansible编排引擎组成：
 1) Ansible Core，Ansible自身核心模块；
 2) Host Inventory，主机库，用于定义可管控的主机列表；
-3) Connection Plugins，连接插件，有local、SSH（默认，底层通过paramiko实现）和Omq（message bus）；
-4) Modules，任务模块，分为自带的Core Modules和自定义的Custom Modules；
-5) Playbook，剧本。
+3) Plugins
+   完成模块功能的补充。
+   1) Filter Plugins
+   2) Callback Plugins
+      - 邮件
+      - 日志
+4) Connection Plugins，连接插件，有local、SSH(默认，底层通过paramiko实现)和ZeroMQ(message bus，大规模时使用这个会提高执行速度)
+5) Modules，任务模块，分为自带的Core Modules和自定义的Custom Modules；
+6) Playbook，剧本。
 
 * 工作流程
 1) 读取配置信息
@@ -33,16 +56,64 @@ Ansible编排引擎组成：
 5) Runner执行返回
    1) Connection阶段，通过Connection Plugin连接控制节点
    2) Action阶段，通过Lookup plugin获取Action所需的变量和文件等资源
-      1) 使用jinja2解释模板时，会调用filters目录下的Filter plugins（自定义Filter则放filters目录下）
-      2) 在执行各阶段会调用callbacks目录下的Callback plugins执行钩子函数调用
+      1) 若要向管理节点传送文件，内部将使用SCP、SFTP或Rsync(基于SSH)实现
+      2) 使用jinja2解释模板时，会调用filters目录下的Filter plugins（自定义Filter则放filters目录下）
+      3) 在执行各阶段会调用callbacks目录下的Callback plugins执行钩子函数调用
 6) 输出、结束
 
+* TODO 凭证隔离(Crendential Segregation)
+可实现研发工程师管理开发服务器，QA工程师管理QA服务器，而系统管理员管理生产环境服务器，不允许跨权限操作服务器。
+
+* TODO 自定义模块
+  可以使任何语言开发自定义模块。
+
 * 安装
+  [[https://github.com/ansible/ansible][Ansible GitHub]]
 
-** 通过pip安装
-注意：pip会将ansible-playbook等命令安装到~/.local/bin下，那么要通过 ~ln -s $HOME/.local/bin/ansible-playbook /usr/bin/ansible-playbook~ 才能在Jenkins中使用，否则在Jenkins下会报找不到该命令。
+  - 管控节点
+    - 依赖项
+      - Python2.6+
+      - paramiko模块
+      - PyYAML
+      - Jinja2
+      - httplib2
+    - 源码安装devel开发版本
+      #+BEGIN_EXAMPLE bash
+      # 安装依赖项
+      sudo easy_install pip
+      sudo pip install paramiko PyYAML Jinja2 httplib2 six
 
-* Inventory管理
+      # 下载安装
+      git clone git://github.com/ansible/ansible.git --recursive
+      cd ./ansible
+      source ./hacking/env-setup
+
+      # 更新Ansible
+      git pull --rebase
+      git submodule update --init --recursive
+      #+END_EXAMPLE
+    - 系统软件包管理工具进行安装
+      - 制作rpm包
+        #+BEGIN_EXAMPLE bash
+        git clone git://github.com/ansible/ansible.git
+        cd ./ansible
+        # 要先安装rpm-bulid、make和python2-devel组件
+        make rpm
+
+        # 安装
+        sudo rpm -Uvh ~/rpmbuild/ansible-*.noarch.rpm
+        #+END_EXAMPLE
+    - 通过pip安装
+      注意：pip会将ansible-playbook等命令安装到~/.local/bin下，那么要通过 ~ln -s $HOME/.local/bin/ansible-playbook /usr/bin/ansible-playbook~ 才能在Jenkins中使用，否则在Jenkins下会报找不到该命令。
+  - 被管节点
+    - 依赖项：
+      - Python2.4+，若低于2.5则需要安装python-simplejson（可通过raw或script模块安装python和python-simplejson）
+      - Windows环境
+        - PowerShell3.0+
+      - Linux
+        - 若启动了SElinux则需要安装libselinux-python，这样Ansible才能执行 ~copy/file/template~ (可通过yum模块安装libselinux-python)
+
+* Inventory组件
 Inventory就是管理节点集合
 Inventory清单路径：
 1) 在/etc/ansible/hosts
@@ -51,7 +122,7 @@ Inventory清单路径：
 #+BEGIN_EXAMPLE
 # 分组
 [windows]
-127.0.0.1 ansible_ssh_user="lmx" ansible_ssh_pass="password" ansible_ssh_port="5985" ansible_connection="winrm" ansible_winrm_server_cert_validation=ignore
+127.0.0.1 ansible_ssh_user="lmx" ansible_ssh_pass="password" ansible_ssh_port="5985" ansible_connection="winrm" ansible_winrm_server_cert_validation=ignore ansible_python_interpreter=/usr/bin/python2.7
 
 # 分组内节点使用GLOB
 [linux]
@@ -66,13 +137,13 @@ windows
 linux
 #+END_EXAMPLE
 ** 命令
-#+BEGIN_EXAMPLE
+#+BEGIN_EXAMPLE bash
 # 列出匹配的节点信息
 ansible linux --list-hosts
 
 ## <host-pattern>支持通配符和正则表达式匹配管理节点
 # 通过:分隔多个管理节点IP/域名/组名，如192.168.0.1:web.example.com:window
-# all/'*'匹配所有管理节点
+# all或'*'匹配所有管理节点
 # a:!b表示匹配在分组a而不在分组b的管理节点
 # a:&b表示匹配即在分组a又在分组b的管理节点
 # *.example.com使用通配符匹配
@@ -81,100 +152,227 @@ ansible linux --list-hosts
 ansible <pattern_goes_here> -m <module_name> -a <arguments>
 #+END_EXAMPLE
 ** 变量
-**** 预定义变量/行为参数
-ansible_host，SSH目的主机名或IP
-ansible_ssh_user，SSH链接的用户名，默认值当前用户名
-ansible_ssh_port，SSH链接的端口号，默认值为22
-ansible_connection，链接模式，取值为smart/ssh/paramiko/winrm
-ansible_become，类似于Linux的sudo，默认值none
-ansible_become_user，切换到哪个用户执行命令，默认值为none
-ansible_shell_type，执行命令所使用的shell，默认为sh
-ansible_python_interpreter，使用哪个Python解释器，默认为/usr/bin/python
-ansible_*_interpreter，指定其他语言的解释器，默认为none
-**** 自定义变量
-在inventory文件和其他vars文件中定义即可，命名规则为字母、数字和下划线组成，并且首字符必须为字母。
-#+BEGIN_EXAMPLE hosts
-# 直接在管理节点配置中定义
-127.0.0.1 mysql_port=3306
+*** 预定义变量/行为参数
+    ansible_host，SSH目的主机名或IP
+    ansible_ssh_user，SSH链接的用户名，默认值当前用户名
+    ansible_ssh_pass，SSH链接的密码
+    ansible_ssh_port，SSH链接的端口号，默认值为22
+    ansible_connection，链接模式，取值为smart/ssh/paramiko/winrm
+    ansible_become，类似于Linux的sudo，默认值none
+    ansible_become_user，切换到哪个用户执行命令，默认值为none
+    ansible_shell_type，执行命令所使用的shell，默认为sh
+    ansible_python_interpreter，使用哪个Python解释器，默认为/usr/bin/python
+    ansible_*_interpreter，指定其他语言的解释器，默认为none
 
-[test]
-127.0.0.[2:10]
+*** 自定义变量
+    在inventory文件和其他vars文件中定义即可，命名规则为字母、数字和下划线组成，并且首字符必须为字母。
+    #+BEGIN_EXAMPLE
+    # 直接在管理节点配置中定义
+    127.0.0.1 mysql_port=3306
 
-# 分组定义
-[test:vars]
-mysql_port=3307
-#+END_EXAMPLE
+    [test]
+    127.0.0.[2:10]
 
-#+BEGIN_SRC bash
-# 通过{{variable_name}}引用匹配的变量
-ansible all -a 'echo {{mysql_port}}'
-#+END_SRC
+    # 分组定义
+    [test:vars]
+    mysql_port=3307
+    #+END_EXAMPLE
 
-实际项目中会将预定义变量和自定义变量定义在group_vars和host_vars目录下
-#+BEGIN_QUOTE
-/etc/ansible/
-  - hosts
-  - group_vars/
-    - test.yml
-  - host_vars/
-    - 127.0.0.1.yml
-#+END_QUOTE
-#+BEGIN_EXAMPLE test.yml
----
-# group_vars/test.yml
-mysql_port: 3307
-#+END_EXAMPLE
-#+BEGIN_EXAMPLE 127.0.0.1.yml
----
-# host_vars/127.0.0.1.yml
-mysql_port: 3306
-#+END_EXAMPLE
+    #+BEGIN_SRC bash
+      # 通过{{variable_name}}引用匹配的变量
+      ansible all -a 'echo {{mysql_port}}'
+    #+END_SRC
 
+    实际项目中会将预定义变量和自定义变量定义在group_vars和host_vars目录下
+    #+BEGIN_QUOTE
+    /etc/ansible/
+    - hosts
+    - group_vars/
+      - test.yml
+    - host_vars/
+      - 127.0.0.1.yml
+    #+END_QUOTE
+    #+BEGIN_EXAMPLE
+    ---
+    # group_vars/test.yml
+    mysql_port: 3307
+    #+END_EXAMPLE
+    #+BEGIN_EXAMPLE
+    ---
+    # host_vars/127.0.0.1.yml
+    mysql_port: 3306
+    #+END_EXAMPLE
 
+    配置文件在/etc/ansible/ansible.cfg中
+    #+BEGIN_EXAMPLE
+    [defaults]
+    remote_port = 22  # 默认ssh端口
+    remote_user = lmx # 默认ssh登录帐号
+    #+END_EXAMPLE
 
+*** 动态Inventory
+    从CMDB系统或Zabbix监控系统拉取所有主机信息，然后使用Ansible进行管理。
+    只需将配置项inventory指向一个可执行脚本即可，而脚本仅需支持两个选项
+    - ~--list~ 或 ~-l~ ，显示所有主机以及主机组的信息（JSON格式）
+    - ~--host <host>~ 或 ~-H <host>~ ，返回这个台主机的所有信息(包括认证信息、主机变量等)也是JSON格式
+    
+    示例
+    #+BEGIN_EXAMPLE python
+    #!/usr/bin/env python
+    # -*- coding: utf-8 -*-
+    import sys
+    import argparse
+    import json
+    
+    def list():
+        r = {}
+        h = ['172.17.16.10' + str(i) for i in xrange(0,2)]
+        hosts = {'hosts': h}
+        r['docker'] = hosts
 
-配置文件在/etc/ansible/ansible.cfg中
-#+BEGIN_EXAMPLE
-[defaults]
-remote_port = 22  # 默认ssh端口
-remote_user = lmx # 默认ssh登录帐号
-#+END_EXAMPLE
+        return json.dump(r, indent=4)
+
+    def host(name):
+        r = {'ansible_ssh_pass': '123'}
+        cpis = dict(r.items)
+
+        return json.dump(cpis)
+
+    if __name__ == '__main__':
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-l', '--list', help='hosts list', action='store_true')
+        parser.add_argument('-H', '--host', help='hosts vars')
+        args = vars(parser.parse_args())
+
+        if args['list']:
+            print list()
+        elif args['host']:
+            print hosts(args['host'])
+        else:
+            parser.print_help()
+    #+END_EXAMPLE
 
 * 配置
-配置读取顺序为：
-1) 环境变量ANSIBLE_CONFIG
-2) 当前工作目录下的ansible.cfg
-3) ~/.ansible.cfg
-4) /etc/ansible/ansible.cfg
+  配置读取顺序为：
+  1) 环境变量ANSIBLE_CONFIG
+  2) 当前工作目录下的ansible.cfg
+  3) ~/.ansible.cfg
+  4) /etc/ansible/ansible.cfg
 
-内容采用ini格式
+  内容采用ini格式
 
 ** 常用配置
-#+BEGIN_EXAMPLE ansible.cfg
-[defualts]
-; inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)
-; library=/usr/share/my_modules/，指定模块地址
-; action_plugins=/usr/share/ansible/plugins/action，action模块存放的路径
-; callback_plugins=/usr/share/ansible/plugins/callback，callback模块存放的路径
-; connection_plugins=/usr/share/ansible/plugins/connection，connection模块存放的路径
-; lookup_plugins=/usr/share/ansible/plugins/lookup，lookup模块存放的路径
-; vars_plugins=/usr/share/ansible/plugins/vars，vars模块存放的路径
-; test_plugins=/usr/share/ansible/plugins/test，test模块存放的路径
-; strategy_plugins=/usr/share/ansible/plugins/strategy，strategy模块存放路径
-; remote_user，SSH的用户名
-; log_path=/var/log/ansible.log，日志文件路径
-; forks=5，并行进程的数量
-; gathering=implicit，控制收集Facts变量的策略
-; become，是否进行提权
-; become_method=sudo，提权方式
-; become_user=root，提权为哪个用户
-; become_ask_pass=no，提权是否需要密码
-; ssh_args，控制SSH连接参数
-; pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
-; control_path，保存ControlPath socket的路径
-; retry_files_enabled=False，当playbook失败得情况下，一个重试文件将会创建，默认为开启此功能
-; retry_files_save_path = ~/.ansible-retry，重试文件的路径，默认为当前目录下.ansible-retry
+   #+BEGIN_EXAMPLE ansible.cfg
+   [defualts]
+   ; inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)。若值为目录路径，那么该目录下的文件将合并为一个inventory文件。
+   ; library=/usr/share/my_modules/，指定模块地址。多个地址间使用:分隔。默认还会搜索playbook同目录下的library/目录
+   ; action_plugins=/usr/share/ansible/plugins/action，action模块存放的路径
+   ; callback_plugins=/usr/share/ansible/plugins/callback，callback模块存放的路径
+   ; connection_plugins=/usr/share/ansible/plugins/connection，connection模块存放的路径
+   ; lookup_plugins=/usr/share/ansible/plugins/lookup，lookup模块存放的路径
+   ; vars_plugins=/usr/share/ansible/plugins/vars，vars模块存放的路径
+   ; test_plugins=/usr/share/ansible/plugins/test，test模块存放的路径
+   ; strategy_plugins=/usr/share/ansible/plugins/strategy，strategy模块存放路径
+   ; host_key_checking=True，是否检查SSH主机的密钥(即公钥认证)
+   ; sudo_user=root，默认执行命令的用户
+   ; timeout=60，SSH连接的超时间隔，单位为秒
+   ; remote_user，SSH的用户名
+   ; log_path=/var/log/ansible.log，Ansible默认不记录日志，若要记录则设置日志文件路径
+   ; forks=5，并行进程的数量
+   ; gathering=implicit，控制收集Facts变量的策略
+   ; become，是否进行提权
+   ; become_method=sudo，提权方式
+   ; become_user=root，提权为哪个用户
+   ; become_ask_pass=no，提权是否需要密码
+   ; ssh_args，控制SSH连接参数
+   ; pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
+   ; control_path，保存ControlPath socket的路径
+   ; retry_files_enabled=False，当playbook失败得情况下，一个重试文件将会创建，默认为开启此功能
+   ; retry_files_save_path = ~/.ansible-retry，重试文件的路径，默认为当前目录下.ansible-retry
+   #+END_EXAMPLE
+
+** 配置Linux主机SSH免密访问
+   #+BEGIN_EXAMPLE bash
+   # 在主控节点生成密钥和公钥
+   ssh-keygen
+
+   # 将主控节点的公钥传输到被控节点的~/.ssh/authorized_keys下，权限为400
+   ssh-copy-id -i /root/.ssh/id_rsa.pub root@<被控节点IP>
+   #+END_EXAMPLE
+   然后就可以执行
+   #+BEGIN_EXAMPLE bash
+   # 以ansible用户通过免密方式连接被控节点，然后通过sudo提权执行命令
+   ansible webserver -m ping -u ansible -sudo
+   # 以交互方式输入密码连接被控节点
+   ansible webserver -m ping -u ansible -sudo -k
+   #+END_EXAMPLE
+
+* 模块
+
+** 常用模块
+1) 用户管理 ~user~
+   参数password值必须为加密后的值，因此需要通过openssl生成密码
+   #+BEGIN_EXAMPLE bash
+   # 为密码ansible生成加密后值，回显$1$GPMku7y
+   echo ansible | openssl passwd -1 -stdin
+   # 创建新用户
+   ansible '*' -m user -a 'name=dev password="$1$GPMku7y"' -f 5 -o
+   #+END_EXAMPLE
+2) 静态被管节点facts信息采集 ~setup~
+   #+BEGIN_EXAMPLE bash
+   # 收集并只查看指定信息
+   ansible '*' -m setup -a 'filter=ansible_all_ipv4_addresses'
+   #+END_EXAMPLE
+
+** Windows模块
+官方Windows可用模块： https://docs.ansible.com/ansible/latest/modules/list_of_windows_modules.html
+#+BEGIN_EXAMPLE
+# ping所有管理端
+ansible all -m win_ping
+
+# 复制文件
+ansible all -m win_copy -a 'src=/etc/passwd dest=f:\file\passwd'
+
+# 复制目录
+ansible all -m win_copy -a 'src=/etc dest=f:\file\'
+
+# 删除管理端的文件
+ansible all -m win_file -a 'path=f:\file\passwd state=absent'
+
+# 获取管理端的Windows Facts
+ansible all -m setup
+
+# 在管理端执行cmd命令
+ansible all -m raw -a 'ipconfig'
+
+# 在管理端执行ansible扩展命令
+ansible all -m win_command -a 'whoami'
+
+# 调用PowerShell执行命令
+ansible all -m script -a 'foo.ps1'
+
+# ??????
+ansible all -m slurp 
+
+# 查看模块的帮助文档
+ansible-doc <module_name>
+
+# 查看模块名或描述包含关键字的模块列表
+ansible-doc -l <keyword>
 #+END_EXAMPLE
+
+** 模块返回值
+| 返回值键    | 含义                                         |
+|-------------+----------------------------------------------|
+| changed     | 表示模块是否对管理节点执行了修改操作         |
+| failed      | 若模块未能执行，则返回true                   |
+| msg         | 模块执行失败的原因                           |
+| rc          | return code                                  |
+| stdout      | 标准输出                                     |
+| stderr      | 错误输出                                     |
+| backup_file | 用于来返回备份文件的路径                     |
+| results     | 应用在Playbook中存在循环的情况，返回多个结果 |
+
 
 * 管理Windows服务器
 ** 前提条件
@@ -255,55 +453,6 @@ https://www.microsoft.com/en-us/download/confirmation.aspx?id=54616
   - 配置加密方式为允许非加密 ~winrm set winrm/config/service @{AllowUnencrypted="true"}~
   - 查看winrm service listener ~winrm e winrm/config/listener~ ，有返回即服务已启用
   
-* 模块
-** Windows模块
-官方Windows可用模块： https://docs.ansible.com/ansible/latest/modules/list_of_windows_modules.html
-#+BEGIN_EXAMPLE
-# ping所有管理端
-ansible all -m win_ping
-
-# 复制文件
-ansible all -m win_copy -a 'src=/etc/passwd dest=f:\file\passwd'
-
-# 复制目录
-ansible all -m win_copy -a 'src=/etc dest=f:\file\'
-
-# 删除管理端的文件
-ansible all -m win_file -a 'path=f:\file\passwd state=absent'
-
-# 获取管理端的Windows Facts
-ansible all -m setup
-
-# 在管理端执行cmd命令
-ansible all -m raw -a 'ipconfig'
-
-# 在管理端执行ansible扩展命令
-ansible all -m win_command -a 'whoami'
-
-# 调用PowerShell执行命令
-ansible all -m script -a 'foo.ps1'
-
-# ??????
-ansible all -m slurp 
-
-# 查看模块的帮助文档
-ansible-doc <module_name>
-
-# 查看模块名或描述包含关键字的模块列表
-ansible-doc -l <keyword>
-#+END_EXAMPLE
-
-** 模块返回值
-| 返回值键    | 含义                                         |
-|-------------+----------------------------------------------|
-| changed     | 表示模块是否对管理节点执行了修改操作         |
-| failed      | 若模块未能执行，则返回true                   |
-| msg         | 模块执行失败的原因                           |
-| rc          | return code                                  |
-| stdout      | 标准输出                                     |
-| stderr      | 错误输出                                     |
-| backup_file | 用于来返回备份文件的路径                     |
-| results     | 应用在Playbook中存在循环的情况，返回多个结果 |
 * Playbook
 https://segmentfault.com/a/1190000015953283#articleHeader8
 
