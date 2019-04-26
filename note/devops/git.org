@@ -1,5 +1,437 @@
+工作目录（working directory）
+暂存区（stage）
+版本历史
+
+| --->     | 工作目录         | 暂存区  | 版本历史   |
+|----------+------------------+---------+------------|
+| 工作目录 |                  | git add |            |
+| 暂存区   | git reset --hard |         | git commit |
+| 版本历史 |                  |         |            |
+
 * 配置
+  #+BEGIN_EXAMPLE shell
+  # 配置当前用户下所有仓库通用的帐号和邮箱地址
+  # --local  表示当前仓库下使用，信息保存在.git/config中
+  # --global 表示当前用户下所有仓库通用，信息保存在~/.gitconfig中
+  # --system 表示所有用户下所有仓库通用
+  git config --global user.name "fsjohnhuang"
+  git config --global user.email "fsjohnhuang@hotmail.com"
+
+  # 查看当前仓库、当前用户、系统级和三者的配置
+  git config --list --local
+  git config --list --global
+  git config --list --system
+  git config --list
+
+  # 彩色显示
+  git config --global color.ui auto
+  # 正常显示中文文件路径
+  git config --global core.quotepath off
+
+  # 子命令别名
+  git config --global alias.co checkout
+  git config --global alias.br branch
+  git config --global alias.st status
+  git config --global alias.type cat-file -t
+  git config --global alias.dump cat-file -p
+  git config --global alias.hist log --pretty=format:'%h %ad | %s%d [%a]' --graph
+  #+END_EXAMPLE
+
 * 本地操作
-#+BEGIN_EXAMPLE shell
-# 将一系列变更合并为一个，让变更历史更加清晰，称为挤压(squashing)
+  #+BEGIN_EXAMPLE shell
+
+  # 初始化仓库
+  # git仓库中存在目录.git，用于存放元数据
+  git init
+
+  # 创建仓库，并创建同名目录
+  git init <repos>
+
+  # 查看
+  git status
+
+  # 将工作目录中的某文件加入到暂存区
+  git add <file-path>
+  # 将工作目录中的所有文件加入到暂存区
+  git add .
+  # 将工作目录中的已被git跟踪管理的文件加入到暂存区
+  git add -u
+
+  # 提交commit
+  git commit
+
+  # 重命名
+  git mv <original-file> <new-file>
+
+  # 删除文件
+  git rm <file>
+  # 取消版本跟踪，但不删除文件
+  git rm --cache <file>
+
+  # 显示最近4个提交，且提交日志仅用一行显示commit id和日志信息
+  git log --oneline -n 4
+  # 以树状图显示提交日志，且提交日志仅用一行显示commit id和日志信息
+  git log --oneline --graph
+  # 查看某文件的提交日志（含对比信息）
+  git log -p <file>
+  # 查看某文件的提交日志（仅含sha码）
+  git blame <file>
+
+  # 带注释的标签，git会创建一个tag对象保存注释和其指向的commit
+  git tag -a
+  # 不带注释的标签，tag直接指向commit id，不会创建tag对象
+  git tag 
+  
+
+  # 分离头指针(detached head)，即HEAD指向一系列的提交并且没有与某分支关联，git会将其当成垃圾清理掉
+  # 为分离头指针建立关联分支
+  git branch <new-branch> <commit-id>
+  # 或者执行如下命令
+  git checkout -b <new-branch>
+
+  # 查看所有分支
+  git branch -av
+  # 基于当前分支/指定分支/提交，创建并切换到新分支
+  git checkout -b <new-branch> [<original-branch>|<commit-id>]
+  # 删除分支
+  git branch -d <branch>
+  # 默认情况下当分支没有被merge，其上的修改在分支删除后会被丢弃，那么git会阻止你删除分支
+  # 通过选项 -D 强制删除分支
+  git branch -D <branch>
+  # 切换分支
+  git checkout <branch>
+  # 以指定的标签作为基础创建并切换到detached branch
+  git checkout <tag>
+  # 注意：分支名称和标签名称必须有所区分，若有重复那么引用时就要使用全路径refs/heads/<branch>和refs/tags/<tag>
+  
+  # 分支合并时若两个分支不存在同一个父提交，那么即使没有明显的冲突也会被认为存在冲突
+  # 合并后产生的commit存在两个父commit
+  # 以非fast-forward方式将指定分支内容合并到当前分支
+  git merge --no-ff <branch>
+  # 取消合并操作，分支内容回滚到合并前状态
+  git merge --abort
+
+  # GitHub的合并策略
+  # merge commits，将target branch合并到base branch中并创建一个commit。merge commit有两个父commit，因此删除target branch后依然可以找到target branch的提交记录
+  # squash merging，将target branch上的commit合并为一个commit，并将该commit存放到base branch中
+  # rebase merging，将target branch上的commit逐个添加到base branch上
+
+  # 修改最新commit的日志消息
+  git commit --amend
+  # 修改前第n个commit的日志消息，注意<n+1-commit-id>为前n+1个提交的id
+  # 打开交互界面，显示的提交记录以顺序方式排列（第一行为前第n个提交）
+  # 修改第一行第一个单词pick修改为reword，然后保存退出就可以修改日志消息了
+  git rebase -i <n+1-commit-id>
+
+  # 将一系列变更合并为一个，让变更历史更加清晰，称为挤压(squashing)
+  # 打开交互界面，显示的提交记录以顺序方式排列（第一行为前第n个提交）
+  # 以第一行为基础合并提交，因此第一行为pick
+  # 其他要合并的提交则修改为squash，然后保存退出即进入编辑界面输入合并日志
+  # 操作结束后会创建一个新的commit作为一系列提交合并的提交，并且被合并的系列提交的后续提交都会重建，因为它们的父提交都被修改了
+  git rebase -i <n+1-commit-id>
+
+  # 合并几个不连续的提交
+  # 在交互界面中，将不连续的提交重新排版让它们相邻，然后和执行将一系列变更合并为一个操作一样即可
+  git rebase -i <n+1-commit-id>
+
+  # 对当前分支的每个提交以指定分支的最后一个提交作基础进行变基
+  # 若出现冲突那么解决冲突后执行 git rebase --continue
+  git rebase <branch>
+
+  # 比较工作目录和暂存区所有文件的差异
+  git diff
+  # 比较工作目录和暂存区某些文件的差异
+  git diff -- <file-path>...
+  # 比较暂存区和版本历史中当前提交的差异
+  git diff --cache
+  # 比较版本历史中当前提交和前一个提交的差异
+  git diff HEAD HEAD^
+  # 比较两个分支版本历史中当前提交的差异
+  git diff <branch-a> <branch-b>
+  git diff <branch-a> <branch-b> -- <file-path>...
+  # 与某次提交的指定文件进行比较
+  git diff <commmit-id> <file>...
+
+  # 丢弃暂存区的变更，恢复和版本历史中当前提交一致
+  git reset HEAD
+  # 丢弃暂存区部分文件的变更，恢复和版本历史中当前提交一致
+  git reset HEAD <file>...
+
+  # 丢弃工作目录部分文件的变更，恢复和暂存区一致
+  git checkout -- <file>...
+
+  # 回滚提交（会造成提交丢失）
+  # 将HEAD指向某个commit，并且恢复工作目录，暂存区和该commit内容一致
+  git reset --hard <commit-id>
+  # 恢复工作目录，暂存区和版本历史当前提交内容一致
+  git reset --hard HEAD
+  # 恢复工作目录，暂存区和版本历史前一个提交内容一致
+  git reset --hard HEAD^
+  # 恢复工作目录，暂存区和版本历史前３个提交内容一致
+  git reset --hard HEAD~3
+
+  # 将工作目录的变更缓存起来
+  git stash
+  # 从缓存中恢复工作目录
+  git stash apply
+  # 从缓存中恢复工作目录，并清除缓存区中的该项目内容
+  git stash pop
+
+  # 获取子命令的帮助文档
+  git help <subcommand>
+  git help <subcommand> --web
+
+  # 通过对象id查看对象类型
+  git cat-file -t <id>
+  # 通过对象id查看对象内容
+  git cat-file -p <id>
+  
+  # 将refs/heads、refs/tags/和refs/remotes/下的文件和及内容压缩保存到packed-refs
+  git gc
+
+  # 将某分支的commit应用到另一个分支上
+  git cherry-pick <commit-id>
+  #+END_EXAMPLE
+
+  author和commiter可以为不同的人，通过cherry pick实现
+  https://opensource.com/article/19/4/server-administration-git?utm_campaign=intrel
+
+* 远端操作
+  #+BEGIN_EXAMPLE bash
+  # 显示关联的远端仓库信息
+  git remote -v
+
+  # 添加关联的远端仓库信息
+  git remote add <remote-repo-name> <repo-uri>
+  
+  # 将本地新建的分支推送到远端仓库
+  git push --set-upstream <remote-repo-name> <local-branch-name>
+  # 将本地标签推送到远端仓库
+  git push --set-upstream <remote-repo-name> --tags
+  # 将本地分支和标签都推送到远端仓库
+  git push --set-upstream <remote-repo-name> --all
+  # 强制推送，即使存在冲突．应该禁止此操作
+  git push -f <remote-repo-name> <local-branch-name>
+
+  # 在已经执行fetch后，以远端仓库为基础创建本地分支
+  # remote-branch形如origin/feat-1
+  git checkout -b <new-branch> <remote-branch>
+  git checkout --track <remote-branch>
+
+  # 删除远端仓库已删除，但本地依然存在的分支
+  git remote prune <remote-repo>
+
+  # 从远端仓库拉取，remote-repo-name默认为origin
+  git fetch [remote-repo-name]
+  # 合并代码
+  git merge
+  # 从远端仓库拉取并合并代码，remote-repo-name默认为origin
+  git pull [remote-repo-name]
+
+  # 将其他项目拉取到指定目录下，并且当前目录下会生成.gitmodule文件
+  git submodule add <repo> <dir>
+  # 更新某submodule内容
+  cd <dir> && git pull
+  # 更新所有submodule内容
+  git submodule foreach git pull
+  # 下载带submodule的仓库方式1
+  git clone <repo> <dir>
+  cd <dir> && git submodule init && git submodule update --recursive
+  # 下载带submodule的仓库方式2
+  git clone <repo> <dir> --recursive
+
+  # 在父项目中修改子项目代码时用subtree效果更好，subtree命令比submodule命令出来要晚
+  # 从<repo>拉取<branch>代码到<dir>下，若加上--squash那么子项目的commit会被合并一个commit从而不污染父项目的版本历史。
+  # 要么所有用--squash，要么全都不使用--squash，否则会有问题
+  git subtree add --prefix <dir> <repo> <branch>
+  # 同步子项目代码
+  git subtree pull --prefix <dir> <repo> <branch>
+  # 向子项目推送代码
+  git subtree push --prefix <dir> <repo> <branch>
+  #+END_EXAMPLE
+
+* 图形界面
+  1) gitk
+     #+BEGIN_EXAMPLE bash
+     # 进入git仓库
+     gitk --all
+     #+END_EXAMPLE
+
+  2) TortoiseGit
+
+* .git目录
+  #+BEGIN_EXAMPLE
+  .git/
+    - HEAD     # 内容为 ref: refs/heads/master，记录当前所在分支
+    - config   # 内容为 git config --list --local的输出信息
+    - refs/   
+      - heads/ # 分支目录
+        - master # master分支，存放分支指向的commit id，执行git cat-file -t `cat .git/refs/heads/master`回显为commit，表示指向的一个commit对象
+        - temp   # temp分支，存放分支指向的commit id
+      - tags/  # 标签目录，标签对应项目管理中的里程碑
+        - js01   # js01分支，存放分支id，执行git cat-file -t `cat .git/refs/tags/js01`回显为tag，表示指向的一个tag对象
+                 # 执行git cat-file -p `cat .git/refs/tags/js01`回显tag对应的commit id和日志信息
+    - objects/ # 保存tree、blob、tag、commit对象
+        - 18/
+          - 4a24f15674f2d93901f9f1b38b7f1c22031581 # 父目录名和该文件名组成tree对象的id或blob对象的id，tree对象包含1~N个block对象
+        - pack/ # 执行git gc后对objects下松散的文件进行整理压缩打包，并存放到pack目录下
+  #+END_EXAMPLE
+  一个commit对应一棵tree，一颗tree包含0~n个blob和0~n棵tree。tree对应文件系统的目录，而blob对应文件系统的文件，注意的是文件内容相同的文件被保存为同一个blob。整体保存该commit对应的文件系统快照。
+  例如：一个commit仅包含./doc/readme，那么一个tree表示./，一个tree表示doc，一个blob表示readme。
+  
+* TODO 服务端
+#+BEGIN_EXAMPLE bash
+# 创建用户
+sudo adduser git
+# 将客户端的ssh-key的公钥收集到服务端放到用户git的家目录下
+
+# 创建不带工作目录的裸仓库
+git init --bare
+# 克隆不带工作目录的裸仓库
+# 哑协议，/path/to/repo.git，性能较差，而且没有进度条
+# 智能协议，file:///path/to/repo.git，http://hostname/path/to/repo.git，https://hostname/path/to/repo.git，user@hostname:path/to/repo.git，性能更好，有进度条
+git clone --bare <repo-uri> <repo>
 #+END_EXAMPLE
+
+* 场景
+  1) 当A修改文件名而B修改文件内容，并且A先推送变更到远端仓库，然后B后推送变更到远端仓库
+     Git会要求B先从远端仓库执行pull，并且Git会自动更新文件名和将文件内容的变更合并在一起
+  2) 当A修改文件名而B也修改文件名，并且A先推送变更到远端仓库，然后B后推送变更到远端仓库
+     Git会要求B先从远端仓库执行pull，并且报存在冲突，需要手动删除原文件选择保留哪个新文件，然后提交即可
+  3) 分支 *禁止* 执行rebase后在合并到集成分支中
+
+* TODO QA
+  1) fast-forward
+  2) rebase
+
+* 工作流
+  
+** 因素
+   1) 团队人员组成
+   2) 研发设计能力
+   3) 输出产品的特征
+   4) 项目难易程度
+
+** 主干开发
+   适用因素：
+   1) 团队人员能力强、人员少、沟通畅通
+   2) 迭代速度快
+   3) 有一套有效的特性切换实施机制
+   4) 采用组件化开发方式，即各组件间关联性小
+
+   | commit 1 | commit 2 | commit 3 | commit 4 |
+   |          |          |          | master   |
+   |          |          |          | HEAD     |
+
+** Git Flow
+   适用因素：
+   1) 基于特性分支开发
+   2) 开发周期较长
+
+** GitHub Flow
+   适用因素：
+   1) 基于特性分支开发
+   2) 集成到主分支时则可发布
+
+   | commit 1 | commit 2 | commit 3 |           |           |           | commit 4 |
+   |          |          |          | commit-a1 | commit-a2 |           |          |
+   |          |          |          |           | feat-a    |           |          |
+   |          |          |          | commit-b1 | commit-b2 | commit-b3 |          |
+   |          |          |          |           |           | feat-b    |          |
+   
+** GitLabFlow
+   适用因素：
+   1) 基于特性分支开发
+   2) 特性分支集成到产品分支，待可发布时则合并到主分支
+
+** 多版本分支
+   适用因素：
+   1) 多个发布版本分支长期存在，当通用特性变更后通过cherry pick同步文件到对应的发布版本分支上
+
+* Code Review
+Git Review + Gerrit
+流程：
+1) 本地Git提交代码review到Gerrit
+2) 在Gerrit作Code Review
+3) 通过则merge到分支
+4) 不通过
+   1) 修改后再update patch set
+   2) abandon掉
+
+* 日志格式
+
+** Karma格式
+#+BEGIN_EXAMPLE bash
+# 第一行不能超过70个字符
+<type>[(<scope>)]: <subject>
+
+# 每行不能超过80个字符
+<body>
+
+[footer]
+#+END_EXAMPLE
+
+- ~<type>~ 指定变更类型
+  - ~feat~ new feature for the user, not a new feature for build script.
+  - ~fix~ bug fix for the user, not a fix for build script.
+  - ~docs~ changes to the documentation.
+  - ~style~ formatting, semi colon, etc. no production code change.
+  - ~refactor~ refactoring production code, eg. renaming variable.
+  - ~test~ adding missing tests, refactoring tests; no production code change.
+  - ~chore~ update grunt tasks etc; no production code change.
+- ~<scope>~ 指定变更范围，为空表示全局
+  - ~init~
+  - ~runner~
+  - ~watcher~
+  - ~config~
+  - ~web-server~
+  - ~proxy~
+  - etc.
+- ~<body>~ 详细日志信息
+  - uses the imperative, present tense: "change" not "changed" nor "changeds".
+  - includes the motivation for the change and contracts with previous behavior.
+- ~[footer]~
+  - referencing issues, eg. ~Closes #12 #223~
+  - breaking changes
+    #+BEGIN_EXAMPLE text
+    BREAKING CHANGE:
+
+    `port-runner` command line option has changed to `runner-port`, so that it is
+    consistent with the configuration file syntax.
+
+    To migrate your project, change all the commands, where you use `--port-runner`
+    to `--runner-port`.
+    #+END_EXAMPLE
+
+* merge和rebase区别
+  1) 原分支图
+     |    |      |       | origin |
+     | C1 | - C2 | - C3  | - C4   |
+     |    |      | \- C5 | - C6   |
+     |    |      |       | mywork |
+  2) 将origin合并到mywork
+     |    |      |      | origin |        |
+     | C1 | - C2 | - C3 | - C4   | \      |
+     |    |      | \ C5 | - C6   | -C7    |
+     |    |      |      |        | mywork |
+  3) 以origin为基础对mywork进行变基
+     #+BEGIN_EXAMPLE bash
+     # 执行变基
+     git checkout mywork
+     git rebase origin
+
+     # 解决冲突后，继续执行变基
+     git rebase --continue
+
+     # 终止变基，回滚
+     git rebase --abort
+     #+END_EXAMPLE
+     |    |      |      | origin |      |        |
+     | C1 | - C2 | - C3 | - C4   |      |        |
+     |    |      | \ C5 | - C6   | \C5' | -C6'   |
+     |    |      |      |        |      | mywork |
+
+** 最佳实践
+   由于rebase会修改提交记录
+   1) 不对master分支执行rebase，否则会引起很多问题
+   2) 仅对本地/特性/个人开发的分支进行rebase

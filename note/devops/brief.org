@@ -220,6 +220,9 @@ fi
    3) 执行扩容 ~VBoxManage modifyhd 你的uuid --resize 40960~
    4) 重新添加到到对应虚拟机的SATA Contorller下即可
 
+*** TODO 制作Windows Server 2012 base box
+工具：Packer
+
 *** 搭建Ansible实验室
 #+BEGIN_EXAMPLE ruby
 Vagrant.config(2) do |config|
@@ -361,3 +364,34 @@ docker run -it --link redis:redis --name redis-client ubuntu /bin/bash
     1) Logstash，用于接收如log4j等日志框架发送过来的日志记录
     2) Elasticsearch，保存日志并建立索引
     3) Kibana，日志搜索和可视化的Web界面
+
+* SRE
+  SRE团队的职责：
+  1) 可用性改进
+  2) 延迟优化
+  3) 性能优化
+  4) 效率优化
+  5) 变更管理
+  6) 监控
+  7) 紧急事务处理
+  8) 容量规划与管理
+  
+  针对上述内容制定一套完整的沟通准则和行事规范。
+
+** Goolge SRE核心方法论
+   1) 确保长期关注研发工作
+      - 目标：运维工作限制在50%以内。
+      - 运维工作超出上限时，临时应急措施
+        1) 将生产环境的Bug和工单转给研发管理人员去分配处理
+        2) 将开发人员加入到轮值on-call体系中
+      - 故障处理流程
+        1) 处理故障
+        2) 恢复服务
+        3) 撰写事后报告
+           1) 事故发生
+           2) 事故发现
+           3) 事故解决方案
+           4) 事故的根本原因
+           5) 事故预防方案
+           6) 事故优化方案
+   2) 在保障服务SLO的前提下最大化迭代速度

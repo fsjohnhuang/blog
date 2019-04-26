@@ -45,10 +45,13 @@ ln -s /usr/local/bin/python2.7 /usr/local/bin/python
 * 包机制
 Python代码按照模块(module)划分，一个模块可以是一个文件或一个包含一个或多个子模块的目录。而模块同时可以视作包(package)
 
+dist-packages
+site-packages
+
 ** 模块检索
 ~str, len 和 Exception~ 等存在于全局作用域，在Python中被称为builtin scope；其他模块则通过 ~import~ 语句引入。
 
-*** import语句
+*** TODO import语句
 1) import语句可导入如下对象
    1) 模块文件(.py文件)
    2) C或C++扩展（已编译为共享库.so或DLL文件）
@@ -1161,7 +1164,7 @@ class Field(object):
         self.name = name
 #+END_EXAMPLE
 
-* 垃圾回收机制
+* TODO 垃圾回收机制
 引用计数 + 循环垃圾收集器
 
 将生命周期不同的对象划分到3种代（generation0-年轻代、generation1-老年代）去管理和回收。
@@ -1451,14 +1454,14 @@ handler_stderr.setLevel(logging.WARN)
 logger.addHandler(handler_stderr)
 #+END_EXAMPLE
 
-* 调试/性能优化
+* TODO 调试/性能优化
 pdb和ipdb
 追踪模块trace用于追踪打印运行路径， ~python -m trace --trace foo.py~ 。
 pycallgraph用于追踪性能问题，可以创建函数调用时间和次数的图表。
 objgraph用于查找内存泄漏。
 profile和pstats分析。
 
-* 兼容性开发
+* TODO 兼容性开发
 #+BEGIN_EXAMPLE python
 from __future__ import (
     print_function,   # Python2.x中print为statement，而Python3.x中print为函数。
@@ -1473,7 +1476,7 @@ from __future__ import (
 )
 #+END_EXAMPLE
 
-* 单元测试
+* TODO 单元测试
 
 ** 通过unittest2模块进行单元测试
 unittest2模块是对unittest模块API的优化，并让测试用例书写上更符合pythonic。
@@ -1748,7 +1751,7 @@ signal.alarm(5)
 ** 其他方式发送信号量
 ~os.kill~ 和 ~os.killpg~ 都可向其他进程发送信号量。
 
-* 并发编程
+* TODO 并发编程
 
 ** 操作系统简史
 1) 手工操作
@@ -2274,7 +2277,7 @@ CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个P
 注意：当调用外部代码（如C/C++扩展函数）时会先释放GIL让其它线程运行。
 GIL源码在Python/ceval.c文件中。
 
-* 开发环境
+* TODO 开发环境
 
 https://jeffknupp.com/blog/2013/08/16/open-sourcing-a-python-project-the-right-way/
 ** 项目结构

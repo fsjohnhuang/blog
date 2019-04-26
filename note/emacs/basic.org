@@ -17,3 +17,17 @@
 ~C-x 3~ ，左右分屏
 
 
+* 包
+gnuplot，画图
+helm-bibtex，管理和插入参考文档
+company，代码和英语单词补全
+flycheck，实时语法检查
+langtool和flyspell，语法和拼写检查
+helm-show-kill-ring，复制粘帖工具
+minted，高亮tex代码
+[[https://github.com/emacs-helm/helm][helm]]
+imenu，显示当前buffer的函数列表，可实现跳转。
+helm-dash 看编程文档
+cnfonts 配置中英文等宽字体
+ac-html 網絡開發必需的package，提供自動補全html的能力。
+magit Git

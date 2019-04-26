@@ -5,10 +5,12 @@
 金丝雀部署(canary deployments)
 灰度发布()
 
-等幂性(idempotent)，某动作执行结果为某事物已达到某目标状态，在执行该动作前先检查事物是否已达到某状态，若已达到某状态则不执行，若未达到则执行。
-收敛性，某动作可多次执行，每次执行都让状态更趋向于目标状态，并最终达到目标状态。由Mark Burgess在CFEngine中提出的。
+*等幂性(idempotent/idempotency)* ，某动作执行结果为某事物已达到某目标状态，在执行该动作前先检查事物是否已达到某状态，若已达到某状态则不执行，若未达到则执行。从而达到不引发副作用的前提下，不论动作执行多少次目的最终状态不变。
+*收敛性* ，某动作可多次执行，每次执行都让状态更趋向于目标状态，并最终达到目标状态。由Mark Burgess在CFEngine中提出的。
 
 backport方式：将一个软件的补丁应用到比此补丁所对应的版本更老的版本的行为。
+
+System Center Configuration Manager(SCCM)
 
 * 服务器自动化搭建
   | 交付产物： | 虚拟机     | 服务器                | OS镜像                | 已配置的服务器        | 已加固的服务器                                         | 应用就绪的服务器      | 服务器资源池          |
@@ -24,8 +26,11 @@ ansible-doc -s win_iis_webapppool # 列出某模块的使用说明
 
 ansible-galaxy install <role_name> # 从http://galaxy.ansible.com/list#/roles上下载role到/etc/ansible/roles/目录下
 
-ansible-config          ansible-test                                                              
-ansible-connection    ansible-inventory   ansible-pull        ansible-vault  
+ansible-config # 查看、编辑ansible.cfg
+
+ansible-test # Ansible Playbook的本地测试框架，内部使用Docker构建测试环境。用处不大
+
+ansible-connection    ansible-inventory   ansible-pull 
 #+END_EXAMPLE
 
 ansible-vault
@@ -42,6 +47,7 @@ Ansible编排引擎组成：
       - 邮件
       - 日志
 4) Connection Plugins，连接插件，有local、SSH(默认，底层通过paramiko实现)和ZeroMQ(message bus，大规模时使用这个会提高执行速度)
+   CLI中通过 ~-c~ 设置connection类型
 5) Modules，任务模块，分为自带的Core Modules和自定义的Custom Modules；
 6) Playbook，剧本。
 
@@ -60,9 +66,6 @@ Ansible编排引擎组成：
 
 * TODO 凭证隔离(Crendential Segregation)
 可实现研发工程师管理开发服务器，QA工程师管理QA服务器，而系统管理员管理生产环境服务器，不允许跨权限操作服务器。
-
-* TODO 自定义模块
-  可以使任何语言开发自定义模块。
 
 * 安装
   [[https://github.com/ansible/ansible][Ansible GitHub]]
@@ -262,14 +265,18 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
    #+BEGIN_EXAMPLE ansible.cfg
    [defualts]
    ; inventory=/etc/ansible/hosts，默认的inventory文件路径(1.9版本前叫做hostfile)。若值为目录路径，那么该目录下的文件将合并为一个inventory文件。
-   ; library=/usr/share/my_modules/，指定模块地址。多个地址间使用:分隔。默认还会搜索playbook同目录下的library/目录
-   ; action_plugins=/usr/share/ansible/plugins/action，action模块存放的路径
-   ; callback_plugins=/usr/share/ansible/plugins/callback，callback模块存放的路径
-   ; connection_plugins=/usr/share/ansible/plugins/connection，connection模块存放的路径
-   ; lookup_plugins=/usr/share/ansible/plugins/lookup，lookup模块存放的路径
-   ; vars_plugins=/usr/share/ansible/plugins/vars，vars模块存放的路径
-   ; test_plugins=/usr/share/ansible/plugins/test，test模块存放的路径
-   ; strategy_plugins=/usr/share/ansible/plugins/strategy，strategy模块存放路径
+   ; library=/usr/share/my_modules/，指定Extra模块(第三方模块)所在目录路径。多个地址间使用:分隔。默认还会搜索playbook同目录下的library/目录
+   ; action_plugins=/usr/share/ansible/plugins/action，action插件存放的路径
+   ; cache_plugins=/usr/share/ansible/plugins/cache，cache插件存放的路径
+   ; callback_plugins=/usr/share/ansible/plugins/callback，callback插件存放的路径
+   ; callback_whitelist=timer, log_plays，设置启用的callback插件
+   ; connection_plugins=/usr/share/ansible/plugins/connection，connection插件存放的路径
+   ; inventory_plugins=/usr/share/ansible/plugins/inventory，inventory插件存放的路径
+   ; lookup_plugins=/usr/share/ansible/plugins/lookup，lookup插件存放的路径
+   ; filter_plugins=/usr/share/ansible/plugins/filter，filter插件存放的路径
+   ; vars_plugins=/usr/share/ansible/plugins/vars，vars插件存放的路径
+   ; test_plugins=/usr/share/ansible/plugins/test，test插件存放的路径
+   ; strategy_plugins=/usr/share/ansible/plugins/strategy，strategy插件存放路径
    ; host_key_checking=True，是否检查SSH主机的密钥(即公钥认证)
    ; sudo_user=root，默认执行命令的用户
    ; timeout=60，SSH连接的超时间隔，单位为秒
@@ -319,6 +326,20 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
    #+BEGIN_EXAMPLE bash
    # 收集并只查看指定信息
    ansible '*' -m setup -a 'filter=ansible_all_ipv4_addresses'
+   #+END_EXAMPLE
+3) template模块
+   用于动态生成配置文件，应该添加属性 ~validate~ 用于校验配置文件的正确性
+   #+BEGIN_EXAMPLE yaml
+   - template:
+       src: user-sudoers
+       dest: /etc/sudoers.d/test
+       validate: visudo -cf %s
+       # for Nginx
+       # validate: /usr/bin/nginx -t -c %s
+       # for Prometheus
+       # validate: promtool check config %s
+       # for Logstash
+       # validate: logstash -t -f %s
    #+END_EXAMPLE
 
 ** Windows模块
@@ -370,6 +391,177 @@ ansible-doc -l <keyword>
 | backup_file | 用于来返回备份文件的路径                            |
 | results     | 应用在Playbook中存在循环的情况，返回多个结果        |
 
+* 自定义模块
+  可以使任何语言开发自定义模块。
+  注意：
+  1) 核心模块是存放在Ansible代码目录的/modules/core目录下（如 ~/usr/local/lib/python2.7/dist-packages/ansible/modules/core/~）
+  2) Extra模块存放路径通过ansible.cfg配置项library设置（默认为/usr/share/ansible），或在调用命令 ~ansbile~ 或 ~ansible-playbook~ 时通过参数 ~-M~ 设置路径亦可
+  3) 模块最后的输出会被Ansible使用json.load格式化
+  4) 当模块中使用了基础模块 ~ansible.module_utils.basic~ ，那么该模块只能在被控节点上运行且不能与管理节点有任何联系
+     copy和synchronize等核心模块实际是存放在unner/action_plugins中，且使用基础模块，因此可以与管理节点有关联
+  5) 返回JSON的键中避免使用Ansible的关键字，Ansible很可能会覆盖这些关键字的值
+     - invocation
+
+** Check Mode(Dry Run)
+   当执行 ~ansible --check~ 时将以check mode运行Playbook，即不执行实际的变更动作，而且对于支持check mode的模块，还会报告该模块将作怎样的变更。
+   注意：
+   1) 由于check mode只是模拟执行，因此若后一个模块A以前面的模块执行结果作为入参，那么模块A的变更预测将无参考意义
+   2) 若在自定义模块中实现 ~supports_check_mode~ ，那么即表示该模块稳定
+
+   #+BEGIN_EXAMPLE yaml
+   # 强制该任务运行在check mode，即使命令行不添加参数--check
+   - shell: echo 1
+     check_mode: yes
+
+   # 强制该任务不运行在check mode，即使命令行添加参数--check
+   - shell: echo 2
+     check_mode: no
+
+   # 通过变量ansbile_check_mode作为条件
+   - shell: echo 3
+     when: not ansible_check_mode
+
+   - shell: echo 4
+     ignore_errors: "{{ansible_check_mode}}"
+
+   # 忽略该任务当命令行添加参数--diff
+   - template:
+       src: xml.conf.j2
+       dest: /etc/xml.conf
+       owner: root
+       group: root
+       mode: "0600"
+     diff: no
+   #+END_EXAMPLE
+
+** 自定义echo模块
+   #+BEGIN_EXAMPLE python
+   # !/usr/bin/env python
+   # ./library/info.py
+   # 用于ansible-doc
+   DOCUMENTATION = """
+   ---
+   module: echo
+   short_description: This module acts as echo
+   description:
+     - This module acts as echo
+   version_added: "1.1"
+   options:
+     str1:
+       description:
+         - string 1
+       require: true
+       default: null
+     str2:
+       description:
+         - string 2
+       require: false
+       default: null
+   author: fsjohnhuang
+   requirements: [ "python >= 2.7.0"]
+   """
+   # 用于ansible-doc
+   EXAMPLES = """
+   - echo: str1="123" str2="333"
+   """
+
+   import sys
+   # 引入ansible模块工具获取入参
+   from ansible.module_utils.basic import (
+       AnsibleModule,
+   )
+   
+   module = AnsibleModule(
+       argument_spec = dict(
+           str1 = dict(default=None, type="str", required=True),
+           str2 = dict(default=None, type="str"),
+           choices = dict(default="present", choices=["present", "absent"]),
+           bools = dict(type="bool"),
+           name1 = dict(aliases=["name2", "name2"]), # name1、name2和name3都是指向同一个入参
+       ),
+       supports_check_mode = True # 开启模块的check支持，表示该模块已经经过严格的测试，当执行ansible-playbook --check时列入检查范围，否则会被跳过检查。
+   )
+   
+   str1 = module.params["str1"]
+   str2 = module.params["str2"]
+
+   if module.check_mode:
+       print("in check mode")
+
+   if str1 is None:
+      module.fail_json(msg="module echo need one argument at least")
+      # 返回内容为
+      # {"failed": true, "msg": "module echo need one argument at least", "rc":1}
+   else:
+      result = dict(echo=str1 + str2 if str2 is not None else "", changed=False, failed=False, rc=0)
+      module.exit_json(**result)
+      # 返回内容为
+      # {"changed": false, "echo": "123333"}
+   #+END_EXAMPLE
+
+** 自定义Facts模块
+   从被控节点上读取存储服务器名片文件信息（业务用途等信息）。
+   #+BEGIN_EXAMPLE python
+   # !/usr/bin/env python
+   # ./library/info.py
+   # 用于ansible-doc
+   DOCUMENTATION = """
+   ---
+   module: info
+   short_description: This module is extend facts module
+   description:
+     - This module is extend facts module
+   version_added: "1.1"
+   options:
+     enable:
+       description:
+         - enable extend facts
+       require: true
+       default: null
+   """
+   # 用于ansible-doc
+   EXAMPLES = """
+   - info: enable=yes
+   """
+   
+   import sys
+   import shlex
+   try:
+       import json
+   except:
+       import simplejson as json
+
+   # ansible all -M library/ -m info -a "enable=yes" -o
+   args_file = sys.argv[1]
+   args_data = file(args_file).read()
+   arguments = shlex.split(args_data)
+   for arg in arguments:
+       if "=" in arg:
+           key, value = arg.split("=")
+           if key == "enable" and value == "yes":
+               data = {
+                   "key": "value",
+                   "list": ["one", "two", "three"],
+                   "dict": {"A": "a"}
+               }
+               print(json.dump({"ansible_facts": data}, indent=4)
+               sys.exit(0)
+           else:
+               print("info modules usage error")
+       else:
+           print("info modules need one parameter")
+
+   sys.exit(1)
+   #+END_EXAMPLE
+
+* TODO 自定义插件
+
+** Callback插件
+
+** Lookup插件
+
+** Jinja2 Filter插件
+
 * Playbook 
   Playbook采用[[https://yaml.org/spec/1.2/spec.html#Syntax][YAML]]进行编写。
   组织规则：
@@ -398,9 +590,9 @@ ansible-doc -l <keyword>
          - name: "password vaes"
            prompt: "Enter password"
            default: "secret"
-           private: yes
+           private: yes # 在命令行输入的任何字符均不可见
+           confirm: yes # 需要输入两次进行确认
            encrypt: "md5_crypt"
-           confirm: yes
            salt: 1234
            salt_size: 8
      # 运行Playbook前将运行的任务
@@ -560,14 +752,25 @@ ansible-doc -l <keyword>
    Playbook运行前会读取所有相关变量，若不存在则会报错．
 
 *** 优先级
-    | 优先级 | 变量类型                                                    |
-    |--------+-------------------------------------------------------------|
-    | 高     | 外部变量, --extra-vars                                      |
-    |        | inventory主机清单中内置变量(ansible_ssh_user等)             |
-    |        | play的vars和vars_files                                      |
-    |        | invertory主机清单中自定义变量,group_vars和host_vars下的变量 |
-    |        | 系统facts变量                                               |
-    | 低     | 角色定义的默认变量(roles/rolename/defaults/main.yml)        |
+    | 优先级 | 变量类型                                                     |
+    |--------+--------------------------------------------------------------|
+    | 高     | extra variables                                              |
+    |        | task varialbes                                               |
+    |        | block variables                                              |
+    |        | role variables and include variables                         |
+    |        | play vars_files                                              |
+    |        | play vars_prompt                                             |
+    |        | play variables                                               |
+    |        | set_facts，即inventory主机清单中内置变量(ansible_ssh_user等) |
+    |        | registerd variables                                          |
+    |        | host facts                                                   |
+    |        | playbook host_vars                                           |
+    |        | playbook group_vars                                          |
+    |        | inventory host_vars                                          |
+    |        | inventory group_vars                                         |
+    |        | inventory variables                                          |
+    |        | dynamic inventory variables                                  |
+    | 低     | 角色定义的默认变量(roles/rolename/defaults/main.yml)         |
 
 *** 内置变量
     ~inventory_hostname~ Ansible当前执行任务的定义在inventory清单中的主机名，若定义为server1.test.com，则返回server1.test.com
@@ -594,37 +797,98 @@ ansible-doc -l <keyword>
 *** Facts变量
     为远程目标主机的IP/OS/以太网设备/MAC地址等系统/硬件信息.
     默认情况下每次执行play时会先执行收集Facts变量,如同先执行 ~ansible all -m setup~ ,并将返回结果保存到内存中,直到playbook结束.
+    返回的JSON以属性 ~ansible_facts~ 为开头。
 
-    两种方式优化:
-    1) 在playbook的每个play中添加 ~gather_facts: no~, 禁止收集Facts变量
-    2) Ansible1.8+可缓存Facts变量
-    #+BEGIN_EXAMPLE ansible.cfg
-    # 启用缓存
-    # smart, 默认收集Facts,但有缓存时则不收集
-    # implicit, 不收集Facts
-    # explicit, 强制收集Facts
-    gathering = smart
+**** 返回值意思
+     ansible_fqdn 127.0.0.1的域名
+    
+**** 两种方式优化
+     1) 在playbook的每个play中添加 ~gather_facts: no~, 禁止收集Facts变量
+     2) Ansible1.8+可缓存Facts变量
+     #+BEGIN_EXAMPLE ansible.cfg
+     # 启用缓存
+     # smart, 默认收集Facts,但有缓存时则不收集
+     # implicit, 不收集Facts
+     # explicit, 强制收集Facts
+     gathering = smart
 
-    # 缓存到Redis
-    fact_caching_timeout = 86400
-    fact_caching = redis
-    fact_caching_connection = 127.0.0.1:6379
+     # 缓存到Redis
+     fact_caching_timeout = 86400
+     fact_caching = redis
+     fact_caching_connection = 127.0.0.1:6379
 
-    # 缓存到本地文件
-    # fact_caching = jsonfile
-    # fact_caching_connection = /tmp/mycachedir
-    #+END_EXAMPLE
+     # 缓存到本地文件
+     # fact_caching = jsonfile
+     # fact_caching_connection = /tmp/mycachedir
+     #+END_EXAMPLE
 
-    *QA*: 若缓存到Redis后报
-    #+BEGIN_QUOTE
-    TypeError: the JSON object must be str, not 'bytes'
-    #+END_QUOTE
-    则将ansible/plugins/cache/redis.py中90行
-    #+BEGIN_SRC python
-    self._cache[key] = json.loads(value)
-    # 修改为
-    self._cache[key] = json.loads(value.decode('utf-8'))
-    #+END_SRC
+     *QA*: 若缓存到Redis后报
+     #+BEGIN_QUOTE
+     TypeError: the JSON object must be str, not 'bytes'
+     #+END_QUOTE
+     则将ansible/plugins/cache/redis.py中90行
+     #+BEGIN_SRC python
+     self._cache[key] = json.loads(value)
+     # 修改为
+     self._cache[key] = json.loads(value.decode('utf-8'))
+     #+END_SRC
+
+** 条件判断
+   通过 ~when~ 语句实现if语句，其中的逻辑运算由Jinja2提供。
+   #+BEGIN_EXAMPLE yaml
+   ---
+   # 测试字符串
+   vars: 
+      url: abc
+      a: [1,2,3]
+      b: [2,3]
+      path: path/to
+   tasks:
+      - debug: msg="1"
+        when: url | match(".*c") # 完全匹配
+      - debug: msg="2"
+        when: url | search("c1+") # 部分匹配
+
+   # 版本比较
+      - debug: msg="3"
+        when: ansible_distribution_version | version_compare('12.04', operator='lt', strict=True)
+
+   # 集合测试
+      - debug: msg="4"
+        when: a | issuperset(b)
+      - debug: msg="5"
+        when: b | issubset(a)
+
+   # 文件路径
+      - debug: msg="file"
+        when: path | is_file
+      - debug: msg="directory"
+        when: path | is_dir
+      - debug: msg="symbol link"
+        when: path | is_link
+      - debug: msg="exists"
+        when: b | exists
+
+   # 测试任务执行结果
+      - shell: /usr/bin/foo
+        register: result
+        ignore_errors: yes
+
+      - debug: msg="failed"
+        when: result | failed
+
+      - debug: msg="changed"
+        when: result | changed
+
+      - debug: msg="succeeded in Ansible >=2.1"
+        when: result | succeeded 
+
+      - debug: msg="succeeded"
+        when: result | success 
+
+      - debug: msg="skipped"
+        when: result | skipped 
+   #+END_EXAMPLE
 
 ** 循环结构
 
@@ -740,7 +1004,10 @@ ansible-doc -l <keyword>
                    - nginx
                    - memcached
              - template: src=templates/src.j2 dest=/etc/foo.conf
-             - service: name=bar state=started enabled=True
+             - service: name={{ service-name }} state=started enabled=True
+
+           vars:
+             service-name: boo
              
            when: ansible_distribution == 'CentOS'
            rescue:
@@ -750,6 +1017,39 @@ ansible-doc -l <keyword>
            always:
                - debug: msg="this always executes"
    #+END_EXAMPLE
+
+** 标签
+   通过 ~tags~ 为 *任务/角色/include语句* 打上标签，可实现按需执行部分任务的功能。
+   #+BEGIN_EXAMPLE yaml
+   - shell: echo helloworld
+     tags:
+       - helloworld
+       - first_tag
+   - shell: echo "second tag"
+     tags:
+       - second_tag
+   #+END_EXAMPLE
+   #+BEGIN_EXAMPLE bash
+   # 仅执行tags包含first_tag的任务
+   ansible-playbook script.yaml --tags first_tag
+   # 不执行tags包含helloworld的任务
+   ansible-playbook script.yaml --skip-tags helloworld
+   #+END_EXAMPLE
+
+*** 特殊标签-always
+    任务属性 ~tags~ 打上 *always* 后，除非通过CLI选项 ~--skip-tags always~ 明确排除，否则其对应的任务必定会被执行。
+
+*** 特殊标签-tagged
+    设置在CLI选项 ~--tags tagged~ ，即只执行打上标签的任务。
+    设置在CLI选项 ~--skip-tags tagged~ ，不执行打上标签的任务。
+
+*** 特殊标签-untagged
+    设置在CLI选项 ~--tags untagged~ ，即只执行没有打上标签的任务。
+    设置在CLI选项 ~--skip-tags untagged~ ，不执行没有打上标签的任务。
+
+*** 特殊标签-all
+    设置在CLI选项 ~--tags all~ ，即执行所有任务。
+    设置在CLI选项 ~--skip-tags all~ ，跳过所有任务。
 
 ** 读取动态变量
    通过lookups插件实现，并且读取操作均在被控节点上执行。
@@ -809,6 +1109,14 @@ ansible-doc -l <keyword>
         - debug: msg="{{content}}"
     #+END_EXAMPLE
 
+*** lookups env
+    从被控节点中读取环境变量
+    #+BEGIN_EXAMPLE yaml
+    ---
+    vars:
+      content: "{{ lookup('env', 'HOME') }}"  
+    #+END_EXAMPLE
+
 ** 错误处理和状态转换
    #+BEGIN_EXAMPLE yaml
    # 忽略错误
@@ -832,25 +1140,62 @@ ansible-doc -l <keyword>
 ** 进阶操作
 
 *** delegate_to
-    任务委派：定义任务将交给非当前play的hosts指定的目标主机执行．
-    #+BEGIN_EXAMPLE
-    ---
-    - hosts: 10.1.1.1 10.1.1.2
-      tasks:
-        - name: Ping
-          ping:
+    任务委派：定义任务将交给非当前play的hosts指定的目标主机执行．但facts依然为当前host的。
+    1) 示例1
+       #+BEGIN_EXAMPLE yaml
+       ---
+       - hosts: 10.1.1.1 10.1.1.2
+         tasks:
+           - name: Ping
+             ping:
 
-        - name: Ping 10.1.2.3
-          ping:
-          delegate_to: 10.1.2.3 # 由于hosts有2台目标主机，那么执行2次 ping 10.1.2.3
+           - name: Ping 10.1.2.3
+             ping:
+             delegate_to: 10.1.2.3 # 由于hosts有2台目标主机，那么执行2次 ping 10.1.2.3
 
-         - name: Create file local
-           shell: 'touch /temp/test.txt'
-           delegate_to: localhost
-           run_once: yes
-    #+END_EXAMPLE
+            - name: Create file local
+              shell: 'touch /temp/test.txt'
+              delegate_to: localhost
+              run_once: yes
+       #+END_EXAMPLE
 
-** 目录结构
+    2) 示例2-向监控服务器添加配置信息
+       #+BEGIN_EXAMPLE yaml
+       ---
+       - hosts: all
+         tasks:
+           - name: Add server to Munin monitoring configuration
+             command: monitor-server webservers {{ inventory_hostname }}
+             delegate_to: {{ monitoring_master }}
+       #+END_EXAMPLE
+
+*** location_action
+    将任务交给管理节点执行。
+    1) 示例1
+       #+BEGIN_EXAMPLE yaml
+       # 管理节点IP为127.0.0.1
+       # 下面两个任务效果是一致的
+       - name: remove server
+         local_action: command remove-from-lb {{ inventory_hostname }}
+
+       - name: remove server
+         command: remove-from-lb {{ inventory_hostname }}
+         delegate_to: 127.0.0.1
+       #+END_EXAMPLE
+
+    2) 示例2-任务暂停
+       #+BEGIN_EXAMPLE
+       - name: wait for webserver to start
+         local_action:
+             module: wait_for  # 在管理节点执行wait_for模块
+             host: webserver1  # IP
+             port: 80          # 端口
+             delay: 10         # 每10秒检测一次
+             timeout: 300      # 超过300秒host:port还没开启则返回失败
+             state: started
+       #+END_EXAMPLE
+
+** 角色-目录结构
    #+BEGIN_EXAMPLE
    /var/ansible/
      - production  # inventory file for production environment
@@ -875,6 +1220,7 @@ ansible-doc -l <keyword>
          - files/     # 保存需要上传到管理节点的文件，copy模块默认使用这个目录下的文件
          - vars/      # 不可以被覆盖的变量
            - main.yml
+           - debian.yml
          - default/   # 可以被覆盖的变量（优先级别最低）
            - main.yml
          - meta/
@@ -917,27 +1263,58 @@ ansible-doc -l <keyword>
    ---
    # This playbook deploys webserver tier.
 
-   - import_playbook: install_httpd.yml
-   - import_playbook: copy_code.yml
+   - include: install_httpd.yml
+   - include: copy_code.yml
+
+   - name: add the OS specific variables
+     include_vars: debian.yml
    #+END_EXAMPLE
+
+** 角色-依赖管理
+   假如角色A和角色B执行前需要先执行角色C，那么可以在角色A和角色B的meta/main.yml中注明如何执行角色C。
+   #+BEGIN_EXAMPLE yaml
+   ---
+   # role_a/meta/main.yml
+   # role_b/meta/main.yml
+   dependencies:
+       - role: common
+         name: "NameInDb"
+   #+END_EXAMPLE
+   那么在顶层Playbook中
+   #+BEGIN_EXAMPLE yaml
+   ---
+   # 由于角色A和角色B都以相同的入参依赖角色C，因此Ansible会合并依赖，并先执行角色C，然后一次执行角色A和角色B。
+
+   - hosts: all
+     roles:
+        - role_a
+        - role_b
+   #+END_EXAMPLE
+   *注意：若依赖的角色相同，但入参不同，则认为依赖不同的角色，不会合并依赖。*
 
 ** 开发环境
    - ansible-console工具
-     交互式的ansible Ad-Hoc，作为REPL提高开发效率。
+     交互式的ansible Ad-Hoc，作为REPL提高开发效率。提示符 ~@all(4)[f:5]~ 表示hosts为all，匹配4台服务器，工作线程数为5。
      - 默认读取ansible.cfg内容，可以通过 ~ansible-console -i <inventory>~ 等命令设置环境参数
      - ~!hostname~ 查看当前操作的被控节点IP
-     - ~cd~ 切换Inventory对象，支持正则
+     - ~cd <hosts>~ 切换Inventory对象，支持正则
      - ~list~ 显示当前目录下的主机和主机组列表
      - ~forks~ 临时设置并发数
      - ~become~ 设置become模式，例如su或sudo
      - ~!~ 强制调用shell模块
+     - ~?~ 列出所有的可用模块
+     - ~help <module>~ 获取模块的详细用法说明
+   - [[https://docs.ansible.com/ansible-lint/][ansible-lint]]工具
+     Ansible Lint is a commandline tool for linting playbooks. Use it to detect behaviors and practices that could potentially be improved.
+     - 安装： ~pip install ansible-lint~
+     - 使用： ~ansible-lint <playbook_file_path>~
    - 语法验证， ~ansible-playbook script.yaml --syntax-check~
    - 灰度发布，通过 ~delegate_to~ 将一个或多个任务委派到某台测试机器上执行验证
    - 配置文件验证，通过 ~--check~ 和 ~--diff~ 来对比生成后的文件是否符合要求
    - 显示详细执行信息(verbosity)
      执行ansible-playbook时会使用默认级别的verbosity
      1) none，默认级别，仅显示Play头、Task名称和Task执行状态(ok/fatal/changed)
-     2) 1(-v)，1级，显示返回值
+     2) 1(-v)，1级，显示返回值（如registerd variables值）
      3) 2(-vv)，2级，显示输入数据和返回值
      4) 3(-vvv)，3级，显示详细的连接尝试
      5) 4(-vvvv)，4级，会传输-v选项给SSH等具体的连接插件
@@ -959,18 +1336,79 @@ ansible-doc -l <keyword>
               msg: "derpops value is {{ derpops }}"  # 显示整个返回值
               var: derpops.server                    # 显示返回值的某个属性
      #+END_EXAMPLE
-   
-* 管理Windows服务器
+   - [[https://docs.ansible.com/ansible/latest/user_guide/playbooks_debugger.html][Debugger]]
+     以play/role/block/task为单位进行断点调试（查看/修改变量和入参值，重新执行断点任务）
+     - 调试单元必须设置属性 ~name~
+     - 条件断点(属性 ~debugger~)
+       - ~always~ 必定触发Debugger
+       - ~never~ 绝对不触发Debugger
+       - ~on_failed~ 当任务执行失败触发Debugger
+       - ~on_unreachable~ 当被控节点不可访问时触发Debugger
+       - ~on_skipped~ 当任务被跳过时触发Debugger
+     - Play的条件断点覆盖调试其他单元的条件断点
+       #+BEGIN_EXAMPLE yaml
+       ---
+       # 由于play单元的debugger设置为never，那么即使task的debugger设置为on_failed，那么也不会触发Debugger
+       - name: play
+         hosts: all
+         debugger: never
+         tasks:
+           - name: execute a command
+             command: false
+             debugger: on_failed
+       #+END_EXAMPLE
+     - 通过配置或环境变量设置任务执行failed或unreachable时触发Debugger
+       - ~enable_task_debugger=True~
+       - ~ANSIBLE_ENABLE_TASK_DEBUGGER=True ansible-playbook -i hosts site.yml~
+     - Debugger命令
+       - ~p <task|task_vars|host|result>~ print values
+       - ~task.args[key]=value~ update module's argument
+       - ~task_vars[key]=value~ update task' variable
+       - ~r~ run the task again
+       - ~c~ just continue
+       - ~q~ quit from the debugger. the playbook execution is aborted
+   - [[https://testinfra.readthedocs.io/en/latest/index.html][Testinfra]]
+     对Ansible Playbook执行结果做单元测试，由ThoughtWorks开发对标[[https://serverspec.org][Serverspec]]。作为Pytest测试引擎的插件来使用。
+     - 安装
+       #+BEGIN_EXAMPLE bash
+       pip install testinfra
+       pip install paramiko
+       pip install pytest-xdist # 添加多线程支持
+       #+END_EXAMPLE
+
+* TODO 管理Windows服务器
   PowerShell: 以.NET Framework为平台，接收和返回.NET对象
-  Server Core: Windows Server 2008开始提供Server Core模式，只包含安全、TCP/IP、文件系统、RPC等服务器核心子系统。可以安装DNS、DHCP、文件服务、活动目录、ADLDS（轻型目录服务）、打印、媒体、Web服务角色。降低磁盘空间占用、较少的补丁安装。
+  Server Core: Windows Server 2008开始提供Server Core模式，只包含安全、TCP/IP、文件系统、RPC等服务器核心子系统。可以安装DNS、DHCP、文件服务、活动目录、ADLDS（轻型目录服务）、打印、媒体、Web服务角色。降低磁盘空间占用、较少的补丁安装和减少攻击面。
   而Ansible就是基于PowerShell3.0+管理Windows服务器。
 
   Windows主机工作环境分为工作组(work group)和域(domain)两种：
   1) 工作组，将不同的电脑按功能分别列入不同的组中
   2) 域，用于一组计算机共享共用的安全数据库，是一组服务器和工作站的集合
 
+  认证传输框架(authentication transport scheme):
+  1) NTLM
+  2) Kerberos, 服务器已加入域
+  3) basic authentication.
+
 ** 依赖项
    1) 管理节点必须为Linux系统，并且安装Python2.7+、pywinrm和requests
+      1) 若验证方式采用Kerberos则要安装python-requests-kerberos，且将/etc/krb5.conf编辑为
+         #+BEGIN_EXAMPLE ini
+         [realms]
+         EXAMPLE.COM = {
+           kdc = ad.example.com
+         }
+         
+         [domain_realm]
+         .example.com = EXAMPLE.COM
+         #+END_EXAMPLE
+         #+BEGIN_EXAMPLE ini
+         # inventory
+         ansible_connection=winrm
+         ansible_port=5986
+         ansible_winrm_transport=kerberos
+         ansible_winrm_server_cert_validation=ignore
+         #+END_EXAMPLE
    2) 被管节点必须为Windows Server 2008 R2+、PowerShell3.0+、.NET Framework3.0+，并且开启WinRM服务
       WinRM为WS-Management协议的Microsoft实现，该协议基于SOAP，由硬件和软件制造商群体开发的公共标准，用于实现该协议的任何计算机设备远程交换管理数据。
       - WinRM监听端口5985和5986，默认关闭
@@ -980,20 +1418,25 @@ ansible-doc -l <keyword>
    1) https://www.cnblogs.com/kingleft/p/6391652.html
    2) http://www.ansible.com.cn/docs/intro_windows.html (内含Windows Server 2008 R2管理节点配置方式)
 
-   - 安装Framework3.0
-     - 下载地址 http://download.microsoft.com/download/B/A/4/BA4A7E71-2906-4B2D-A0E1-80CF16844F5F/dotNetFx45_Full_x86_x64.exe
-   - Windows 7 和 Windows Server 2008 R2由于使用Windows Management Framework3.0因此存在OOM漏洞，需要安装补丁
-     - 下载地址 http://support.microsoft.com/kb/2842230
-   - 设置PowerShell为remotesigned
-     - 在PowerShell中执行 ~set-executionpolicy remotesigned~
-   - 升级PowerShell至3.0+(Windows7和Windows Server 2008 R2的PowerShell一般为2.0)
-     - 查看PowerShell版本，在PowerShell中执行 ~get-host~
-     - 到官网下载3.0安装包到管理节点安装
-   - 启用WinRM(WS-Management)，在cmd下执行
-     - 基本配置 ~winrm quickconfig~
-     - 配置验证方式为基本验证 ~winrm set winrm/config/service/auth @{Basic="true"}~
-     - 配置加密方式为允许非加密 ~winrm set winrm/config/service @{AllowUnencrypted="true"}~
-     - 查看winrm service listener ~winrm e winrm/config/listener~ ，有返回即服务已启用
+   3) 安装Framework3.0
+      - 下载地址 http://download.microsoft.com/download/B/A/4/BA4A7E71-2906-4B2D-A0E1-80CF16844F5F/dotNetFx45_Full_x86_x64.exe
+   4) Windows 7 和 Windows Server 2008 R2由于使用Windows Management Framework3.0因此存在OOM漏洞，需要安装补丁
+      - 下载地址 http://support.microsoft.com/kb/2842230
+   5) 设置PowerShell为remotesigned
+      - 在PowerShell中执行 ~set-executionpolicy remotesigned~
+        1) Restricted，默认设置，不允许任务script运行
+        2) AllSigned，只能运行经过数字证书签名的script
+        3) RemoteSigned，运行本地的script时不用数字签名，但运行从网络上下载的script就必须要有数字签名
+        4) Unrestricted，允许运行所有script
+   6) 升级PowerShell至3.0+(Windows7和Windows Server 2008 R2的PowerShell一般为2.0)
+      - 查看PowerShell版本，在PowerShell中执行 ~get-host~
+      - 到官网下载3.0安装包到管理节点安装
+   7) 启用WinRM(WS-Management)，在cmd下执行
+      - 基本配置 ~winrm quickconfig~
+      - 配置验证方式为基本验证 ~winrm set winrm/config/service/auth @{Basic="true"}~
+        - 如要配置验证方式为Kerberos ~winrm set winrm/config/service/auth @{Basic="false"; Kerberos="true"}~
+      - 配置加密方式为允许非加密 ~winrm set winrm/config/service @{AllowUnencrypted="true"}~
+      - 查看winrm service listener ~winrm e winrm/config/listener~ ，有返回即服务已启用
 
 ** QA
    1) 控制端执行 ~ansible all -m win_ping~ 报如下异常：
@@ -1048,6 +1491,50 @@ ansible-doc -l <keyword>
    安装Windows Management Framework 5.0，去这里下载，Windows 2008 R2选择安装【Win7AndW2K8R2-KB3134760-x64.msu】
    https://www.microsoft.com/en-us/download/confirmation.aspx?id=54616
 
+** TODO Server Core with Windows Server 2012
+   1) Server Core和GUI间切换
+      1) to Server Core，在PS中输入 ~Uninstall-WindowsFeature Server-Gui-Mgmt-Infra -Restart~
+      2) to GUI，在PS中输入 ~Install-WindowsFeature Server-Gui-Shell -Restart~
+   2) 通过 ~sconfig~ 配置基线
+   3) 通过PS配置基线
+      - 重命名计算机名 ~Rename-Computer -ComputerName 新主机名~
+      - 查看网络适配器(interface index，简称ifIndex)信息 ~Get-NetAdapter~
+      - 设置IP、掩码和默认网关 ~New-NetIPAddress -InterfaceIndex 2 -ipaddress 192.168.2.31 -prefixlength 24 -defaultgateway 192.168.2.1~
+        - ~-InterfaceIndex~ 设置网络适配器的ifIndex
+        - ~ipaddress~ 设置IP地址
+        - ~-prefixlength~ 设置掩码长度，24就是255.255.255.0
+        - ~-defaultgateway~ 设置默认网关
+      - 设置主备DNS ~Set-DnsClientServerAddress -InterfaceIndex 2 -ServerAddress 192.168.12.10,202.96.209.100~
+   4) 通过PS管理角色
+      - 查看所有角色启用状态 ~dism /English /Online /Get-Features /Format:Table~
+      - 根据角色关键字查看某角色启用状态 ~dism /English /Online /Get-Features /Format:Table | findstr <keyword>~
+      - 安装IIS运行环境
+        #+BEGIN_EXAMPLE cmd
+        dism /English /Online /Enable-Features /FeatureName:NetFx4Extended-ASPNET45
+        #+END_EXAMPLE
+   5) 其他PS命令
+      - 查看主机名 ~hostname~
+      - 开启防火墙 ~netsh firewall set portopening TCP 8080~
+      - 启用Windows PowerShell远程访问，即在本地PS键入命令将在另一个台机器上执行
+      - 删除中文输入法，新增英文输入法
+        #+BEGIN_EXAMPLE cmd
+        # 若安装的只有中文输入法的系统
+        $LanguageList = Get-WinUserLanguageList
+        $LanguageList.Add("en-US")
+        $LanguageList.Remove($LanguageList[0])
+        Set-WinUserLanguageList $LanguageList
+        #+END_EXAMPLE
+      - 获取可用命令列表 ~get-command~
+      - 获取某命令的帮助文档 ~get-help <cmdlet>~
+
+   https://www.cnblogs.com/IPYQ/p/6800616.html
+   https://blog.csdn.net/xray2/article/details/51029735
+   https://blog.51cto.com/yttitan/2067579
+
+*** TODO Connect from Linux to Windows by PowerShell
+    https://github.com/PowerShell/psl-omi-provider
+    https://www.freebuf.com/articles/system/195166.html
+   
 * Ansible-Galaxy
   #+BEGIN_EXAMPLE
   # 初始化一个role的目录结构
@@ -1072,20 +1559,45 @@ ansible-doc -l <keyword>
     - role: bennojoy.mysql
   #+END_QUOTE
 
-* 插件
-用于增强Ansible核心功能。
+* TODO 插件
+  用于增强Ansible核心功能。
+  分类
+  - Action，和模块相似但应用于管理节点而不是被控节点上。
+  - Cache，为Facts提供缓存
+  - Callback，在执行Playbook后提供额外的行为，如发送Email或写日志等
+    若配置了callback插件，那么Ansible会根据执行后的状态调用对应callback插件。
+  - Connection，为管理节点和被控节点提供更多的连接方法。默认为paramiko的SSH协议
+  - Lookup
+  - Inventory
+  - Vars，提供更多变量注入的方法
+  - Filter
+  - Test，为Ansible Jinja2 test提供更多功能
+  - Strategy，为执行Playbook提供更多的执行策略
+    默认策略为 *linear* 即所有被控节点都执行完某一个任务后，在执行下一个任务。内置另一个策略为 *free* 即每一台被控节点执行完整个Play后再轮到下一台被控节点执行。
+    #+BEGIN_EXAMPLE yaml
+    - hosts: all
+      strategy: free
+    #+END_EXAMPLE
+  - Shell，提供被控节点上更多类型的shell的支持
 
 ** 性能监控
 1) [[https://github.com/jlafon/ansible-profile][ansible-profile]]
    - 用于统计每个任务的耗时
    - 已经集成到Ansible2.x，只要在ansible.cfg中加入 ~callback_whitelist = profile_tasks~ 即可
 
-** Callback插件
-对任务执行响应事件进行处理的插件。
-
 * TODO 安全
   
 ** ansible-vault
+   用于加密配置文件。
+   #+BEGIN_EXAMPLE bash
+   # ansible-vault [create|decrypt|edit|encrypt|rekey|view] [--help] [options] <file_name>
+
+   # 加密：输入命令后提示输入加密密码
+   ansible-vault encrypt a.yml
+   # 解密：输入命令后提示输入加密密码
+   ansible-valut decrypt a.yml
+   #+END_EXAMPLE
+
 * QA
 1) 部署代码时中文乱码
    解决方法：在Ansible配置文件的defaults section下修改为
@@ -1096,9 +1608,131 @@ ansible-doc -l <keyword>
    module_set_locale = True
    #+END_EXAMPLE
    
-
+* 实例-IIS
+  #+BEGIN_EXAMPLE yaml
+  ---
+  - hosts: win-server
+    gather_facts: yes
+    tasks:
+      - name: Install IIS feature on {{inventory_hostname}}
+        win_feature:
+          name: Web-Server
+          state: present
+          restart: no
+          include_sub_features: yes
+          include_management_tools: no
+      - name: Copy local web index file to {{inventory_hostname}} 
+        win_copy:
+          src: index.html
+          dest: c:\inetpub\wwwroot\index.html
+      - name: Open firewall port 80 for IIS web server on {{inventory_hostname}}
+        win_firewall_rule:
+          name: "{{inventory_hostname}}_80"
+          enable: yes
+          state: present
+          localport: 80
+          action: Allow
+          direction: In
+          protocol: Tcp
+      - name: Testing IIS is properly configured and running on {{inventory_hostname}}
+        win_uri:
+          url: "http://{{ansible_fqdn}}"
+          return_content: yes
+          register: result
+          failed_when: 'test' not in result.content
+  #+END_EXAMPLE
 * TODO 实例-Zabbix
+
+* TODO 实例-ELK
 
 * TODO 实例-Hadoop
 
 * TODO 实例-HAProxy
+
+* TODO Emacs开发环境配置
+
+** 编辑优化
+   1) [[https://github.com/Fuco1/smartparens][smartparens-mode]]，自动创建、移动和操作花括号
+      #+BEGIN_EXAMPLE elisp
+      (add-hook 'yaml-mode-hook #'smartparents-mode)
+      #+END_EXAMPLE
+   2) hightlight-indentation-mode，显示同级indent标线
+      #+BEGIN_EXAMPLE elisp
+      (add-hook 'yaml-mode-hook #'highlight-indentation-mode)
+      #+END_EXAMPLE
+   3) aj-toggle-fold，折叠/展开同级indent的行
+   4) indent-for-tab-command，Emacs内置功能，默认通过键tab对region或单行实现indentation操作
+   5) flycheck-mode，在线YAML语法检查
+   6) [[https://github.com/k1LoW/emacs-ansible][emacs-ansible]]，提供Ansible module snippet、Ansible module key for auto-complete和Ansible vault支持
+      #+BEGIN_EXAMPLE elisp
+      (add-hook 'yaml-mode-hook '(lambda () (ansible 1)))
+      #+END_EXAMPLE
+   7) 在当前角色目录下搜索变量
+      #+BEGIN_EXAMPLE elisp
+      (defun search-in-role ()
+        "Search in role folder"
+        (interactive)
+        (helm-do-ag (expand-file-name ".." projectile-project-root)))
+      #+END_EXAMPLE
+
+** TODO 保存文件时自动运行ansible-lint检查当前playbook
+
+** TODO 热键绑定
+   - 配置文件验证，通过 ~--check~ 和 ~--diff~ 来对比生成后的文件是否符合要求
+   - 发布到开发环境
+   
+** REPL
+   使用multi-term打开模拟终端，然后输入ansible-console即可
+* TODO 最佳实践
+
+** 基于Web的图形管理界面
+   工具：[[https://github.com/ansible/awx][AWX]]、Rundeck(provides procedures as self-service jobs)、Jenkins(CI/CD)
+
+** 执行日志统一处理和分析
+   工具：[[https://github.com/ansible-community/ara][ARA(Ansible Running Analysis)]]
+
+** 文档
+   #+BEGIN_QUOTE
+   Documentation is a love letter that you write to your future self. 
+   -- Damian Conway
+   #+END_QUOTE
+   #+BEGIN_QUOTE
+   Tranditional approaches for documentation, like wikis or shared drives, are useful for general documents, bu inevitably they become outdated and can't keep pace with the rapid changes in infrastructure and environments.
+   #+END_QUOTE
+   #+BEGIN_QUOTE
+   First do it, then do it right, then do it better.
+   -- Addy Osmani
+   #+END_QUOTE
+
+** 测试
+   工具：[[https://molecule.readthedocs.io/en/latest/][Molecule]]（intro https://opensource.com/article/18/12/testing-ansible-roles-molecule）
+
+*** 在发布流程中加入必要的验证
+    Ansible测试策略：https://docs.ansible.com/ansible/latest/reference_appendices/test_strategies.html?extIdCarryOver=true&sc_cid=701f2000001OH7nAAG
+
+    服务是否已启动、包是否已安装等都不用验证
+    #+BEGIN_EXAMPLE yaml
+    ---
+    - hosts: webservers
+      serial: 5
+
+      pre_tasks:
+        - name: take out of load balancer pool
+          command: /usr/bin/take_out_of_pool {{ inventory_hostname }}
+          delegate_to: 127.0.0.1
+      roles:
+        - common
+        - webserver
+        - apply_testing_checks
+      post_tasks:
+        - name: add back to load balancer pool
+          command: /usr/bin/add_back_to_pool {{ inventory_hostname }}
+          delegate_to: 127.0.0.1
+    #+END_EXAMPLE
+
+** 版本控制库管理Playbook
+
+** 通过Ansible Vault保护帐号密码等敏感信息
+   虽然可以通过 ~ansible-vault~ 对group_vars、host_vars、include_vars和var_files加密，但当执行 ~ansible -v~ 时未加密信息依然会输出到stdout和日志中，这时我们可以通过在任务中设置 ~no_log: true~ 屏蔽日志输出。 
+
+

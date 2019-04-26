@@ -39,6 +39,10 @@ C-u C-c C-t    ; 按顺序循环加入或更新关键字
 (org-show-todo-tree) ; 显示存在关键字且关键字不为DONE的TODO项，快捷键 C-c / t
 (org-insert-todo-heading) ; 插入TODO项
 (org-insert-todo-subheading) ; 插入子TODO项
+
+; 预览
+M-x (org-export-as-html) ; 导出html到buffer
+M-x (browse-url-of-bffer); 在浏览器中打开buffer
 #+END_EXAMPLE
 
 ** 配置
@@ -60,6 +64,9 @@ C-u C-c C-t    ; 按顺序循环加入或更新关键字
 (setq org-todo-keyword-faces
       '(("TODO" . org-warning) ("STARTED" . "yellow")
         ("CANCELED" . (:foreground "blue" :weight bold))))
+
+; 模糊搜索fzf，按文件名搜索
+(fzf-directory "path/to/notes")
 #+END_EXAMPLE
 
 ** 内联配置
@@ -74,3 +81,5 @@ C-u C-c C-t    ; 按顺序循环加入或更新关键字
 
 C-c C-c ; 在首行执行将刷新内联配置
 #+END_EXAMPLE
+
+bable mode直接在文本文件中执行代码并插入结果和图片。

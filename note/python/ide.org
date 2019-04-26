@@ -52,3 +52,15 @@ exit
 # 查看依赖图
 pipenv graph
 #+END_EXAMPLE
+
+* 其他
+tox
+
+
+* 自动化测试
+Robot Framework
+Java Cucumber 在Python中有对应的Lettuce
+Locust负载测试工具
+Selenium Web自动化测试
+
+docker-py提供docker支持
