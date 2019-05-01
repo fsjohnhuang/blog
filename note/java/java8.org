@@ -71,7 +71,7 @@ import java.io.*;
 * Maven
   https://mvnrepository.com/
 
-* Spring MVC + MyBatis
+* Spring MVC 4
 
 ** JavaEE分层模型
    1) 表现层(View)
@@ -587,7 +587,6 @@ import java.io.*;
          2) ~<mvc:resources/>~ 的 order 值为 2147483646;
          3) ~<mvc:default-servlet-handler/>~ 的 order 值为 2147483647;
 
-
 *** 信息转换
     将请求体转换为对象，将对象转换为响应体。Spring3.0+新增接口HttpMessageConverter<T>，和一堆具体的实现类来处理信息转换。
     DispatcherServlet默认装配了RequestMappingHandlerAdapter作为HandlerAdapter组件的实现类，而RequestMappingHanlderAdapter会调用HttpMessageConverter实例。
@@ -628,8 +627,154 @@ import java.io.*;
 
 **** 响应JSON数据
 
-
 *** 国际化
+
+    基于Java国际化通过提供不同国家/语言环境的消息资源，然后通过ResourceBundle加载指定Locale对应的资源文件，再取得该资源文件中指定key对应的消息。
+    Java国际化利用 ~java.util.ResourceBundle~
+
+    Spring MVC 两种方式输出国际化消息：
+    1) 通过 Spring MVC 标签库在视图上输出国际化消息
+    2) 通过 ~org.springframework.web.servlet.support.RequestContext~ 的 ~getMessage()~ 方法在 Controller 的 Handle中输出国际化消息
+
+    支持3种语言环境存储解析器：
+    1) AcceptHeaderLocaleResolver，默认值
+    2) SessionLocaleResolver
+    3) CookieLocaleResolver
+
+    资源文件路径规则： ~<resource>_<locale>.properties~ ，如 message_zh_CN.properties 和 message_en_US.properties。
+    
+**** AcceptHeaderLocaleResolver实例
+     1) 配置国际化资源文件
+        #+BEGIN_EXAMPLE xml
+        <!-- /WEB-INF/dispatcher-servlet.xml -->
+        <bean id="messageSource"
+              class="org.springframework.context.support.ResourceBundleMessageSource">
+              <!-- 对于多个资源文件时，property组件的name值设置为basenames，list组件则列出资源文件名称前缀 -->
+              <property name="basenames">
+                  <list>
+                      <value>message</value>
+                      <value>fkit</value>
+                  </list>
+              </property>
+              <!--
+                  单个资源文件时，property组件的name值设置为basename，value值为资源文件名前缀
+                  <property name="basename" value="message">
+              -->
+        </bean>
+        #+END_EXAMPLE
+     2) 配置多语言资源文件
+        #+BEGIN_EXAMPLE
+        # message_en_US.properties
+        loginname = Login name:
+        submit = Submit
+        welcome = Welcome {0} access fkit
+        #+END_EXAMPLE
+     3) 配置语言环境存储解析器
+        #+BEGIN_EXAMPLE xml
+        <!-- /WEB-INF/dispatcher-servlet.xml -->
+        <mvc:interceptors>
+            <bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor"/>
+        </mvc:interceptors>
+        <bean id="localeResolver" class="org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver"/>
+        #+END_EXAMPLE
+     4) message标签在视图输出国际化消息
+        #+BEGIN_EXAMPLE jsp
+        <%@taglib prefix="spring" uri="http://www.springframework.org/tags" %>
+        <spring:message code="loginname"/>
+        #+END_EXAMPLE
+        - message标签的属性
+          | 属性              | 描述                                            |
+          |-------------------+-------------------------------------------------|
+          | arguments         | 标签的参数，类型为字符串、数组或对象            |
+          | argumentSeparator | 标签参数的分隔符                                |
+          | code              | 资源文件的键                                    |
+          | htmlEscape        | boolean值，被渲染的值是否应该进行HTML转义       |
+          | javaScriptEscape  | boolean值，被渲染的值是否应该进行JavaScript转义 |
+          | message           | MessageSourceResolvable参数                     |
+          | scope             | 保存var属性中定义的变量的作用范围               |
+          | text              | 如果code对应的值不存在，所显示的默认文本        |
+          | var               | 用于保存消息的变量                              |
+     5) 在Controller的Handle中输出国际化消息
+        #+BEGIN_EXAMPLE java
+        @RequestMapping("/index")
+        public void index(HttpServletRequest request, Model model){
+            RequextContext context = new RequestContext(request);
+            loginname = context.getMessage("loginname");
+            model.addAttribute("loginname", loginname);
+        }
+        #+END_EXAMPLE
+
+**** SessionLocaleResolver实例
+     将Locale实例保存到HttpSession中
+     1) 配置语言环境存储解析器
+        #+BEGIN_EXAMPLE xml
+        <!-- /WEB-INF/dispatcher-servlet.xml -->
+        <mvc:interceptors>
+            <bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor"/>
+        </mvc:interceptors>
+        <bean id="localeResolver" class="org.springframework.web.servlet.i18n.SessionLocaleResolver"/>
+        #+END_EXAMPLE        
+     2) 在Controller中设置语言环境信息
+        #+BEGIN_EXAMPLE java
+        @RequestMapping("/{formName}")
+        public String setLocale(
+            @PathVariable String formName,
+            @RequestParam("request_locale") String request_locale,
+            HttpServletRequest request){
+            
+            if (request_locale != null){
+                if (request_locale.equals("zh_CN")){
+                    Locale locale = new Locale("zh", "CN");
+                    request.getSession().setAttribute(SessionLocaleResolver.LOCALE_SESSION_ATTRIBUTE_NAME, locale);
+                }
+                else{
+                     request.getSession()
+                            .setAttribute(SessionLocaleResolver.LOCALE_SESSION_ATTRIBUTE_NAME,
+                                          LocaleContextHolder.getLocale());
+                }
+            }
+            
+            return formName;
+        }
+        #+END_EXAMPLE
+**** CookieLocaleResolver实例
+     1) 配置语言环境存储解析器
+        #+BEGIN_EXAMPLE xml
+        <!-- /WEB-INF/dispatcher-servlet.xml -->
+        <mvc:interceptors>
+            <bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor"/>
+        </mvc:interceptors>
+        <bean id="localeResolver" class="org.springframework.web.servlet.i18n.CookieLocaleResolver"/>
+        #+END_EXAMPLE
+     3) 在Controller中设置语言环境信息
+        #+BEGIN_EXAMPLE java
+        @RequestMapping("/{formName}")
+        public String setLocale(
+            @PathVariable String formName,
+            @RequestParam("request_locale") String request_locale,
+            HttpServletRequest request,
+            HttpServletResponse response){
+            
+            if (request_locale != null){
+                if (request_locale.equals("zh_CN")){
+                    Locale locale = new Locale("zh", "CN");
+                    (new CookieLocaleResolver()).setLocale(request, response, locale);
+                }
+                else{
+                    (new CookieLocaleResolver()).setLocale(request, response, LocaleContextHolder.getLocale());
+                }
+            }
+            
+            return formName;
+        }
+        #+END_EXAMPLE
+*** 数据转换、格式化和数据校验
+
+**** 数据转换
+
+**** 格式化
+
+**** 数据校验
 
 *** RESTful API    
 
@@ -665,5 +810,6 @@ import java.io.*;
        </faceted-project>
        #+END_EXAMPLE
   2) URI和URL的区别？
+  3) Bean组件是什么？
 
 
