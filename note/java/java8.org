@@ -67,3 +67,603 @@ import java.io.*;
 ** HashMap
 
 ** Hashtable
+
+* Maven
+  https://mvnrepository.com/
+
+* Spring MVC + MyBatis
+
+** JavaEE分层模型
+   1) 表现层(View)
+      底层通过称为DTO(Data Transfer Object, 数据传输对象)的JavaBean向表现层传输状态信息。
+      - Servlet和JSP，JSP将被Web服务器编译为Servlet，然后Web服务器运行Servlet对外提供服务。Servlet3.x新增如下特性
+        - 异步请求
+        - 注解
+        - 增强的Servlet API
+        - 非阻塞IO
+      - FreeMarker
+      - Velocity
+   2) 控制器层(Controller)
+   3) 服务逻辑层(Service)
+   4) 数据访问服务层(DAO,Data Access Object)
+      在MyBatis中称为Mapper层
+      - Hibernate，全自动ORM
+      - MyBatis，半自动ORM
+   5) 领域对象层(Domain Object)
+      由一系列POJO(Plain Old Java Object, 普通的传统的Java对象)组成。
+
+** Spring MVC 4
+   通过继承HttpServlet的org.springframework.web.servlet.DispatcherServlet作为前端控制器来拦截用户请求并分派请求到具体执行业务控制的Controller，并处理请求。视图技术包含JSP、Velocity、Tiles、iText和POI等，功能分工上包含控制器、验证器、命令对象、模型对象、处理程序映射视图解析器等。
+   Spring核心容器依赖common-logging的JAR包。
+
+*** MVC模型
+    1) Model1
+       View和Controller层均通过JSP实现，将控制逻辑和表现逻辑混杂在一起，代码重用性、可扩展性和维护性极低，但由于架构简单开发速度快。
+    2) Model2
+       JSP作为View、Servlet作为Controller、JavaBean作为Model，提高代码重用、可扩展和维护性。
+
+*** 简单应用
+    目录结构
+    #+BEGIN_EXAMPLE
+    - ProjectName/
+        - .idea/
+        - lib/ # 内含Spring MVC相关依赖的JAR
+        - src/
+            - org.myproject.controller/
+                - HelloController.java
+        - web/
+            - WEB-INF/
+                - web.xml
+                - dispatch-servlet.xml
+                - content/
+                    - welcome.jsp
+        - pom.xml
+        - ProjectName.iml
+    #+END_EXAMPLE
+
+**** 传统方式
+     #+BEGIN_EXAMPLE xml
+     <!-- WebContent/WEB-INF/web.xml -->
+     <?xml version="1.0" encoding="UTF-8"?>
+     <web-app  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://java.sun.com/xml/ns/javaee" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd" id="WebApp_ID" version="3.0">
+
+       <display-name>My first Spring MVC 4 Web Application</display-name>
+       <context-param>
+         <param-name>contextConfigLocation</param-name>
+         <param-value>/WEB-INF/dispatcher-servlet.xml</param-value>
+       </context-param>
+       <servlet>
+         <servlet-name>dispatcher</servlet-name>
+         <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+         <load-on-startup>1</load-on-startup>
+       </servlet>
+       <servlet-mapping>
+         <servlet-name>dispatcer</servlet-name>
+         <url-pattern>/</url-pattern>
+       </servlet-mapping>
+       <listener>
+         <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class> <!-- 这段为启用Spring MVC -->
+       </listener>
+
+     </web-app>
+     #+END_EXAMPLE
+     Spring MVC解析contextConfigLocation指定的文件并根据文件配置信息创建一个基于ApplicationContext容器的WebApplicationContext容器对象(称为上下文环境)。WebApplicationContext需要ServletContext，因此必须拥有Web容器的提前下才能完成启动Spring Web应用上下文的工作。
+     Spring MVC将具体的Controller称为Handle
+
+     在dispatcher-servlet.xml通过Bean组件配置handler和URL路径映射
+     #+BEGIN_EXAMPLE xml
+     <!-- /WEB-INF/dispatcher-servlet.xml -->
+     <!-- 配置Handler和URL路径映射 -->
+     <bean name="/hello" class="org.myproject.controller.HelloController"/>
+     <!-- 配置处理映射器将bean节点的name作为URL路径进行匹配查找 -->
+     <bean class="org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping"/>
+     <!-- 启用继承HandlerAdapter的SimpleControllerHandlerAdapter实例来调用Handler的handleRequest方法 -->
+     <bean class="org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter"/>
+     <!-- 配置View Resolver -->
+     <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver“>
+       <property name="prefix">
+         <value>/WEB-INF/views/</value>
+       </property>
+       <property name="suffix">
+         <value>.jsp</value>
+       </property>
+     </bean>
+
+     <!-- 
+         /WEB-INF/views下的文件默认不能通过URL直接访问，必须通过Controller进行映射。
+         但对于Controller没有任何逻辑，为执行映射编写一个Controller显然是徒劳的，因此可通过<mvc:view-controller path=""/>简化映射操作
+     -->
+     <mvc:view-controller path="/success"/> <!-- 访问/success时会自动映射到/WEB-INF/views/success.jsp -->
+     #+END_EXAMPLE
+
+     #+BEGIN_EXAMPLE java
+     // src/org/myproject/controller/HelloController.java
+     package org.myproject.controller;
+     import javax.servlet.http.HttpServletRequest;
+     import javax.servlet.http.HttpServletResponse;
+     import org.apache.commons.logging.Log;
+     import org.apache.commons.logging.LogFactory;
+     import org.springframework.web.servlet.ModelAndView;
+     import org.springframework.web.servlet.mvc.Controller;
+
+     public class HelloController implements Controller {
+         private static final Log logger = LogFactory.getLog(HelloController.class);
+        
+         // 返回一个包含视图名称或视图名称和模型的ModelAndView对象
+         @Override
+         public ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response){
+             logger.info("handleRequest invoked");
+             ModelAndView mv = new ModelAndView();
+             // 添加模型数据，可为任意的POJO对象
+             mv.addObject("message", "Hello World!");
+             // 设置逻辑视图名，视图解析器会解析到具体的视图页面
+             // 将视图页面存放在/WEB-INF/views下，那么就不能通过URL直接访问视图页面
+             mv.setViewName("welcome");
+            
+             return mv;
+         }
+     }
+     #+END_EXAMPLE
+
+     #+BEGIN_EXAMPLE html
+     <!-- WebContent/WEB-INF/views/welcome.jsp -->
+     <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+     <!doctype html>
+     <html>
+       <body>
+         ${requestScope.message}
+         <!-- 或者 -->
+         ${message}
+       </body>
+     </html>
+     #+END_EXAMPLE
+
+**** 注解方式
+     Spring MVC 2.5后支持注解方式。
+     #+BEGIN_EXAMPLE xml
+     <!-- WEB-INF/dispatch-servlet.xml -->
+     <!-- Spring自动扫描base-package下的包和子包的Java文件，将存在Spring注解的类， -->
+     <context:component-scan base-package="org.myproject.controller"/>
+     #+END_EXAMPLE
+
+     #+BEGIN_EXAMPLE java
+     // src/org/myproject/controller/HelloController.java
+     package org.myproject.controller;
+     import org.apache.commons.logging.Log;
+     import org.apache.commons.logging.LogFactory;
+     import org.springframework.web.servlet.ModelAndView;
+     import org.springframework.stereotype.Controller;
+     import org.springframework.web.bind.annotation.RequestMapping;
+     import org.springframework.web.bind.annotation.RequestParam;
+
+     @Controller
+     public class HelloController {
+         private static final Log logger = LogFactory.getLog(HelloController.class);
+        
+         // 返回一个包含视图名称或视图名称和模型的ModelAndView对象
+         @RequestMapping("/hello")
+         public ModelAndView showMessage(
+                 @RequestParam(value="name", required=false, defaultValue="world") String name){
+             logger.info("handleRequest invoked");
+             ModelAndView mv = new ModelAndView();
+             // 添加模型数据，可为任意的POJO对象
+             mv.addObject("message", "Hello World!");
+             // 设置逻辑视图名，视图解析器会解析到具体的视图页面
+             // 将视图页面存放在/WEB-INF/views下，那么就不能通过URL直接访问视图页面
+             mv.setViewName("welcome");
+            
+             return mv;
+         }
+     }     
+     #+END_EXAMPLE
+     
+*** DispatcherServlet作用
+    1) org.springframework.web.servlet.DispatcherServlet内部操作
+       #+BEGIN_EXAMPLE java
+       protected void initStrategies(ApplicationContext context){
+           initMultipartResolver(context); // 初始化上传文件解析器
+           initLocaleResolver(context); // 初始化本地化解析器
+           initThemeResolver(contect); // 初始化主题解析器
+           initHandlerMappings(context); // 初始化N个处理器映射器
+           initHandlerAdapters(context); // 初始化N个处理器适配器
+           initHandlerExceptionResolvers(context); // 初始化N个处理器异常解析器，执行过程中遇到异常将交给HandlerExceptionResolver来解析
+           initRequestToViewNameTranslator(context); // 初始化视图名称转换器
+           initViewResolvers(context); // 初始化N个视图解析器
+           initFlashMapManager(context); // 初始化flash映射管理器
+       }
+       #+END_EXAMPLE
+    2) org.springframework.web.servlet.DispatcherServlet.properties配置文件包含默认组件
+       #+BEGIN_EXAMPLE xml
+       // 若查找不到name值为localeResolver，class值没有继承LocaleResolver结尾Bean组件时采用默认值
+       org.springframework.web.servlet.LocaleResovler=org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver
+       // 若查找不到name值为themeResolver，class值没有继承ThemeResolver结尾Bean组件时采用默认值
+       org.springframework.web.servlet.ThemeResolver=org.springframework.web.servlet.theme.FixedThemeResolver
+       // 若detectAllHandlerMappings为true(默认值)，则根据类型匹配机制在上下文和Spring容器中查找所有class值继承HandlerMapping的Bean组件
+       // 若detectAllHandlerMappings为false，则查找name值为handlerMapping，class值继承HandlerMapping的Bean组件
+       // 若上述两个条件都没有匹配到时采用默认值
+       org.springframework.web.servlet.HandlerMapping=org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping, org.springframework.web.servlet.mvc.annotation.DefaultAnnotationHandlerMapping
+       // 若detectAllHandlerAdapters为true(默认值)，则根据类型匹配机制在上下文和Spring容器中查找所有class值继承HandlerAdapter的Bean组件
+       // 若detectAllHandlerAdapters为false，则查找name值为handlerAdapter，class值继承HandlerAdapter的Bean组件
+       // 若上述两个条件都没有匹配到时采用默认值
+       org.springframework.web.servlet.HandlerAdapter=org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter,org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter,org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerAdapter
+       // 若detectAllHandlerExceptionResolvers为true(默认值)，则根据类型匹配机制在上下文和Spring容器中查找所有class值继承HandlerExceptionResolver的Bean组件
+       // 若detectAllHandlerExceptionResolvers为false，则查找name值为handlerExceptionResolver，class值继承HandlerExceptionResolver的Bean组件
+       // 若上述两个条件都没有匹配到时采用默认值
+       org.springframework.web.servlet.HandlerExceptionResolver=org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerExceptionResolver,org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionResolver,org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver
+       // 若查找不到name值为viewNameTranslator，class值没有继承ViewNameTanslator结尾Bean组件时采用默认值
+       org.springframework.web.servlet.RequestToViewNameTranslator=org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator
+       // 若detectAllViewResolvers为true(默认值)，则根据类型匹配机制在上下文和Spring容器中查找所有class值继承ViewResolver的Bean组件
+       // 若detectAllViewResolvers为false，则查找name值为viewResolver，class值继承ViewResolver的Bean组件
+       // 若上述两个条件都没有匹配到时采用默认值
+       org.springframework.web.servlet.ViewResolver=org.springframework.web.servlet.view.InternalResourceViewResolver
+       // 若查找不到name值为flashMapManager，class值没有继承FlashMapManager结尾Bean组件时采用默认值
+       org.springframework.web.servlet.FlashMapManager=org.springframework.web.servlet.support.SessionFlashMapManager
+       // 若查找不到name值为multipartResolver，class值没有继承MultipartResolver结尾Bean组件时不加载该类型的组件
+       #+END_EXAMPLE
+    3) 作用
+       1) 对请求URL进行解析得到URI，然后根据URI调用HandlerMapping实例获得Handler对象和对应的拦截器，组成一个HandlerExecutionChain对象返回。然后选择合适的HandlerAdpater实例处理Handler实例。
+       2) 解析请求体转换为对象
+       3) 根据HTTP协议将响应对象序列化
+
+*** 注解
+    1) ~@Controller~
+       全限定类名org.springframework.stereotype.Controller，其标识的类实例将作为作为Controller。其标识为 ~@RequestMapping~ 的公开实例方法将作为具体的handler。
+       在dispatcher-servlet.xml中通过配置 ~<context:component-scan base-package=""/>~ 启动包扫描功能，自动注册带 ~@Controller,@Service,@repository,@Component~ 等注解的类成为Spring Bean。
+       #+BEGIN_EXAMPLE java
+       import org.springframework.stereotype.Controller;
+       import org.springframework.web.bind.annotation.RequestMapping;
+       import org.springframework.ui.Model;
+       
+       @Controller
+       public class HelloController {
+           @RequestMapping("/hello")
+           public String index(Model m){
+               m.addAttribute("message", "test") // jsp视图中通过${message}、${request.message}或${requestScope.message}获取该值
+               return "helloworld" // 返回逻辑视图名称，Spring会自动通过RequestToViewNameTranslator获取物理的ViewName(如/WEB-INF/views/helloworld.jsp)
+           }
+       }
+       #+END_EXAMPLE
+    2) ~@RequestMapping~
+       全限定类名org.springframework.web.bind.annotation.RequestMapping，可用于标识类和实例方法，用于设置请求与handler匹配条件
+       - 参数
+         | 属性     | 类型            | 说明                                                                     | 示例                                                            |
+         |----------+-----------------+--------------------------------------------------------------------------+-----------------------------------------------------------------|
+         | value    | String[]        | URI                                                                      |                                                                 |
+         | name     | String          | 映射地址的别名                                                           |                                                                 |
+         | method   | RequestMethod[] | 请求方法类型：RequestMethod.GET/POST/HEAD/OPTIONS/PUT/PATCH/DELETE/TRACE | @RequestMapping(method={RequestMethod.GET, RequestMethod.POST}) |
+         | consumes | String[]        | 指定请求头字段Content-Type的必须匹配的值，如application/json,text/xml等  | @RequestMapping(consumes="application/json")                    |
+         | produces | String[]        | 指定请求头字段Accept的必须匹配的值                                       | @RequestMapping(produces="application/json")                    |
+         | params   | String[]        | 请求参数必须匹配的值                                                     | @RequestMapping(params="myParam=123"                            |
+         | headers  | String[]        | 请求头必须匹配的头字段及值                                               | @RequestMapping(headers="Referer=http://test.com")              |
+         | Path     | String[]        |                                                                          |                                                                 |
+    3) Handler方法入参类型
+       - javax.servlet.ServletRequest 或 javax.servlet.http.HttpServletRequest
+       - javax.servlet.ServletResponse 或 javax.servlet.http.HttpServletResponse
+       - javax.servlet.http.HttpSession
+       - java.util.Locale
+       - java.util.Map
+       - java.io.InputStream 或 java.io.Reader
+       - java.io.OutputStream 或 java.io.Writer
+       - HttpEntity<?>
+       - java.security.Principal
+       - org.springframework.ui.Model
+       - org.springframework.ui.ModelMap
+       - org.springframework.web.servlet.ModelAndView
+       - org.springframework.web.servlet.mvc.support.RedirectAttributes
+       - org.springframework.validation.Errors
+       - org.springframework.validation.BindingResult
+       - org.springframework.web.bind.support.SessionStatus
+       - org.springframework.web.util.UriComponentsBuilder
+       - @PathVariable, @@MatrixVariable
+       - @RequestParam, @RequestHeader, @RequestBody, @RequestPart
+    4) Handler方法返回值类型
+       - org.springframework.web.servlet.ModelAndView
+       - org.springframework.ui.Model
+       - java.util.Map<K,V>
+       - org.springframework.web.servlet.View
+       - java.lang.String, 作为视图名称
+         - 若匹配 ~redirect:<handle-name>~ 或 ~redirect:/path/to/static/resource~ 则为请求重定向
+         - 若匹配 ~forward:<handle-name>~ 或 ~forward:/path/to/static/resource~ 则为请求转发
+       - HttpEntity 或 ResponseEntity
+       - java.util.concurrent.Callable
+       - org.springframework.web.context.request.async.DeferredResult
+       - void, @RequestMapping的value值即作为视图名称
+    5) Model、ModelMap和ModelAndView
+       Spring MVC 在调用处理方法前会创建一个隐含的作为模型数据存储容器的模型实例，若Handler相关方法入参类型为Model或ModelMap时就会将隐含的模型实例引用传递给这些参数。
+       #+BEGIN_EXAMPLE java
+       @Controller
+       public class HelloController {
+           // @ModelAttribute 修饰的方法会在实际的handle执行前先执行，并且可以接收请求的参数
+           // 可用于将从请求体获取的数据加工存放到Model或ModelMap实例中供后续的Handle使用
+           @ModelAttribute
+           public void createUserModel(String loginname, String password, Model model, ModelMap mm, ModelAndView mv){
+               User user = User.builder()
+                               .loginname(loginname)
+                               .password(password);
+               model.addAttribute("user", user);
+               mm.addAttribute("user", user);
+               mv.addObject("user", user);
+           }
+           
+           @RequestMapping("/hello")
+           public ModelAndView login(Model model, ModelMap mm, ModelAndView mv){
+               User user1 = (User) model.asMap().get("user");
+               User user2 = (User) mm.get("user");
+               User user3 = (User) mv.getModel().get("user");
+               mv.setViewName("viewname");
+
+               return mv;
+           }
+
+       }
+       #+END_EXAMPLE
+    6) 参数绑定注解
+       1) ~@RequestParam~
+          全限定类名org.springframework.web.bind.annotation.RequestParam，用于将指定的请求参数(querystring和request body中的参数)赋值给Handle的型参。
+          - 参数
+            | 属性         | 类型    | 说明               |
+            |--------------+---------+--------------------|
+            | name         | String  | 指定请求参数的名称 |
+            | value        | String  | 指定请求参数的名称 |
+            | requried     | boolean | 是否必须绑定       |
+            | defaultValue | String  | 默认值             |
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @RequestMapping("/login")
+            public String login(@RequestParam(value="username", required=false, defaultValue="john") String username){
+              // TODO
+            }
+
+            @RequestMapping(value="/register", method=RequestMethod.POST)
+            public String login(@RequestParam(value="username", required=false, defaultValue="john") String username){
+              // TODO
+            }
+            #+END_EXAMPLE
+       2) ~@PathVariable~
+          全限定类名org.springframework.web.bind.annotation.PathVariable，用于获取请求URL中的动态参数。仅含String类型的value参数，若省略则默认绑定同名参数。
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @RequestMapping(value="/url_include_dynamic_variable/{userId}")
+            public void index(@PathVariable String userId){
+              // TODO
+            }
+            #+END_EXAMPLE
+       3) ~@RequestHeader~
+          全限定类名org.springframework.web.bind.annotation.RequestHeader，用于将指定的请求头字段映射到Handle形参。
+          - 参数
+            | 属性         | 类型    | 说明                 |
+            |--------------+---------+----------------------|
+            | name         | String  | 指定请求头字段的名称 |
+            | value        | String  | 指定请求头字段的名称 |
+            | requried     | boolean | 是否必须绑定         |
+            | defaultValue | String  | 默认值               |
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @RequestMapping("/path/to/resource")
+            public void index(@RequestHeader("Accept") String[] accepts){
+              // TODO
+            }
+            #+END_EXAMPLE
+       4) ~@CookieValue~
+          全限定类名org.springframework.web.bind.annotation.CookieValue，用于将指定的请求头字段Cookies或Cookies2中的键值对绑定到Handle形参。
+          - 参数
+            | 属性         | 类型    | 说明         |
+            |--------------+---------+--------------|
+            | name         | String  | 指定键       |
+            | value        | String  | 指定键       |
+            | requried     | boolean | 是否必须绑定 |
+            | defaultValue | String  | 默认值       |
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @RequestMapping("/path/to/resource")
+            public void index(@CookieValue("JSESSIONID") String sessionId){
+              // TODO
+            }
+            #+END_EXAMPLE
+       5) ~@SessionAttributes~
+          全限定类名org.springframework.web.bind.annotation.SessionAttributes，只能修饰类。用于指定Model实例中哪些属性将转存到HttpSession对象中。
+          - 参数
+            | 属性  | 类型       | 说明                                                 |
+            |-------+------------+------------------------------------------------------|
+            | names | String[]   | Model中属性的名称，即存储到HttpSession中的属性的名称 |
+            | value | String[]   | 属性names的别名                                      |
+            | types | Class<?>[] | 存入HttpSession中的属性的类型                        |
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @Controller
+            @SessionAttributes(value={"user","dept"}, types={User.class, Dept.class})
+            public class HelloController{
+                @RequestMapping("/hello")
+                public String hello(Model model){
+                    model.addAttribute("user", User.builder().username("john"));
+                    model.addAttribute("dept", Dept.builder().name("IT"));
+                    // 在jsp视图中可通过${sessionScope.user}从HttpSession中获取User实例
+                    return "hello";
+                }
+            }
+            #+END_EXAMPLE
+       6) ~@ModelAttribute~
+          全限定类名org.springframework.web.bind.annotation.ModelAttribute，将请求参数绑定到Model实例。被修饰的方法会在每个相同Controller中被@RequestMapping修饰的方法执行前被执行。
+          - 参数
+            | 属性  | 类型   | 说明                        |
+            |-------+--------+-----------------------------|
+            | value | String | 指定绑定到Model中的属性名称 |
+          - 示例
+            #+BEGIN_EXAMPLE java
+            @ModelAttribute("name")
+            public String getName(@RequestParam("username") String username){
+                // 返回值将作为Model实例属性name的值
+                return username;
+            }
+            
+            @ModelAttribute
+            public User getUser(){
+                // 若没有指定属性名称，且返回值为某实例，那么会自动对类名作小写转换作为Model的属性名称
+                return User.builder().name("john");
+            }
+
+            @ModelAttribute
+            public void getUserManually(Model m){
+                m.setAttribute("user", User.builder().name("john"));
+            }
+
+            @RequestMapping("/index")
+            @ModelAttribute("message")
+            public String index(){
+                 // 当@RequestMapping和@ModelAttribute同时修饰一个方法时，该方法返回值将作为Model实例属性值，而视图名称即保持与RequestMapping的属性value值一致
+                 return "helloworld";
+            }
+
+            @RequestMapping("/user")
+            public void user(@ModelAttribute("name") String name){
+                // 从Model实例中将属性name值赋值给形参name。
+            }
+            #+END_EXAMPLE
+       7) ~@RequestBody~
+          全限定类名org.springframework.web.bind.annotation.RequestBody，用于读取请求体中部分数据。内部使用HttpMessageConverter实现类对请求体进行解析，然后将结果绑定到Handle的形参上。
+          - GET或POST请求方式，以下ContentType的处理情况
+            - application/x-www-form-urlencoded，可通过@RequestParam、@ModelAttribute和@RequestBody获取
+            - multipart/form-data，@RequestBody则处理不了
+            - 其他类型(包含application/json、application/xml)，必须用@RequestBody处理
+          - PUT请求方式，以下ContentType的处理情况
+            - application/x-www-form-urlencoded，必须用@RequestBody处理
+            - multipart/form-data，@RequestBody则处理不了
+            - 其他类型(包含application/json、application/xml)，必须用@RequestBody处理
+          - 参数
+            | 属性     | 类型    | 说明                               |
+            |----------+---------+------------------------------------|
+            | required | boolean | 是否必须要存在请求体，默认值为true |
+
+    7) ~@ResponseBody~
+
+*** 静态资源
+
+    1) 在注册DispatcherServlet映射前，先注册应用服务器的defaultServlet拦截所有静态资源
+       #+BEGIN_EXAMPLE xml
+       <!--WEB-INF/web.xml-->
+       <!--
+         Tomcat, Jetty, JBoss, and GlassFish  默认 Servlet的名字 -- "default"
+         Google App Engine 默认 Servlet的名字 -- "_ah_default"
+         Resin 默认 Servlet的名字 -- "resin-file"
+         WebLogic 默认 Servlet的名字  -- "FileServlet"
+         WebSphere  默认 Servlet的名字 -- "SimpleFileServlet"
+       -->
+       <servlet-mapping>
+           <servlet-name>default</servlet-name>
+           <url-pattern>*.js</url-pattern>
+       </servlet-mapping>
+       <servlet-mapping>
+           <servlet-name>default</servlet-name>
+           <url-pattern>*.css</url-pattern>
+       </servlet-mapping>
+       
+       <!-- DispatcherServelt 配置 -->
+       #+END_EXAMPLE
+       - *注意: 静态资源不能位于WEB-INF下，必须位于Web Application根目录下。*
+    2) 通过 ~<mvc:resources mapping="" location=""/>~ 实现(Spring 3.0.4+支持)
+       #+BEGIN_EXAMPLE xml
+       <!--WEB-INF/dispatcher-servlet.xml-->
+       <mvc:annotation-driven />
+       <!-- 静态资源位于Web Application根目录下 -->
+       <mvc:resources mapping="/style/**" location="/css/" />
+       <!-- 静态资源位于WEB-INF目录下 -->
+       <mvc:resources mapping="/script/**" location="/WEB-INF/script/" />
+       <!-- 静态资源可以打包压缩到JAR包中 -->
+       #+END_EXAMPLE
+       - 原理
+         将mapping值和ResourceHttpRequestHandler作为键值对加入到SimpleUrlHandlerMapping的urlMap中，那么当请求静态资源时就会使用ResourceHttpRequestHandler处理。
+    3) 通过 ~<mvc:default-servlet-handler/>~ 实现
+       #+BEGIN_EXAMPLE xml
+       <!--WEB-INF/dispatcher-servlet.xml-->
+       <mvc:annotation-driven />
+       <mvc:default-servlet-handler/>
+       #+END_EXAMPLE
+       - *注意: 静态资源不能位于WEB-INF下，必须位于Web Application根目录下。*
+       - 原理
+         可以理解为第一个方法的进化版，将 ~/**~ 和 ~org.springframework.web.servlet.resource.DefaultServletHttpRequestHandler~ 作为键值对加入到SimpleUrlHandlerMapping，DefaultServletHttpRequestHandler会调用应用服务器的defaultServlet。
+       - 多个HandlerMapping的执行顺序
+         HandlerMapping通过属性order值从小往大执行，若通过当前HandlerMapping找到Handler则中止当前流程。
+         1) DefaultAnnotationHandlerMapping 的 order 值为 0;
+         2) ~<mvc:resources/>~ 的 order 值为 2147483646;
+         3) ~<mvc:default-servlet-handler/>~ 的 order 值为 2147483647;
+
+
+*** 信息转换
+    将请求体转换为对象，将对象转换为响应体。Spring3.0+新增接口HttpMessageConverter<T>，和一堆具体的实现类来处理信息转换。
+    DispatcherServlet默认装配了RequestMappingHandlerAdapter作为HandlerAdapter组件的实现类，而RequestMappingHanlderAdapter会调用HttpMessageConverter实例。
+    默认装配的实例有：
+    - StringHttpMessageConverter
+      - 将请求信息转换为String，可以读取所有MIME(*/*)的请求信息，可通过设置supportMediaTypes属性指定MIME。
+      - 响应信息的MIME为text/plain
+    - ByteArrayHttpMessageConverter
+      - 将请求信息转换为byte[]，可以读取所有MIME(*/*)的请求信息，可通过设置supportMediaTypes属性指定MIME。
+      - 响应信息的MIME为application/octet-stream
+    - SourceHttpMessageConverter
+      - 将请求信息转换为javax.xml.transform.[dom.DOMSource|sax.SAXSource|stream.StreamSource]，可以读取的MIME包含text/xml和application/xml的请求信息。
+      - 响应信息的MIME为text/xml或application/xml
+    - XmlAwareFormHttpMessageConverter
+      继承FormHttpMessageConverter，当表单属性是XML数据，则用该转换器
+      - FormHttpMessageConverter
+        - 将请求信息转换org.springframework.util.MultiValueMap<String, ?>类型，支持读取MIME为application/x-www-form-urlencoded，不支持multipart/form-data。
+        - 响应信息的MIME为application/x-www-form-urlencoded或multipart/form-data
+
+    通过Bean组件自定义RequestMappingHandlerAdapter装配的HttpMessageConverter实例
+    #+BEGIN_EXAMPLE xml
+    <!-- WEB-INF/applicationContext.xml -->
+    <bean class="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter">
+        <property name="messageConverters">
+            <list>
+                <bean class="org.springframework.http.converter.StringHttpMessageConverter"/>
+                <bean class="org.springframework.http.converter.xml.XmlAwareFormHttpMessageConverter"/>
+                <bean class="org.springframework.http.converter.ByteArrayHttpMessageConverter"/>
+                <bean class="org.springframework.http.converter.BufferedImageHttpMessageConverter"/>
+            </list>
+        </property>
+    </bean>
+    #+END_EXAMPLE
+
+    
+**** 接收JSON数据
+     
+
+**** 响应JSON数据
+
+
+*** 国际化
+
+*** RESTful API    
+
+*** WebService
+
+* MyBatis
+
+* Spring Boot
+  通过[[https://start.spring.io/][Spring Initializr]]初始化项目。
+
+* TODO 打包发布
+  jar、ear和war的差别
+
+* TODO QA
+  1) Eclipse 中的 Dynamic Web Module Version 与 Application Server 搭配
+     Dynamic Web Module Version 决定Java动态网站依赖的包版本，因此必须和Application Server对应才能成功运行。
+     - 映射表
+       | Dynamic Web Module Version | Application Server |
+       |----------------------------+--------------------|
+       |                        2.4 |                5.5 |
+       |                        2.5 |                6.0 |
+       |                        3.0 |                7.0 |
+       |                        3.1 |                8.5 |
+       |                        4.0 |                9.0 |
+     - 通过 ~项目目录/.setting/org.eclipse.wst.common.project.facet.core.xml~ 修改 Dynamic Web Module Version
+       #+BEGIN_EXAMPLE xml
+       <?xml version="1.0" encoding="UTF-8"?>
+       <faceted-project>
+         <fixed facet="wst.jsdt.web"/>
+         <installed facet="java" version="1.5"/>
+         <installed facet="jst.web" version="3.1"/> <!-- 修改为对应的Dynamic Web Module Version，然后重启Tomcat即可 -->
+         <installed facet="wst.jsdt.web" version="1.0"/>
+       </faceted-project>
+       #+END_EXAMPLE
+  2) URI和URL的区别？
+
+

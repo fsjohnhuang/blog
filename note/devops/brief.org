@@ -222,6 +222,10 @@ fi
 
 *** TODO 制作Windows Server 2012 base box
 工具：Packer
+组成：
+1) Builder(构建器)，用于为某个平台生成镜像，如VirtualBox、Alicloud ECS等。
+2) Provisioner(派生器)，在Builder创建和运行的机器中安装和配置软件。
+3) Post-Processor(后处理器)
 
 *** 搭建Ansible实验室
 #+BEGIN_EXAMPLE ruby
@@ -349,13 +353,16 @@ docker run -it --link redis:redis --name redis-client ubuntu /bin/bash
    - ~RUN <cmd>~ 向Docker守护进程提供容器构建的命令
 
 **** 容器编排
-     大规模使用容器将面临如下问题：
-     1) 布置（亲和或者反亲和）
-     2) 可用性（容器状态管理：运行、停止、从故障中恢复）
-     3) 联网（容器间通信）
+大规模使用容器将面临如下问题：
+1) 布置（亲和或者反亲和）
+2) 可用性（容器状态管理：运行、停止、从故障中恢复）
+3) 联网（容器间通信）
 
-**** k8s(Kubernetes)
-     源自Google用于管理多台机器上的容器。
+Docker Swarm: 兼容Docker Compose，由Docker社区维护。
+Kubernetes: 基于Google Borg集群软件模型，但与Borg不同。
+
+***** k8s(Kubernetes)
+源自Google用于管理多台机器上的容器。
 
 * 监控
 

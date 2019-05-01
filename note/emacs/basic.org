@@ -19,6 +19,10 @@
 
 * 包
 gnuplot，画图
+graphviz，dot语言解释器，用于画流程图
+  C-c c 编译生成图片， C-c p 可以预览图片   
+ido， ~C-x~ 键的增强
+smex， ~M-x~ 键的增强
 helm-bibtex，管理和插入参考文档
 company，代码和英语单词补全
 flycheck，实时语法检查

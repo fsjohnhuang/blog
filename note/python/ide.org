@@ -1,3 +1,5 @@
+Python社区中还没出现如Maven/Gradle那样不仅管理依赖，还能初始化项目目录、测试、生成文档等。
+
 * 虚拟环境
 
 ** 限制pip必须在一个激活的虚拟环境中执行安装
@@ -12,9 +14,10 @@ gpip() {
 #+END_EXAMPLE
 
 ** pipenv
-pipenv是基于pip和virtualenv的更高级的集成虚拟环境的依赖管理器，在安装第三方依赖时自动生成Pipfile用于记录Python版本、开发依赖(dev-packages)、运行依赖(packages)和项目的基本信息，并且通过 ~pipenv run python <project.py>~ 启用一个虚拟环境运行项目。
+   pipenv由Kenneth Reitz开发是基于pip和virtualenv的更高级的集成虚拟环境的依赖管理器，在安装第三方依赖时自动生成Pipfile用于记录Python版本、开发依赖(dev-packages)、运行依赖(packages)和项目的基本信息，并且通过 ~pipenv run python <project.py>~ 启用一个虚拟环境运行项目。
 
-缺点：无法通过pip安装的第三方依赖，就比较难安装到虚拟环境了。
+   缺点：无法通过pip安装的第三方依赖，就比较难安装到虚拟环境了。
+   Pipfile.lock的内容为通过hash算法将包名称和版本，以及依赖关系生成哈希值，保证包的完整性．
 
 *** 安装
 #+BEGIN_EXAMPLE shell
@@ -35,15 +38,40 @@ pipenv --python 2.7
 # 安装第三方依赖
 pipenv install jenkins-job-builder
 
-# 安装当前目录下Pipfile、Pipfile.lock内的依赖
+# 卸载第三方依赖
+pipenv uninstall jenkins-job-builder
+
+# 卸载所有依赖
+pipenv uninstall --all
+
+# 安装当前目录下Pipfile内的生产依赖，并更新Pipfile.lock
 # 若没有上述文件则根据当前目录下的requirements.txt生成Pipfile和Pipfile.lock在安装
 pipenv install
+
+# 安装requirements.txt内的依赖
+pipenv install -r requirements.txt
+
+# 根据Pipfile.lock的内容安装依赖
+pipenv install --ignore-pipfile
+
+# 根据当前虚拟机环境中已安装的依赖名称和版本作为内容生成Pipfile.lock
+pipenv lock
+
+# 安装开发依赖
+pipenv install --dev jenkins-job-builder
+
+# 安装当前目录下Pipfile、Pipfile.lock内的开发依赖
+pipenv install --dev
+
+# 更新依赖版本，Pipfile不发生变化，但Pipfile.lock会发生变化
+pipenv update jenkins-job-builder
 
 # 在不激活虚拟环境下，临时在虚拟环境运行应用
 pipenv run python foo.py
 
 # 激活虚拟环境
 pipenv shell
+
 # 激活虚拟环境后在虚拟环境运行应用
 python foo.py
 # 退出虚拟环境
@@ -51,11 +79,45 @@ exit
 
 # 查看依赖图
 pipenv graph
+
+# 生成包含dev-packages和pacakges的requirements.txt
+pipenv lock -r --dev > requirements.txt
+# 生成包含pacakges的requirements.txt
+pipenv lock -r > requirements.txt
+
+# 删除虚拟环境
+pipenv --rm
+
+# 列出本地工程路径
+pipenv --where
+
+# 列出虚拟环境路径
+pipenv --venv
+
+# 列出虚拟环境的Python可执行文件
+pipenv --py
 #+END_EXAMPLE
+
+*** 注意
+    1) 由于pipenv不会读取pip.conf，因此修改源时需要修改Pipfile的source即可．国内源
+       - 阿里云：http://mirrors.aliyun.com/pypi/simple/
+       - 豆瓣：http://pypi.douban.com/simple/
+       - 清华大学：https://pypi.tuna.tsinghua.edu.cn/simple/
+       - 中国科学技术大学：https://pypi.mirrors.ustc.edu.cn/simple/
+    2) 当安装包时发现lock步骤缓慢，可以通过 ~pipenv install <package> --skip-lock~ 跳过lock步骤。若还是慢则需要采用上述方式更换源了。
+
+*** Pipfile和Pipfile.lock的区别
+    Pipfile和Pipfile.lock对标Ruby中的Gemfile和Gemfile.lock。
+    Pipfile列出依赖源、生产和开发依赖包名称、虚拟环境Python版本信息。
+    Pipfile.lock列出当前虚拟环境中的依赖源、生产和开发依赖包名称和具体版本、虚拟环境Python版本信息，不同的操作系统生成的Pipfile.lock会有所不同。
+
+    只需要将Pipfile纳入版本控制即可。
+
+** conda
+   Windows下使用
 
 * 其他
 tox
-
 
 * 自动化测试
 Robot Framework
