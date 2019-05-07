@@ -1,0 +1,531 @@
+JPA(Java Persistent API)，作为Java EE官方标准的一种ORM规范，并不是ORM产品，具体通用性。规范中对数据库结构提供较完整的封装，如Hibernat那样从POJO到数据库表的映射关系，通过规范/框架提供的存储逻辑自动生成对应的SQL并自动调用JDBC接口来执行。
+
+PO(Persistent Object,持久化对象)，通过该对象可对数据库执行增、删、改的操作，以面向对象的方式操作数据库。
+
+JTA(Java Transaction API)
+
+DriverManager，操作一次数据库都重新建立一个数据库链接。
+DataSource，提供数据库连接池优化对数据库的操作。
+
+JavaBeans
+为符合特定规范的Java类：
+1) 公有类
+2) 私有字段
+3) 公有getter和setter
+4) 无参构造方法
+
+* 简单示例
+  - src/mybatis-config.xml
+    #+BEGIN_EXAMPLE xml
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <!DOCTYPE configuration
+      PUBLIC "-//mybatis.org/DTD Config 3.0//EN"
+      "http://mybatis.org/dtd/mybatis-3-config.dtd">
+    <configuration>
+        <!-- 指定Myatis所用日志的具体实现 -->
+        <settings>
+            <setting name="logImpl" value="LOG4J"/>
+        </settings>
+        <!-- 数据库环境配置 -->
+        <environments default="sqlite">
+            <environment id="sqlite">
+                <transactionManager type="JDBC"/>
+                <dataSource type="POOLED">
+                    <property name="driver" value="org.sqlite.JDBC"/>
+                    <property name="url" value="jdbc:sqlite:/path/to/example.db"/>
+                    <property name="username" value=""/>
+                    <property name="password" value=""/>                    
+                </dataSource>
+            </environment>
+        </environments>
+        <mappers>
+            <mapper resource="org/john/mapper/UserMapper.xml"/>
+        </mappers>
+    </configuration>
+    #+END_EXAMPLE
+  - PO
+    #+BEGIN_EXAMPLE java
+    package org.john.domain
+    // src/org/john/domain/User.java
+  
+    public class User {
+        private Integer id;
+        private String name;
+        // setter,getter
+    }
+    #+END_EXAMPLE
+  - mapper.xml
+    #+BEGIN_EXAMPLE xml
+    <!-- org/john/mapper/UserMapper.xml-->
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0/EN"
+     "http://mybatis.org/data/mybatis-3-mapper.dtd">
+    <!-- namespace必须全局唯一，一般命名方式为<包名>+<SQL映射文件名> -->
+    <mapper namespace="org.john.mapper.UserMapper">
+       <!-- useGeneratedKeys表示使用数据库的自动增长策略，需要底层数据库的支持 -->
+       <insert id="save" parameterType="org.john.domain.User" useGeneratedKeys="true"> 
+           INSERT INTO USER(name) values(#{name})
+       </insert>
+    </mapper>
+    #+END_EXAMPLE
+  - log4j.properties
+    #+BEGIN_EXAMPLE
+    # src/log4j.properties
+    log4j.rootLogger=ERROR, stdout
+    log4j.logger.org.john.mapper.UserMapper=DEBUG
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout = org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern = [%-5p] %d{yyyy-MM-dd HH:mm:ss,SSS} method:%l%n%m%n
+    #+END_EXAMPLE
+  - 程序入口
+    #+BEGIN_EXAMPLE java
+    package org.john;
+    
+    public static class App {
+        public static void main(String[] args) {
+            InputStream configStream = Resources.getResourceAsStream("mybatis-config.xml");
+            SqlSessionFactory sessionFactory = new SqlSessionFactoryBuilder().build(configStream);
+            SqlSession session = sessionFactory.openSession();
+            
+            User user = new User();
+            user.setName("john");
+            session.insert("org.john.mapper.UserMapper.save", user);
+            session.commit();
+            session.close();
+        }
+    }
+    #+END_EXAMPLE
+
+* 核心对象
+
+~SqlSessionFactoryBuilder~, 读取MyBatis的XML配置文件或预制定的Configuration对象初始化SqlSessionFactory。
+1) 读取MyBatis的XML配置文件初始化SqlSessionFactory实例
+   1) 通过 ~Resources.getResourceAsStream("mybatis-config.xml")~ 读取XML配置文件并将其构建为输入流
+   2) 将输入流传给 ~new SqlSessionFactoryBuilder().build~, 内部构建XMLConfigBuilder实例并通过其方法parse，解析XML配置文件内容并返回Configuration实例
+   3) SqlSessionFactoryBuilder根据Configuration实例创建一个DefaultSessionFactory实例，并返回给调用者使用。
+
+~SqlSessionFactory~, 为单个数据库映射关系经过编译后的内存镜像。
+- 通过方法 ~new SqlSessionFactoryBuilder().build~ 从XML配置文件或一个预先定制的Configuration实例构建出来。
+- 线性安全。
+- 建议使用单例模式，在应用运行期间常存且避免重复创建。
+- 底层封装了DataSource。
+- 常用方法
+  - ~SqlSession openSession()~
+
+~SqlSession~, 持久化操作对象。
+- 常用方法
+  - ~int insert(String statement)~, statement为在mapper.xml中元素 ~<insert>~ 的id值
+  - ~int insert(String statement, Obejct parameter)~, statement为在mapper.xml中元素 ~<insert>~ 的id值
+  - ~int update(String statement)~, statement为在mapper.xml中元素 ~<update>~ 的id值
+  - ~int update(String statement, Object parameter)~, statement为在mapper.xml中元素 ~<update>~ 的id值
+  - ~int delete(String statement)~, statement为在mapper.xml中元素 ~<delete>~ 的id值
+  - ~int delete(String statement, Object parameter)~, statement为在mapper.xml中元素 ~<delete>~ 的id值
+  - ~<T> T selectOne(String statement)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~<T> T selectOne(String statement, Object parameter)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~<E> List<E> selectList(String statement)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~<E> List<E> selectList(String statement, Object parameter)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~<E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+    - rowBounds用于分页，属性offset为查询的当前页数，属性limit为显示多少条数据。
+  - ~<K,V> Map<K,V> selectMap(String statement, String mapKey)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+    - mapKey用于指定表中的一个列名。
+  - ~<K,V> Map<K,V> selectMap(String statement, Object parameter, String mapKey)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~<K,V> Map<K,V> selectMap(String statement, Object parameter, String mapKey, RowBounds rowBounds)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~void select(String statement, ResultHandler handler)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+    - handler为用于处理查询返回的复杂结果集，通常用于多表查询。
+  - ~void select(String statement, Object parameter, ResultHandler handler)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~void select(String statement, Object parameter, RowBounds rowBounds, ResultHandler handler)~, statement为在mapper.xml中元素 ~<select>~ 的id值
+  - ~void commit()~
+  - ~void rollback()~
+  - ~void close()~
+  - ~Connection getConnection()~
+  - ~<T> T getMapper(Class<T> type)~, 返回mapper接口的代理对象，该对象关联了SqlSession对象，可以通过该对象直接调用方法操作数据库，参数type是Mapper的接口类型。MyBatis建议通过mapper对象访问MyBatis。
+
+* MyBatis配置文件
+  #+BEGIN_EXAMPLE xml
+  <configuration>
+      <!-- 引入外部配置，并在当前文档中动态替换。
+           如：db.properties的内容为
+                 username=root
+                 password=root
+               配置文件中其他部分动态替换为
+               <property name="username" value="${username}"/>
+               <property name="password" value="${password}"/>
+        -->
+      <properties resource="db.properties"/>
+      <!-- 改变MyBatis运行时行为 -->
+      <settings>
+          <!--开启映射器的缓存-->
+          <setting name="cacheEnabled" value="true"/>
+          <!--开启关联对象延迟加载，在特定关联关系中可通过设置fetchType属性来覆盖该属性值-->
+          <setting name="lazyLoadingEnabled" value="true"/>
+          <!--为true时会使带有延迟加载属性的对象立即加载，默认值为true。因此需要设置为false-->
+          <setting name="aggressiveLazyLoading" value="false"/>
+          <!--允许单一语句返回多结果集-->
+          <setting name="multipleResultSetsEnabled" value="true"/>
+          <!--使用列标签代替列名，具体表现依赖数据库驱动-->
+          <setting name="useColumnLabel" value="true"/>
+          <!--允许JDBC支持自动生成主键-->
+          <setting name="useGeneratedKeys" value="false"/>
+          <!--设置MyBatis如何自动映射列到字段
+              NONE, 取消自动映射
+              PARTIAL, 只自动映射没有定义嵌套结果映射的结果集（默认值）
+              FULL, 自动映射任意复杂的结果集
+            -->
+          <setting name="autoMappingBehavior" value="PARTIAL"/>
+          <!--自动映射时发现未知数据表列的时应如何处理
+              NONE, 不处理（默认值）
+              WARNING, 输出警告
+              FAILING, 映射失败，抛出SqlSessionException
+            -->
+          <setting name="autoMappingUnknownColumnBehavior" value="WARNING"/>
+          <!--配置默认的执行器
+              SIMPLE, 普通的执行器（默认值）
+              REUSE, 执行器会重用预处理语句(prepared statements)
+              BATCH, 执行器将重用语句并执行批量更新
+            -->
+          <setting name="defaultExecutorType" value="SIMPLE"/>
+          <!--超时时间，决定驱动等待数据库响应的秒数-->
+          <setting name="defaultStatementTimeout" value="25"/>
+          <!--默认返回的结果集的大小-->
+          <setting name="defaultFetchSize" value="100"/>
+          <!--允许在嵌套语句中使用分页，默认值为false-->
+          <setting name="safeRowBoundsEnabled" value="false"/>
+          <!--开启自动驼峰命名规则，默认值为false-->
+          <setting name="mapUnderscoreToCamelCase" value="false"/>
+          <!--MyBatis利用本地缓存机制(local cache)防止循环引用(circular references)和加速重复嵌套查询。
+              SESSION, 缓存一个会话中执行的所有查询（默认值）
+              STATEMENT, 相同SqlSession的不同调用将不会共享数据
+            -->
+          <setting name="localCacheScope" value="SESSION"/>
+          <!--当没有为参数提供特定的JDBC类型时，为空值指定JDBC类型。
+              NULL
+              VARCHAR
+              OTHER（默认值）
+            -->
+          <setting name="jdbcTypeForNull" value="OTHER"/>
+          <!--指定哪个对象的方法触发一次延迟加载，属性值设置为方法名的list集合-->
+          <setting name="lazyLoadTriggerMethods" value="equals,clone,hashCode,toString"/>
+          <!--指定MyBatis增加到日志名称的前缀-->
+          <setting name="logPrefix" value="MyBatis"/>
+          <!--指定MyBatis所用日志的具体实现，未指定时将自动查找
+              值范围：SLF4J|LOG4J|LOG4J2|JDK_LOGGING|COMMONS_LOGGING|STDOUT_LOGGING|NO_LOGGING
+            -->
+          <setting name="logImpl" value="LOG4J"/>
+          <!--指定创建具有延迟加载能力的对象所用到的代理工具
+              CGLIB
+              JAVASSIT(默认值)
+            -->
+          <setting name="proxyFactory" value="CGLIB"/>
+          <!--指定当结果集中值为null时是否调用映射对象的setter方法。对于primitive type(int,boolean等)是不能设置为null的-->
+          <setting name="callSettersOnNulls" value="false"/>
+      </settings>
+
+      <!--设置当前XML文档内使用的类型别名-->
+      <typeAliases>
+          <!-- 为类型org.john.domain.User设置别名user -->
+          <typeAlias alias="user" type="org.john.domain.User"/>
+          <!-- MyBatis扫描指定包下的所有类型
+               1) 通过@Alias("alias_name")标识的类型，则以注解值作为别名
+               2) 否则，以首字母小写非限定类型名称作为别名
+            -->
+          <package name="org.john.mapper"/>
+      </typeAilases>
+
+      <!--typeHandlers(类型处理器)
+          在预处理语句(PreparedStatement)中设置一个参数 和 从结果集中取出一个值时，都会通过类型处理器将取出的值转换为Java类型。
+        -->
+      <!--objectFactory(对象工厂)
+         在创建结果对象实例时，会使用对象工厂实例来完成。
+        -->
+
+      <!--数据源列表-->
+      <environments default="dev">
+          <environment id="dev">
+              <!--数据库事务管理配置，结合Spring时Spring会使用自带的管理器来覆盖这部分的设置。
+                  JDBC, 直接使用JDBC的提交和回滚设置，依赖从数据源得到的连接来管理事务范围。
+                  MANAGED, 让容器来管理事务的整个生命周期，它不提交和回滚一个廉洁。
+                -->
+              <transactionManager type="MANAGED">
+                  <property name="closeConnection" value="false"/>
+              </transactionManager>
+              <!--
+                  UNPOOLED, 每次请求时打开和关闭数据库连接
+                  POOLED, 启用数据库连接池
+                  - poolMaximumActiveConnections, 在任意时间最大的正使用的连接数，默认值为10
+                  - poolMaximumIdleConnections, 在任意时间最大的空闲连接数
+                  - poolMaximumCheckoutTime, 在被强制返回前，池中连接被checkout的时间，默认值2000ms
+                  - poolTimeToWait, 等待获取可用连接的超时时间，若超时则创建一个新的连接，默认值2000ms
+                  - poolPingQuery, 发送到数据库的侦测查询，用于检查连接是否处于正常工作状态。默认值为NO PING QUERY SET
+                  - poolPingEnabled, 启用数据库的侦测查询，默认值为false。启用后要设置poolPingQuery为用于侦测用的SQL语句。
+                  - poolPingConnectionsNotUsedFor, 配置poolPingQuery的执行频率
+                  JNDI, 使用EJB或应用服务器容器中配置的数据源
+                  - initial_context, 调用initialContext.lookup(initial_context)寻找JNDI上下文，若忽略那么属性data_source将会直接从InitialContext中寻找。
+                  - data_source, 引用数据源实例位置的上下文路径
+                  <dataSource type="JNDI">
+                      <property name="initial_context" value="java:/comp/env"/>
+                      <property name="data_source" value="fkjavads"/>
+                  </dataSource>
+                -->
+              <dataSource type="POOLED">
+                  <property name="driver" value="${driver}"/>
+                  <property name="url" value="${url}"/>
+                  <property name="username" value="${username}"/>
+                  <property name="password" value="${password}"/>
+              </dataSource>
+          </environment>
+      </environments>
+
+      <!--配置映射文件-->
+      <mappers>
+          <!--使用类路径查找-->
+          <mapper resource="org/john/mapper/UserMapper.xml"/>
+          <!--使用本地文件路径查找-->
+          <mapper url="file:///project/org/john/mapper/UserMapper.xml"/>
+          <!--使用接口类-->
+          <mapper class="org.john.mapper.UserMapper"/>
+          <!--使用包名-->
+          <package name="org.john.mapper"/>
+      </mappers>
+  </configuration>
+  #+END_EXAMPLE
+* Mapper XML映射文件
+  #+BEGIN_EXAMPLE xml
+  <mapper namespace="john.mybatis.mapper.UserMapper">
+
+  <!-- select, 映射查询语句
+       属性：
+         - id, 在mapper的namespace下唯一的标识符
+         - parameterType, 入参类型
+         - resultType, 返回值类型的完全限定名或别名，和属性resultMap不能同时使用
+         - resultMap, 外部resultMap的命名引用，用于复杂的映射
+         - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
+         - useCache, 为true时语句执行结果被二级缓存，select语句中默认值为true
+         - timeout, 返回请求结果超时时间
+         - fetchSize, 每次返回的结果的最大行数
+         - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
+         - resultSetType, 结果集类型，FORWARD_ONLY/SCROLL_SENSITIVE/SCROLL_INSENSITIVE。默认值为unset
+         - databaseId, 若设置databaseIdProvider，那么MyBatis会加载所有不带databaseId或匹配当期那databaseId的语句。
+         - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。
+         - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
+    -->
+  <select id="selectUser" parameterType="int" resultType="hashmap">
+    SELECT * FROM USER WHERE ID = #{id}
+  </select>
+
+  <!-- 对于支持主键自增的数据库 -->
+  <insert id="insertUser1" useGeneratedKeys="true" keyProperty="id">
+    insert into User(name) values(#{name})
+  </insert>
+   
+  <!-- 对于不支持主键自增的数据库 -->
+  <insert id="insertUser2">
+    <selectKey keyProperty="id" resultType="int" order=“BEFORE" statementType="PREPARED">
+      select squence_user.nextval as id from dual
+    </selectKey>
+    insert into User(id, name) values(#{id}, #{name})
+  </insert>
+
+  <!-- <update> 和 <delete> 类似
+    -->
+
+  <!--sql, 可被其他语句引用的可重用语句块，可循环引用-->
+  <sql id="userColumns">
+    ${alias}.id, ${alias}.name
+  </sql>
+  <select id="findUser">
+    select
+    <include refid="userColumns">
+        <property name="alias" value="t1"/>
+    </include>
+    from User t1
+  </select>
+
+  <!--resultMap, 当结果集列名与返回值类型的字段名称不匹配时，通过resultMap设置映射关系-->
+  <resultMap id="userResultMap" type="org.john.domain.User">
+    <id property="id" column="user_id"/>
+    <result property="name" column="user_name"/>
+  </resultMap>
+  <select id="findUser2" resultMap="userResultMap">
+    select * from user
+  </select>
+
+  <resultMap id="userResultMap" type="org.john.domain.User">
+    <id property="id" column="user_id"/>
+    <result property="name" column="user_name"/>
+    <!--多对一/一对一-->
+    <association property="clazz" 
+                 javaType="org.john.domain.Clazz"
+                 column="clazz_id"
+                 select="selectClazzWithId"/>
+  </resultMap>
+  <select id="selectClazzWithId" resultType="org.john.domain.Clazz">
+     -- #{id}为org.john.domain.Clazz的id字段
+     select * from clazz where id = #{id}
+  </select>
+  <select id="selectUser" resultMap="userResultMap">
+     select * from user
+  </select>
+
+  <resultMap id="clazzResultMap" type="org.john.domain.Clazz">
+    <id property="id" column="clazz_id"/>
+    <result property="name" column="clazz_name"/>
+    <!--一对多-->
+    <collection property="students"
+                javaType="ArrayList"
+                ofType="org.john.domain.Student"
+                column="clazz_id"
+                select="selectStudentWithId"
+                fetchType="lazy"/>
+   <!-- fetchType值为eager表示立即加载、lazy表示延迟加载
+        要启用延迟必须在mybatis-config.xml中启用lazyLoadingEnabled和关闭aggressiveLazyLoading-->
+  </resultMap>
+  <select id="selectClazz" resultMap="clazzResultMap">
+     select * from clazz
+  </select>
+  <select id="selectUserWithId">
+     -- #{id}为org.john.domain.Clazz的id字段
+     select * from user where clazz_id=#{id}
+  </select>
+  </mapper>
+  #+END_EXAMPLE
+
+  通过mapper接口对象操作数据库
+  #+BEGIN_EXAMPLE java
+  // 定义mapper接口对象
+  public interface ClazzMapper {
+      Clazz selectClazz();
+  }
+
+  public interface UserMapper {
+      User selectUser();
+  }
+
+  // 主入口
+  ClazzMapper cm = session.getMapper(ClazzMapper.class);
+  UserMapper um = session.getMapper(UserMapper.class);
+  Clazz clazz = cm.selectClazz();
+  User user = um.selectUser();
+  #+END_EXAMPLE
+* 动态SQL
+  MyBatis使用基于OGNL的表达式实现动态SQL。
+  - if
+    #+BEGIN_EXAMPLE xml
+    <select id="selectEmployeeByLoginLike" parameterType="hashmap" resultType="org.john.domain.User">
+    select * from user where state = 'ACTIVE'
+    <if test="loginname != null and password != null">
+      and loginname = #{loginname} 
+      and password = #{password}
+    </if>
+    </select>
+    #+END_EXAMPLE
+    #+BEGIN_EXAMPLE java
+    public interface EmployeeMapper{
+        List<User> selectEmployeeByLoginLike(HashMap<String, Object> params);
+    }
+    
+    EmployeeMapper employeeMapper = session.getMapper(EmployeeMapper.class);
+    HashMap<String, Object> params = new HashMap<String, Object>();
+    params.put("loginname", "john");
+    params.put("password", "123");
+    List<User> users = employeemapper.selectEmployeeByLoginLike(params);
+    users.forEach(user -> System.out.println(user.getName()));
+    #+END_EXAMPLE
+  - choose(when, otherwise)
+    if...elif...else语句
+    #+BEGIN_EXAMPLE xml
+    <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
+    select * from user where state = 'ACTIVE'
+    <choose>
+       <when test="id != null">
+       and id = #{id}
+       </when>
+       <when test="loginname != null and password != null">
+       and loginname = #{loginname} 
+       and password = #{password}
+       </when>
+       <otherwise>
+       and sex = 'male'
+       </otherwise>
+    </choose>
+    </select>
+    #+END_EXAMPLE
+  - where
+    只有一个以上的if条件有值才去插入where子句，并且会自动处理多余的and或or的开头保留字。
+    #+BEGIN_EXAMPLE xml
+    <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
+    select * from user
+    <where>
+       <if test="state != null">
+       state = #{state}
+       </if>
+       <if test="id != null">
+       and id = #{id}
+       </if>
+       <if test="loginname != null and password != null">
+       and loginname = #{loginname} 
+       and password = #{password}
+       </if>
+       <if>
+       and sex = 'male'
+       </if>
+    </where>
+    </select>
+    #+END_EXAMPLE
+  - set
+    自动处理多余的逗号
+    #+BEGIN_EXAMPLE xml
+    <update id="selectUsers" parameterType="hashmap">
+    update user
+    <set>
+      <if test="loginname != null">loginname=#{loginname},</if>
+      <if test="password != null">password=#{password},</if>
+    </set>
+    </update>
+    #+END_EXAMPLE
+  - foreach
+    #+BEGIN_EXAMPLE xml
+    <select id="selectUsers" resultType="org.john.domain.User">
+    select * from user
+    where id in 
+    <!--当入参为List或Array时会自动添加到内部Map实例中，List入参的键名为list，Array入参的键名为array。
+        属性item定义元素引用名称
+        属性index定义元素索引名称
+        属性collection指定入参的键名list|array
+      -->
+    <foreach item="item" index="index" collection="list" open="(" separator="," close=")">
+    #{item}
+    </foreach>
+    </select>
+    #+END_EXAMPLE
+  - bind
+    从OGNL表达式中创建一个变量，并将其绑定到上下文。
+    #+BEGIN_EXAMPLE xml
+    <select id="selectUsre" resultType="org.john.domain.User">
+    <bind name="pattern" value="'%' + _parameter.getName() + '%'"/>
+    select * from user
+    where loginname like #{pattern}
+    </select>
+    #+END_EXAMPLE
+  - trim
+    当标签体有内容时则为内容添加前缀、后缀，而且可以除去内容前后部分内容
+    #+BEGIN_EXAMPLE xml
+    <select id="findActiveBlogLike"
+         resultType="Blog">
+      SELECT * FROM BLOG
+      <!--
+        prefix属性值为添加到内容的前缀信息
+        prefixOverrides属性值为除去内容前的内容，当需要除去多个内容时，使用管道符|分割，注意：空格也将被除去
+      -->
+      <trim prefix="where" prefixOverrides="AND |OR ">
+        <if test="state != null">
+             state = #{state}
+        </if>
+        <if test="title != null">
+            AND title like #{title}
+        </if>
+        <if test="author != null and author.name != null">
+            AND author_name like #{author.name}
+        </if>
+      </trim>
+    </select>
+    #+END_EXAMPLE

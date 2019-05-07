@@ -128,6 +128,8 @@ import java.io.*;
      <web-app  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://java.sun.com/xml/ns/javaee" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd" id="WebApp_ID" version="3.0">
 
        <display-name>My first Spring MVC 4 Web Application</display-name>
+
+       <!-- 加载Servlet WebApplicationContext -->
        <context-param>
          <param-name>contextConfigLocation</param-name>
          <param-value>/WEB-INF/dispatcher-servlet.xml</param-value>
@@ -141,8 +143,10 @@ import java.io.*;
          <servlet-name>dispatcer</servlet-name>
          <url-pattern>/</url-pattern>
        </servlet-mapping>
+       
        <listener>
-         <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class> <!-- 这段为启用Spring MVC -->
+         <!-- 加载Root WebApplicationContext，然后由它再启动Servlet WebApplicationContext的加载，因此没有个配置时无法启用Spring MVC -->
+         <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
        </listener>
 
      </web-app>
@@ -304,6 +308,17 @@ import java.io.*;
        1) 对请求URL进行解析得到URI，然后根据URI调用HandlerMapping实例获得Handler对象和对应的拦截器，组成一个HandlerExecutionChain对象返回。然后选择合适的HandlerAdpater实例处理Handler实例。
        2) 解析请求体转换为对象
        3) 根据HTTP协议将响应对象序列化
+    4) WebApplicationContext层次
+       | *DispatcherServelt*                                                                               |
+       |---------------------------------------------------------------------------------------------------|
+       | Root WebApplicationContext(containing middle-tier services, datasources, etc.)                    |
+       | Services/Repositories/Components                                                                  |
+       |---------------------------------------------------------------------------------------------------|
+       | ^Delegates if no bean found^                                                                      |
+       |---------------------------------------------------------------------------------------------------|
+       | Servlet WebApplicationContext(containing controllers, view resolvers and other web-related beans) |
+       | Controllers/ViewResolver/HandlerMapping                                                           |
+       - AOP中是区分Servlet WebApplicationContext的方法和Root WebApplicationContext的方法的拦截和增强。
 
 *** 注解
     1) ~@Controller~
@@ -323,7 +338,9 @@ import java.io.*;
            }
        }
        #+END_EXAMPLE
-    2) ~@RequestMapping~
+    2) ~@RestController~
+       将 ~@Controller~ 和 ~@ResponseBody~ 结合，用于标识RESTful API的控制器
+    3) ~@RequestMapping~
        全限定类名org.springframework.web.bind.annotation.RequestMapping，可用于标识类和实例方法，用于设置请求与handler匹配条件
        - 参数
          | 属性     | 类型            | 说明                                                                     | 示例                                                            |
@@ -336,7 +353,8 @@ import java.io.*;
          | params   | String[]        | 请求参数必须匹配的值                                                     | @RequestMapping(params="myParam=123"                            |
          | headers  | String[]        | 请求头必须匹配的头字段及值                                               | @RequestMapping(headers="Referer=http://test.com")              |
          | Path     | String[]        |                                                                          |                                                                 |
-    3) Handler方法入参类型
+    4) ~@GetMapping, @PostMapping~ 和 ~@PutMapping, @DeleteMapping~
+    5) Handler方法入参类型
        - javax.servlet.ServletRequest 或 javax.servlet.http.HttpServletRequest
        - javax.servlet.ServletResponse 或 javax.servlet.http.HttpServletResponse
        - javax.servlet.http.HttpSession
@@ -356,7 +374,7 @@ import java.io.*;
        - org.springframework.web.util.UriComponentsBuilder
        - @PathVariable, @@MatrixVariable
        - @RequestParam, @RequestHeader, @RequestBody, @RequestPart
-    4) Handler方法返回值类型
+    6) Handler方法返回值类型
        - org.springframework.web.servlet.ModelAndView
        - org.springframework.ui.Model
        - java.util.Map<K,V>
@@ -368,7 +386,7 @@ import java.io.*;
        - java.util.concurrent.Callable
        - org.springframework.web.context.request.async.DeferredResult
        - void, @RequestMapping的value值即作为视图名称
-    5) Model、ModelMap和ModelAndView
+    7) Model、ModelMap和ModelAndView
        Spring MVC 在调用处理方法前会创建一个隐含的作为模型数据存储容器的模型实例，若Handler相关方法入参类型为Model或ModelMap时就会将隐含的模型实例引用传递给这些参数。
        #+BEGIN_EXAMPLE java
        @Controller
@@ -397,7 +415,7 @@ import java.io.*;
 
        }
        #+END_EXAMPLE
-    6) 参数绑定注解
+    8) 参数绑定注解
        1) ~@RequestParam~
           全限定类名org.springframework.web.bind.annotation.RequestParam，用于将指定的请求参数(querystring和request body中的参数)赋值给Handle的型参。
           - 参数
@@ -534,7 +552,17 @@ import java.io.*;
             |----------+---------+------------------------------------|
             | required | boolean | 是否必须要存在请求体，默认值为true |
 
-    7) ~@ResponseBody~
+    9) ~@ResponseBody~
+    10) ~@ResponseStatus~
+        - 示例
+          #+BEGIN_EXAMPLE java
+          @PostMapping("/")
+          @ResponseBody
+          @ResponseStatus(HttpStatus.CREATED)
+          public String[] create(@ResponseBody NewOrderRequest newOrder){
+              return new String[] {"a", "b"};
+          }
+          #+END_EXAMPLE
 
 *** 静态资源
 
@@ -641,7 +669,7 @@ import java.io.*;
     2) SessionLocaleResolver
     3) CookieLocaleResolver
 
-    资源文件路径规则： ~<resource>_<locale>.properties~ ，如 message_zh_CN.properties 和 message_en_US.properties。
+    资源文件路径规则： ~<basename>_<locale>.properties~ ，如 message_zh_CN.properties 和 message_en_US.properties。
     
 **** AcceptHeaderLocaleResolver实例
      1) 配置国际化资源文件
@@ -769,8 +797,55 @@ import java.io.*;
         }
         #+END_EXAMPLE
 *** 数据转换、格式化和数据校验
+    转换流程：
+    1) 通过ServletRequest获取请求消息，并通过反射获取Handle入参对象，将这些信息交给DataBinder
+    2) DataBinder调用装配在 Spring Web 上下文中的 ConversionService 组件进行数据类型转换、格式化工作，并将 ServletRequest 中的消息填充的参数对象中
+    3) 调用 Validator 组件堆已绑定的参数对象进行数据合法性校验
+    4) 最终生成数据绑定结果 BindingResult 对象，其包含 *参数对象* 和 *校验错误对象*
 
 **** 数据转换
+     Spring MVC 提供的Converter不单可以实现String到任意Java类型的转换，还可以实现任意Java类型到其他Java类型的转换。
+
+***** 自定义日期转换器
+     ~<mvc:annotation-driven/>~ 自动注册 RequestMappingHandlerMapping 和 RequestMappingHandlerAdapter 为 @Controller 分发请求所必须的。此外还注册了一个默认的 ConversionService - FormattingConversionServiceFactoryBean 内置很多类型转换器足以满足大部分类型转换。
+     #+BEGIN_EXAMPLE java
+     // 实现Converter<S,T>接口的转换器
+     public class StringToDateConverter implements Converter<String, Date>{
+         private String datePattern;
+         public void setDatePattern(String datePattern){
+             this.datePattern = datePattern;
+         }
+
+         @Override
+         public Date convert(String date){
+             try{
+                 SimpleDateFormat dateFormat = new SimpleDateFormat(this.datePattern);
+                 return dateFormat.parse(date);
+             }
+             catch (Exception e){
+                 return null; // 返回null则会继续使用其他转换器
+             }
+         }
+     }
+     #+END_EXAMPLE
+     修改converters属性注册自定义转换器
+     #+BEGIN_EXAMPLE xml
+     <!-- dispatcher-servlet.xml -->
+     <mvc:annotation-driven conversion-service="conversionService">
+     <bean id="conversionService"
+           class="org.springframework.context.support.ConversionServiceFactoryBean">
+           <property name="converters">
+               <list>
+                   <bean class="path.to.StringToDateConverter"
+                         p:datePattern="yyyy-MM-dd"/>
+               </list>
+           </property>
+     </bean>
+     #+END_EXAMPLE
+     存在3种类型转换器接口
+     1) Converter<S, T>
+     2) ConverterFactory<S, R>
+     3) GenericConverter
 
 **** 格式化
 
@@ -780,8 +855,725 @@ import java.io.*;
 
 *** WebService
 
-* MyBatis
+*** 文件上传下载
+    
+**** 文件上传
+     Spring MVC 使用 Apache Commons FileUpload 技术实现一个 MultipartResolver 实现类 CommonMultipartResolver。
+     示例：
+     #+BEGIN_EXAMPLE xml
+     <!-- dispatcher-servlet.xml -->
+     <bean id="multipartResovler"
+           class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+           <!-- 上传文件大小上限，单位为字节(10MB) -->
+           <property name="maxUploadSize">
+               <value>10485760</value>
+           </property>
+           <!-- 请求的编码格式，必须和JSP的pageEncoding属性一致，以便正确读取表单的内容，默认为ISO-8859-1 -->           
+           <property name="defaultEncoding">
+               <value>UTF-8</value>
+           </property>
+     </bean>
+     #+END_EXAMPLE
 
+     #+BEGIN_EXAMPLE java
+     /* MultipartFile实例包含如下方法
+        byte[] getBytes() - 返回文件数据
+        String getContentType() - 返回MIME类型，如image/jpeg等
+        InputStream getInputStream() - 返回文件流
+        String getName() - 返回表单中文件组件的属性name值
+        String getOriginalFilename() - 返回上传的文件原名
+        long getSize() - 返回文件的字节大小
+        boolean isEmpty() - 是否有上传文件
+        void transferTo(File dest) - 将上传文件保存到一个目标文件中
+      */
+     @PostMapping("/upload")
+     public String upload(HttpServletRequest request, @RequestParam("file") MultipartFile file) throws Exception {
+         if (!file.isEmpty()){
+             // 上传路径
+             String path = request.getServletContext().getRealPath("/images/");
+             // 上传文件名
+             String filename = file.getOriginalFilename();
+             File filepath = new File(path, filename);
+             
+             // 若父路径不存在则创建
+             if (!filepath.getParentFile().exists()) {
+                  filepath.getParentFile().mkdirs();
+             }
+             
+             // 将上传文件保存到目标路径中
+             file.transferTo(new File(path + File.separator + filename));
+             return "success";
+         }
+         return "error";
+     }
+     #+END_EXAMPLE
+    
+**** 文件下载
+     #+BEGIN_EXAMPLE java
+     @GetMapping("/download")
+     public ResponseEntity<byte[]> download(HttpServletRequest request, @ReqeustParam("filename") String filename) {
+         String path = request.getServletContext().getRealPath("/images/");
+         File file = new File(path + File.separator + filename);
+         HttpHeaders headers = new HttpHeaders();
+         // 处理中文文件名的乱码问题
+         String downloadFilename = new String(filename.getBytes("UTF-8"), "iso-8859-1");
+         headers.setContentDispositionFormData("attachment", downloadFilename);
+         // 设置MIME为application/octet-stream
+         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+         // 设置HTTP Status为201
+         // 通过Apache Commons FileUpload组件的FileUtils将文件内容读取到byte[]中
+         return new ResponseEntity<byte[]>(FileUtils.readFileToByteArray(file), headers, HttpStatus.CREATED);
+     }
+     #+END_EXAMPLE
+
+*** 拦截器
+    通过实现接口HandlerInterceptor或抽象类HandlerInterceptorAdapter的三个方法来完成
+    - ~boolean preHandle(HttpServletRequest request, HttpServeltResponse response, Object handle)~
+      该方法在请求处理之前依据它声明顺序依次被调用(链式调用)，若前一个方法返回 ~false~ 则后续Interceptor和Controller都不会再执行。
+    - ~void postHandle(HttpServeltRequest request, HttpServeltResponse response, Object handle, ModelAndView mv)~
+      该方法在请求处理之后渲染之前依据它声明顺序倒序依次被调用(链式调用)，因此可以在这个方法中对Controller处理后返回的ModelAndView实例进行操作。
+    - ~void afterCompletion(HttpServeltRequest request, HttpServeltResponse response, Object handle, Exception exception)~
+      该方法在DispatcherServlet渲染对应的视图后执行，主要用于资源清理。
+    
+    示例：
+    #+BEGIN_EXAMPLE xml
+    <!-- dispatcher-servlet.xml -->
+    <mvc:interceptors>
+        <mvc:interceptor>
+            <!-- 拦截所有请求 -->
+            <mvc:mapping path="/*"/>
+            <!-- 使用Bean定义一个Interceptor -->
+            <bean class="org.john.interceptor.AuthorizationInterceptor"/>
+        </mvc:interceptor>
+    </mvc:interceptors>
+    #+END_EXAMPLE
+
+    #+BEGIN_EXAMPLE java
+    public class AuthorizationInterceptor implements HttpInterceptor {
+        private static final String[] IGNORE_URI = {"/loginForm", "/login"};
+
+        @Override
+        public boolean preHandle(HttpServletRequest request, HttpServeltResponse response, Object handle) {
+            boolean flag = false;
+            
+            String servletPath = request.getServletPath();
+            for (String uri : IGNORE_URI){
+                flag = IGNORE_URI.contains(uri);
+                if (flag){
+                    break;
+                }
+            }
+
+            if (!flag){
+                // 获取用户凭证
+                Usre user = (User) request.getSession().getAttribute("user");
+                if (user == null){
+                    request.setAttribute("message", "请先登录");
+                    request.getRequestDispatcher("loginForm").forward(request, response);
+                }
+                else{
+                    flag = true;
+                }
+            }
+
+            return flag;
+        }
+    }
+    #+END_EXAMPLE
+
+*** 货币/金额处理
+    依赖:
+    #+BEGIN_EXAMPLE xml
+    <dependency>
+        <groupId>org.joda</groupId>
+        <artifactId>joda-money</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.jadira.usertype</groupId>
+        <artifactId>usertype.core</artifactId>
+    </dependency>
+    #+END_EXAMPLE
+
+* Spring
+
+** 体系结构
+   1) Core Container
+      Spring容器会负责控制程序间的关系，而不是由程序直接控制。
+      1) Beans
+         作为顶层模块提供BeanFactory,由Spring管理的对象称为Bean。
+         #+BEGIN_EXAMPLE java
+         // 很少直接使用BeanFactory
+         // 需要提供Spring所管理容器的详细配置信息
+         BeanFactory beanFactory = new XmlBeanFactory(new FileSystemResource("/applicationContext.xml");
+         #+END_EXAMPLE
+      2) Core
+         Spring框架的基本组成部分，包含IOC和DI。
+      3) Context
+         基于模块Beans和Core之间构建，用于读取定义和配置的任何对象的媒介。
+         ApplicationContext为BeanFactory的子接口，作为常用的核心容器，不仅包含BeanFactory的所有功能，还添加国际化、资源访问、事件传播等方面的支持。
+         #+BEGIN_EXAMPLE java
+         // 创建方法1：通过ClassPathXmlApplicationContext
+         // 从环境变量classPath中寻找指定的XML配置文件，并加载实例化ApplicationContext
+         ApplicationContext applicationContext = new ClassPathXmlApplicationContext(String configLocation);
+
+         // 创建方法2：通过FileSystemXmlApplicationContext
+         // 从文件系统中寻找指定的XML配置文件，并加载实例化ApplicationContext
+         ApplicationContext applicationContext = new FileSystemXmlApplicationContext(String configLocation);
+
+         /* 在Web项目中ApplicationContext容器的实例化工作将由应用服务器来完成
+            应用服务器会通过org.springframework.web.context.ContextLoaderListener来实例化ApplicationContext容器
+            在web.xml中添加
+            <context-param>
+                <param-name>contextConfigLocation</param-name>
+                <param-value>/applicationContext.xml</param-value>
+            </context-param>
+            <listener>
+                <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+            </listener>
+         */
+
+         /* 从ApplicationContext容器中获取Bean实例
+            @param name - 为Bean组件的id或name
+            Object getBean(String name)
+            
+            @param requiredType - Bean实例所属类型
+            <T> getBean(Class<T> requiredType)
+         */
+         #+END_EXAMPLE
+         - 继承关系
+           #+BEGIN_EXAMPLE txt
+           BeanFactory <- HierarchicalBeanFactory <- ApplicationContext <- ConfigurableApplicationContext <-...<- ClassPathXmlApplicationContext
+                       <\ ListableBeanFactory       </          Lifecycle </                                   <\ FileSystemXmlApplicationContext
+                          ApplicationEventPublisher </                                                         <\ AnnotationConfigApplicaitonContext
+                          MessageSource             </
+           ResourceLoader <- ResourcePatternResolver</
+           #+END_EXAMPLE
+         - 手工实现root/child ApplicationContext
+           #+BEGIN_EXAMPLE java
+           ApplicationContext rootApplicationContext = new ClassPathXmlAttributeContext(new String[] {"applicationContext.xml"});
+           ApplicationContext webApplicationContext = new ClassPathXmlAttributeContext(new String[] {"web.xml"}, rootApplicationContext);
+           #+END_EXAMPLE
+      4) SpEL
+         Spring3.0增加的运行时查询和操作对象图的表达式语言。
+   2) Data Access/Integration
+      1) JDBC
+         对Java的JDBC更高层次的抽象，简化开发工作。org.springframework.jdbc.core.JdbcTemplate
+      2) ORM
+         对JPA、JDO和Hibernate等提供集成支持。org.springframework.orm.[hibernate3.HibernateTemplate|jap.JpaTemplate]等
+      3) OXM
+         提供支持对象/XML映射的抽象层实现，如JAXB、Castor、XMLBeans、JiBX和Xstream。
+      4) JMS
+         对Java消息传递服务使用和产生的支持，位于模块Spring-message。
+      5) Transaction
+         提供事务管理。
+   3) Web
+      1) WebSocket
+      2) Servlet
+      3) Web
+      4) Porlet
+   4) Other
+      1) AOP
+      2) Aspects
+         AOP框架。
+      3) Instrumentation
+      4) Messaging
+      5) Test
+
+   核心容器: BeanFactory 和 ApplicationContext
+   
+** Bean的配置和实例化
+   通过配置文件(XML或Properties文件)注册并管理Bean之间的依赖关系。
+   
+   Bean组件属性/子元素
+   | 属性/子元素 | 说明                                                                                                     |
+   |-------------+----------------------------------------------------------------------------------------------------------|
+   | id          | Bean组件的唯一标识                                                                                       |
+   | name        | 一个Bean组件可以拥有多个名称，多个名称间通过逗号分隔                                                     |
+   | class       | 指定Bean对应的具体实现类，为全限定类名                                                                   |
+   | scope       | 指定Bean实例的作用域，singleton(默认值),prototype,request,session, global Session,application和websocket |
+
+*** Bean的3种实例化方式
+    1) 构造方法
+       Spring容器直接通过调用实现类的构造方法实例化对象。
+       #+BEGIN_EXAMPLE java
+       // Bean对应的实现类
+       public class UserInfo{}
+       
+       // 使用Spring容器创建Bean实例
+       ApplicationContext context = ClassPathXmlApplicationContext(contextConfigLocation);
+       UserInfo userInfo = (UserInfo) context.getBean("useInfo");
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE xml
+       <bean id="userInfo" class="UserInfo"/>
+       #+END_EXAMPLE
+    2) 静态工厂
+       Spring容器调用静态工厂的静态方法获取目标实现类的对象。
+       #+BEGIN_EXAMPLE java
+       // Bean对应的实现类
+       public class UserInfo{}
+       
+       public static class StaticUserInfoFactory{
+           public static UserInfo createBean(){
+               return new UserInfo();
+           }
+       }
+
+       // 使用Spring容器创建Bean实例
+       ApplicationContext context = ClassPathXmlApplicationContext(contextConfigLocation);
+       UserInfo userInfo = (UserInfo) context.getBean("userInfo");
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE xml
+       <bean id="userInfo" class="StaticUserInfoFactory" factory-method="createBean"/>
+       #+END_EXAMPLE
+    3) 实例工厂
+       Spring容器先实例化实例工厂，然后再通过实例工厂创建目标实现类的对象。
+       #+BEGIN_EXAMPLE java
+       // Bean对应的实现类
+       public class UserInfo{}
+       
+       public class UserInfoFactory{
+           public UserInfo createBean(){
+               return new UserInfo();
+           }
+       }
+       // 使用Spring容器创建Bean实例
+       ApplicationContext context = ClassPathXmlApplicationContext(contextConfigLocation);
+       UserInfo userInfo = (UserInfo) context.getBean("userInfo");
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE xml
+       <bean id="userInfoFactory" class="UserInfoFactory"/>
+       <bean id="userInfo" class="UserInfo" factory-bean="userinfofactory" factory-method="createBean"/>
+       #+END_EXAMPLE
+
+*** Bean的作用域
+    1) singleton, Spring容器中最多只有一个实例，无论有多少个Bean引用它，始终指向同一个实例。
+       用于无会话状态的Bean(Dao组件、Service组件)
+    2) prototype, 每次通过Spring容器获取时，Spring容器都会创建一个全新的实例。
+       用于需要保持会话状态的Bean(Struct2的Action类)
+    3) request, 同一个HTTP请求中，每次通过Spring容器获取时将返回同一个实例；不在同一个HTTP请求中时则返回全新的实例。即实例仅在当前HTTP Request内有效。
+    4) session, 对于同一个HTTP Session，每次通过Spring容器获取时将返回同一个实例。
+    5) globalSession, 在一个全局的HTTP Session中，将返回同一个实例。仅对portlet上下文有效。(portlet现在已不怎么使用了)
+    6) application, 为每个ServletContext对象创建一个实例，仅Web相关的ApplicationContext有效。
+    7) websocket, 为每个websocket对象创建一个势力，仅Web相关的ApplicationContext有效。
+
+*** Bean的生命周期
+    Spring容器只能跟踪scope为singleton和prototype的Bean的生命周期。
+    | 序号 | 流程操作                                                                                                                             |
+    |------+--------------------------------------------------------------------------------------------------------------------------------------|
+    |    1 | 通过构造方法实例化Bean                                                                                                               |
+    |    2 | 通过依赖注入设置属性值                                                                                                               |
+    |    3 | 若实现BeanNameAware接口，则调用setBeanName方法                                                                                       |
+    |    4 | 若实现BeanFactoryAware接口，则调用setBeanFactory方法                                                                                 |
+    |    5 | 若实现ApplicationContextAware接口，则调用setApplicationContext方法                                                                   |
+    |    6 | 调用BeanPostProcessor的预初始化方法                                                                                                  |
+    |    7 | 调用InitializingBean的afterProperties方法                                                                                            |
+    |    8 | 若设置init-method属性，则调用其值指定的方法                                                                                          |
+    |    9 | 调用BeanPostProcesser的初始化方法                                                                                                    |
+    |   10 | 对于scope为singleton的Bean，则将准备就绪的Bean实例存放在Spring缓冲池中并返回给调用者。若scope为prototype则将Bean实例直接返回给调用者 |
+    |   11 | 对于scope为singleton的Bean，则调用Disposable的destroy方法                                                                            |
+    |   12 | 对于scope为singleton的Bean，若设置destroy-method则调用其值指定的方法                                                                 |
+
+** Spring IoC/DI
+   IoC和DI只是从不同的角度描述同一个事物。
+   - IoC(Inversion of Control, 控制反转)
+     - 实例由Spring容器创建，而不是由实例的使用者来创建；
+     - 程序间的关系由Spring容器来负责，而不是由调用者来直接控制。
+   - DI(Dependency Injection, 依赖注入)
+     - 由Spring容器将被依赖对象赋值给调用者的成员变量。
+
+*** 基于XML的DI实现方式
+    1) Setter Injection
+       - 前提条件
+         1) Bean类必须提供一个没有参数的构造方法
+         2) Bean类必须为属性提供setter方法(通过 ~<property>~ 元素为每个属性注入值)
+       - 示例
+         #+BEGIN_EXAMPLE java
+         public class UserInfo{}
+         public class UserServiceImpl{
+           private UserInfo userInfo;
+           public void setUserInfo(userInfo){
+               this.userInfo = userInfo;
+           }
+         }
+         #+END_EXAMPLE
+         通过Spring配置文件设置注入关系
+         #+BEGIN_EXAMPLE xml
+         <!-- applicationContext.xml -->
+         <bean id="userInfoBean" class="UserInfo">
+         <bean id="userDao" class="UserServiceImpl">
+             <!-- 设置注入方式，name为调用者的成员变量名称，ref为被注入的Bean组件id -->
+             <property name="userInfo" ref="userInfoBean"></property>
+         </bean>
+         #+END_EXAMPLE
+    2) Constructor Injection
+       - 前提条件
+         1) Bean类必须提供有参数的构造方法(通过 ~<constructor-arg>~ 元素为构造方法的每个参数注入值)
+       - 示例
+         #+BEGIN_EXAMPLE java
+         public class UserInfo{}
+         public class UserServiceImpl{
+           private UserInfo userInfo;
+           private String name;
+           public UserServiceImpl(UserInfo userInfo, String name){
+               this.userInfo = userInfo;
+               this.name = name;
+           }
+         }
+         #+END_EXAMPLE
+         通过Spring配置文件设置注入关系
+         #+BEGIN_EXAMPLE xml
+         <!-- applicationContext.xml -->
+         <bean id="userInfoBean" class="UserInfo">
+         <bean id="userDao" class="UserServiceImpl">
+             <!-- 设置注入方式，name为调用者的成员变量名称，ref为被注入的Bean组件id -->
+             <constructor-arg index="0" ref="userInfoBean"></constructor-arg>
+             <constructor-arg index="1" value="john"></constructor-arg>
+         </bean>
+         #+END_EXAMPLE
+
+*** 基于Annotation的DI实现方式
+    | Annotation  | 说明                                                                                                                                    |
+    |-------------+-----------------------------------------------------------------------------------------------------------------------------------------|
+    | @Component  | 表示该类为一个Bean                                                                                                                      |
+    | @Repository | 用于将数据访问层DAO标识为一个Bean                                                                                                       |
+    | @Service    | 用于将业务层Service标识为一个Bean                                                                                                       |
+    | @Controller | 用于将控制层Controller标识为一个Bean                                                                                                    |
+    | @Autowired  | 用于对Bean的属性变量、setter方法和构造方法进行标记，配合对应的注解处理器和Bean的类型完成自动装配                                        |
+    | @Resource   | 用于对Bean的属性变量、setter方法和构造方法进行标记，设置属性name时则通过Bean的id或name完成装配，设置属性type时则通过Bean的class完成装配 |
+    | @Qualifier  | 和@Autowired配合使用，通过Bean的id或name实现自动装配                                                                                    |
+
+    #+BEGIN_EXAMPLE java
+    @Repository("userDao")
+    public class UserDaoImpl implements UserDao{}
+    @Service("userService")
+    public class UserServiceImpl implements UserService{
+        @Resource(name="userDao")
+        private UserDao userDao;
+    }
+    @Controller("userController")
+    public class UserControllerImpl{
+        @Resource(name="userService")
+        private UserService userService;
+    }
+    #+END_EXAMPLE
+    1) 通过 ~<context:annotation-config>~ 启用Annotation装配
+       Annotation仅标识依赖关系，以便Spring容器在作Bean实例化时实现依赖注入，但要手工注册Bean信息。
+       #+BEGIN_EXAMPLE xml
+       <!-- applicationContext.xml -->
+       <context:annotation-config/>
+       <bean id="userDao" class="UserDaoImpl"/>
+       <bean id="userService" class="UserServiceImpl"/>
+       <bean id="userController" class="UserControllerImpl"/>
+       #+END_EXAMPLE
+    2) 通过 ~<context:component-scan>~ 启用Annotation装配
+       自动扫描注册Bean信息。
+       #+BEGIN_EXAMPLE xml
+       <!-- applicationContext.xml -->
+       <context:component-scan base-package="org.test"/>
+       #+END_EXAMPLE
+    3) 通过属性 ~autowire=""~ 启用Annotation装配
+       - 值
+         - default 由 ~<beans>~ 的属性default-autowire的值决定
+         - byName 根据Bean的id值装配
+         - byType 根据Bean的class值装配
+         - constructor 根据构造方法参数的数据类型，进行byType模式的自动装配
+         - no 不使用自动装配，必须使用ref元素定义
+       - 注意：成员变量必须提供setter方法，否则无法实现。
+       - 示例
+       #+BEGIN_EXAMPLE java
+       @Repository("userDao")
+       public class UserDaoImpl implements UserDao{}
+       @Service("userService")
+       public class UserServiceImpl implements UserService{
+           @Autowired
+           private UserDao userDao;
+           public void setUserDao(UserDao userDao){
+               this.userDao = userDao;
+           }
+       }
+       @Controller("userController")
+       public class UserControllerImpl{
+           @Autowired
+           private UserService userService;
+           public void setUserService(UserService userService){
+               this.userService = userService;
+           }
+       }
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE xml
+       <!-- applicationContext.xml -->
+       <bean id="userDao" class="UserDaoImpl" autowire="byType"/>
+       <bean id="userService" class="UserServiceImpl" autowire="byType"/>
+       <bean id="userController" class="UserControllerImpl" autowire="byType"/>
+       #+END_EXAMPLE
+
+** Spring AOP
+  
+*** 术语
+    - Aspect(切面), 封装用于横向插入系统功能(如日志、事任等)的类。
+    - Joinpoint(链接点), 程序运行过程中的函数/方法调用。
+    - Pointcut(切入点), Aspect与程序运行过程中的交叉点，就是Aspect起作用的Joinpoint。
+    - Advice(通知/增强处理), 在Pointcut中执行的具体的Aspect下的方法。
+    - Target Object(目标对象), 被通知或被增强的对象，若采用动态AOP实现，那么Target Object即为一个被代理对象。
+    - Proxy(代理), 将Advice应用到Target Object后，被动态创建出来的对象。
+    - Weaving(织入), 将Advice应用到Target Object时生成Proxy的过程。
+    - Introduction(引入), 为现有类型声明额外的方法和属性。
+  
+*** 动态代理
+    1) JDK动态代理
+       通过调用 ~java.lang.reflect.Proxy~ 的方法 ~newProxyInstance~ 来创建代理对象实现的。
+       - 限制：
+         1) Target Object 必须实现业务接口才能使用JDK动态代理。
+       - 示例
+         #+BEGIN_EXAMPLE java
+         // 定义代理类
+         import java.lang.reflect.Proxy;
+         import java.lang.reflect.Method;
+         import java.lang.reflect.InvocationHandler;
+
+         public class JdkProxy implements InvocationHandler{
+             // 目标对象
+             private UserDao userDao;
+
+             // 创建代理类
+             public UserDao createProxy(UserDao userDao){
+                 this.userDao = userDao;
+                 // 1. 获取类加载器
+                 ClassLoader classLoader = JdkProxy.class.getClassLoader();
+                 // 2. 获取目标对象实现的所有接口
+                 Class<?> interfaces = userDao.getClass().getInterfaces();
+                 // 3. 生成代理
+                 Object proxy = Proxy.newProxyInstance(classLoader, interfaces, this);
+
+                 return (UserDao) proxy;
+             }
+
+             /* 调用代理类的任何方法时实质上都是调用该方法，然后我们在该方法中通过反射调用目标对象的方法
+              * @param Object proxy - 代理对象
+              * @param Method method - 调用的方法信息
+              * @param Object[] args - 入参
+              * @returns Object
+              */
+             @Override
+             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                 // 前置增强
+                 System.out.println("");
+
+                 // 调用目标对象的方法
+                 Object ret = method.invoke(this.userDao, args);
+
+                 // 后置增强
+                 System.out.println("");
+
+                 return ret;
+             }
+         }
+         #+END_EXAMPLE
+    2) CGLIB动态代理
+       CGLIB(Code Generation Library)是一个采用底层字节码技术的代码生成包，对指定的目标类生成一个子类，从而对子类实现增强。
+       - 示例
+         #+BEGIN_EXAMPLE java
+         public class CglibProxy implements MethodInterceptor {
+             public Object createProxy(UserDao userDao){
+                 // 创建动态类对象
+                 Enhancer enhancer = new Enhancer();
+                 enhancer.setSuperClass(userDao.getClass());
+                 enhanser.setCallback(this);
+                 return enhanser.create();
+             }
+
+             /*
+              * @param Object proxy - 动态类对象
+              * @param Method method - 所调用的方法信息
+              * @param Object[] args - 入参
+              * @param MethodProxy methodProxy - 动态类对象的方法对象，用于执行父类的方法
+              */
+             public Object intercept(Object proxy, Method method, Object[] args, MethodProxy methodProxy) throws Throwable {
+                 // 前置增强
+                 System.out.println("");
+
+                 // 调用目标对象的方法
+                 Object ret = methodProxy.invokeSuper(proxy, args);
+
+                 // 后置增强
+                 System.out.println("");
+
+                 return ret;
+             }
+         }
+         #+END_EXAMPLE
+
+*** Advise类型
+    1) org.aopalliance.intercept.MethodInterceptor - 环绕通知
+       在目标方法执行前后实施增强，如日志、事务等功能
+    2) org.aopalliance.intercept.MethodBeforeAdvice - 前置通知
+       在目标方法执行前实施增强，如权限管理等
+    3) org.aopalliance.intercept.MethodReturningAdvice - 后置通知
+       在目标方法执行后实施增强，如关闭流、上传文件、删除临时文件等
+    4) org.aopalliance.intercept.ThrowsAdvice - 异常抛出通知
+       在方法抛出异常后实施增强，如异常处理日志等
+    5) org.aopalliance.intercept.IntroductionInterceptor - 引介通知
+       在目标类中添加新的方法和属性，用于修改老版本的程序
+
+*** 通过 ~<bean class="org.springframework.aop.framework.ProxyFactoryBean">~ 构建AOP
+    ProxyFactoryBean作为FactoryBean的实现类，负责为其它Bean创建代理实例，作为Spring中床将AOP代理的基本方式。
+    - 参数
+      | 属性             | 说明                                                                |
+      |------------------+---------------------------------------------------------------------|
+      | target           | 目标对象                                                            |
+      | proxyInterfaces  | 代理实现的接口，若实现多个接口则使用<list><value></value>...</list> |
+      | proxyTargetClass | 是对类代理(底层使用GCLIB)，还是对接口代理(底层使用JDK Proxy)        |
+      | interceptorNames | 需要织入的目标Advice                                                |
+      | singleton        | 代理是否为单例，默认为true                                          |
+      | optimize         | true时底层采用GCLIB                                                 |
+    - 示例
+      #+BEGIN_EXAMPLE xml
+      <!-- applicationContext.xml -->
+      <context:component-scan base-package="org.proxy.experiment">
+      <!-- 然后通过 applicationContext.getBean("userDaoProxy") 即可获取代理实例 -->
+      <bean id="userDaoProxy" class="org.springframeowork.aop.framework.ProxyFactoryBean">
+          <property name="target" value="userDaoImpl"></property>
+          <property name="proxyInterfaces" value="UserDao"></property>
+          <property name="proxyTargetClass" value="true"></property>
+          <property name="interceptorNames" value="myAspect"></property>
+      </bean>
+      #+END_EXAMPLE
+
+*** 通过AspectJ构建AOP
+    AspectJ是一个基于Java的AOP框架，Spring2.0+引入对AspectJ的支持。
+    
+**** 基于XML声明式
+     #+BEGIN_EXAMPLE
+     <aop:config>
+        - attributes
+        - child-element
+          - <aop:pointcut>, 全局切入点
+          - <aop:advisor>, 通知器
+          - <aop:aspect>
+            - attributes
+            - child-element
+              - <aop:pointcut>, 切入点
+              - <aop:before>, 前置通知
+              - <aop:returning>, 后置通知
+              - <aop:around>, 环绕通知
+              - <aop:throwing>, 异常通知
+              - <aop:after>, 最终通知
+              - <aop:declare-parents>, 引介通知
+     #+END_EXAMPLE
+
+     #+BEGIN_EXAMPLE xml
+     <!-- applicationContext.xml -->
+     <bean id="myAspect" class="org.john.MyAspect">
+         <aop:config>
+             <!-- 配置通知器 -->
+             <aop:aspect id="aspect" ref="myAspect">
+                 <!-- 切入点表达式：execution(modifier-pattern? ret-type-pattern declaring-type-pattern? name-pattern(param-pattern) throws-pattern?)
+                      * 表示任意
+                   -->
+                 <aop:pointcut id="myPointCut" expression="execution(* org.john.*.*(..))" />
+                 <!-- 通知组件的属性：
+                      - pointcut, 设置独立的pointcut expression
+                      - pointcut-ref, 引用<aop:pointcut>
+                      - method, 设置用于作为Advise的Aspect类的方法名
+                      - throwing, 设置用于存储异常对象的形参名称，供Advise访问异常对象
+                      - returning, 设置用于存储返回值的形参名称，供Advise访问返回信息
+                   -->
+                 <aop:before method="myBefore" pointcut-ref="myPointCut"/>
+                 <aop:returning method="myAfterReturning" returning="returnVal" pointcut-ref="myPointCut"/>
+                 <aop:around method="myAround" pointcut-ref="myPointCut"/>
+                 <aop:throwing method="myThrowing" throwing="e" pointcut-ref="myPointCut"/>
+                 <aop:after method="myAfter" pointcut-ref="myPointCut"/>
+             </aop:aspect>
+         </aop:config>
+     </bean>
+     #+END_EXAMPLE
+     #+BEGIN_EXAMPLE java
+     public class MyAspect{
+         public void myBefore(JoinPoint joinPoint){
+             // 目标对象
+             Object targetObject = joinPoint.getTarget();
+             // 目标方法
+             Method method = joinPoint.getSignature();
+         }
+
+         public void myAfterRetuning(JoinPoint joinPoint, Object returnVal){
+             // 目标对象
+             Object targetObject = joinPoint.getTarget();
+             // 目标方法
+             Method method = joinPoint.getSignature();
+         }
+         
+         public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+             // 前置
+             
+             Object ret = proceedingJoinPoint.procee();
+
+             // 后置
+
+             return ret;
+         }
+         
+         public void myThrowing(JoinPoint joinPoint, Throwable e){
+         }
+
+         public void myAfter(){
+         }
+     }
+     #+END_EXAMPLE
+
+**** 基于Annotation声明式
+     #+BEGIN_EXAMPLE xml
+     <!-- applicationContext.xml -->
+     <context:component-scan base-package="org.john.test"/>
+     <!-- 启动基于注解的AspectJ支持 -->
+     <aop:aspectj-autoproxy>
+     #+END_EXAMPLE
+     #+BEGIN_EXAMPLE java
+     @Component
+     @Aspect
+     public class MyAspect{
+         // 通过一个私有方法定义Pointcut表达式
+         // 而Pointcut的id为方法函数名加形参列表
+         @Pointcut("execution(* org.john.*.*(..))")
+         private void myPointCut(){}
+
+         @Before("myPointCut()")
+         public void myBefore(JoinPoint joinPoint){
+             // 目标对象
+             Object targetObject = joinPoint.getTarget();
+             // 目标方法
+             Method method = joinPoint.getSignature();
+         }
+
+         @AfterReturning(value="myPointCut()", returning="returnVal")
+         public void myAfterRetuning(JoinPoint joinPoint, Object returnVal){
+             // 目标对象
+             Object targetObject = joinPoint.getTarget();
+             // 目标方法
+             Method method = joinPoint.getSignature();
+         }
+
+         @Around("myPointCut()")
+         public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+             // 前置
+             
+             Object ret = proceedingJoinPoint.procee();
+
+             // 后置
+
+             return ret;
+         }
+         
+         @Throwing(value="myPointCut()", throwing="e")
+         public void myThrowing(JoinPoint joinPoint, Throwable e){
+         }
+
+         @After("myPointCut()")
+         public void myAfter(){
+         }
+     }
+     #+END_EXAMPLE
+     
 * Spring Boot
   通过[[https://start.spring.io/][Spring Initializr]]初始化项目。
 
@@ -810,6 +1602,5 @@ import java.io.*;
        </faceted-project>
        #+END_EXAMPLE
   2) URI和URL的区别？
-  3) Bean组件是什么？
 
 
