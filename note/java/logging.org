@@ -1,0 +1,108 @@
+* log4j
+#+BEGIN_EXAMPLE java
+package org.john
+import org.apache.log4j.Logger;
+
+public class LogTest {
+  public static void main(String[] args) {
+    Logger logger = Logger.getLogger(LogTest.class);
+    logger.debug("message");
+    logger.info("message");
+    logger.error("message");
+  }
+}
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE
+# log4j.properties
+# 指定全局日志等级等于或低于INFO的日志信息输出到名为stdout的目的地
+log4j.rootCategory=INFO, stdout, logfile, rollinglogfile, dailyrollinglogfile
+# 指定特定Logger的日志等级等于或低于DEBUG的日志信息输出到名为stdout的目的地
+log4j.logger.org.john.LogTest=DEBUG
+# 日志输出到控制台
+log4j.appender.stdout=org.apatche.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
+
+# 日志输出到文件
+log4j.appender.logfile=org.apatche.log4j.FileAppender
+log4j.appender.logfile.File=LogTest.log
+log4j.appender.logfile.layout=org.apache.log4j.PatternLayout
+log4j.appender.logfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
+
+# 日志滚动输出到文件，日志大小到达100MB后创建新的日志文件
+log4j.appender.rollinglogfile=org.apatche.log4j.RollingFileAppender
+log4j.appender.rollinglogfile.File=LogTest.log
+log4j.appender.rollinglogfile.Append=true
+log4j.appender.rollinglogfile.MaxFileSize=100MB
+log4j.appender.rollinglogfile.layout=org.apache.log4j.PatternLayout
+log4j.appender.rollinglogfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
+
+# 日志按日滚动输出到文件
+log4j.appender.dailyrollinglogfile=org.apatche.log4j.DailyRollingFileAppender
+log4j.appender.dailyrollinglogfile.File=LogTest.log
+log4j.appender.dailyrollinglogfile.layout=org.apache.log4j.PatternLayout
+log4j.appender.dailyrollinglogfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
+
+#+END_EXAMPLE
+
+* log4j+jcl(Jakarta Commons Logging, 即commons logging)
+jcl提供的是一个日志接口，同时兼容轻量级和不依赖具体的日志实现工具。即作为日志工具的一个简单的日志操作抽象，允许使用不同的具体日志实现工具。
+底层支持的日志实现工具：
+- Jdk14Logger
+- Log4JLogger
+- LogKitLogger
+- NoOpLogger(直接丢弃所有日志信息)
+- SimpleLog
+
+依赖包：
+- logj4-1.2.16.jar
+- commons-logging-1.1.jar
+
+#+BEGIN_EXAMPLE java
+package org.john;
+import org.apache.commons.logging.*;
+
+public class LogTest {
+  private static final Log logger = LogFactory.getLog(LogTest.class);  
+
+  public static void main(String[] args) {
+    logger.debug("message");
+    logger.info("message");
+    logger.error("message");
+  }
+}
+#+END_EXAMPLE
+~LogFactory.getLog~ 的执行逻辑：
+1) 在 ~CLASSPATH~ 中查找commons-logging.properties文件, 并通过其中的org.apache.commons.logging.Log属性值(为日志实现工具的完全限定类名)找到日志实现类。查找失败进入步骤2
+2) 查找系统属性org.apache.commons.logging.Log属性值(为日志实现工具的完全限定类名)找到日志实现类。查找失败进入步骤3
+3) 在 ~CLASSPATH~ 中查找log4j的类。查找失败进入步骤4
+4) 若JRE1.4+则使用JRE内置日志。失败进入步骤5
+5) 使用jcl内建的SimpleLog
+
+* log4j+slf4j(Simple Logging Facade for Java)
+与jcl一样为日志接口，但具有如下优点：
+1) 受类加载器影响较小，不易产生内存溢出
+2) 可方便部署到OSGI环境中
+
+依赖包：
+- logj4-1.2.16.jar
+- slf4j-api-1.6.0.jar, slf4j基本API包
+- slf4j-log4j12-1.6.0.jar, log4j支持包
+- jcl-over-slf4j-1.6.0.jar, 若项目已经使用了jcl，现在要更换为slf4j则添加这个包并删除commons-logging包。代码级别使用和jcl一样的API，但底层桥接到slf4j的API
+
+#+BEGIN_EXAMPLE java
+package org.john;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class LogTest {
+  private static final Log logger = LogFactory.getLog(LogTest.class);  
+
+  public static void main(String[] args) {
+    logger.debug("message");
+    logger.info("message");
+    logger.error("message");
+  }
+}
+#+END_EXAMPLE

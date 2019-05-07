@@ -108,6 +108,33 @@ JavaBeans
 - 通过方法 ~new SqlSessionFactoryBuilder().build~ 从XML配置文件或一个预先定制的Configuration实例构建出来。
 - 线性安全。
 - 建议使用单例模式，在应用运行期间常存且避免重复创建。
+  #+BEGIN_EXAMPLE java
+  package org.john;
+  import org.apache.ibatis.io.Resources;
+  import org.apache.ibatis.session.SqlSession;
+  import org.apache.ibatis.session.SqlSessionFactory;
+  import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+
+  public class App {
+    private static SqlSessionFactory sqlSessionFactory = null;
+    static {
+      try{
+        InputStream inputStream = Resources.getResourceAsStream("mybatis-config.xml");
+        sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
+
+    public static SqlSession getSqlSession(){
+      return sqlSessionFactory.openSession();
+    }
+
+    public static void main(String[] args) {
+      SqlSession session = getSqlSession();
+    }
+  }
+  #+END_EXAMPLE
 - 底层封装了DataSource。
 - 常用方法
   - ~SqlSession openSession()~
@@ -288,7 +315,7 @@ JavaBeans
       </mappers>
   </configuration>
   #+END_EXAMPLE
-* Mapper XML映射文件
+* XML映射文件配置Mapper
   #+BEGIN_EXAMPLE xml
   <mapper namespace="john.mybatis.mapper.UserMapper">
 
@@ -299,7 +326,7 @@ JavaBeans
          - resultType, 返回值类型的完全限定名或别名，和属性resultMap不能同时使用
          - resultMap, 外部resultMap的命名引用，用于复杂的映射
          - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
-         - useCache, 为true时语句执行结果被二级缓存，select语句中默认值为true
+         - useCache, 为true时语句执行结果被二级缓存，为false时禁用二级缓存。select语句中默认值为true
          - timeout, 返回请求结果超时时间
          - fetchSize, 每次返回的结果的最大行数
          - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
@@ -374,7 +401,7 @@ JavaBeans
                 javaType="ArrayList"
                 ofType="org.john.domain.Student"
                 column="clazz_id"
-                select="selectStudentWithId"
+                select="selectStudentWithClazzId"
                 fetchType="lazy"/>
    <!-- fetchType值为eager表示立即加载、lazy表示延迟加载
         要启用延迟必须在mybatis-config.xml中启用lazyLoadingEnabled和关闭aggressiveLazyLoading-->
@@ -529,3 +556,282 @@ JavaBeans
       </trim>
     </select>
     #+END_EXAMPLE
+* 事务管理
+  事务4个特性：
+  1) 原子性(Atomicity), 事务作为应用中不可再分割的最小逻辑执行单位。
+  2) 一致性(Consistency), 数据库从一种一致性状态，变到另一种一致性状态。一致性通过原子性来保证。
+  3) 隔离性(Isolation), 并发执行的事务之间互不干扰，即事务操作过程中的中间状态无法被其他事务访问。
+  4) 持续性(Durability/Persistence), 事务一旦提交，其对数据的任何草走都将记录到永久存簇器中。 
+
+** 相关接口和实现类
+   接口org.apache.ibatis.transaction.Transaction，而其实现类为org.apache.ibatis.transaction.jdbc.JdbcTransaction和org.apache.ibatis.transaction.managed.ManagedTransaction。
+   工厂接口org.apache.ibatis.transaction.TransactionFactory，而其实现类为org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory和org.apache.ibatis.transaction.managed.ManagedTransactionFactory来获取事务的实例对象。
+   
+   接口Transaction
+   #+BEGIN_EXAMPLE java
+   public interface Transaction {
+       Connection getConnection() throws SQLException;
+       void commit() throws SQLException;
+       void rollback() throws SQLException;
+       void close() throws SQLException;
+   }
+   #+END_EXAMPLE
+
+** 创建事务实例的过程
+   1) 根据mybatis-config.xml中 ~<transactionManager>~ 的属性type值创建JdbcTransactionFactory或ManagedTransactionFactory实例
+      #+BEGIN_EXAMPLE java
+      private TransactionFactory transactionManagedElement(XNode context) throws Exception {
+        /* 前面已经通过下面语句注册别名JDBC和MANAGED对应的工厂类
+           typeAliasRegistry.registerAlias("JDBC", JdbcTransactionFactory.class);
+           typeAliasRegistry.registerAlias("MANAGED", ManagedTransactionFactory.class);
+         */
+        if (context != null){
+          String type = context.getStringAttribute("type");
+          Properties props = context.getChildrenAsProperties();
+          TransactionFactory factory = (TransactionFactory) resolveClass(type).newInstance();
+          factory.setProperties(props);
+          return factory;
+        }
+        throw new BuilderException("Enviroment declaration requries a TransactionFactory.");
+      }
+      #+END_EXAMPLE
+   2) 然后通过TransactionFactory实例，以Connection实例或DataSource实例、隔离级别、自动提交作为入参创建Transaction实例。
+   3) JdbcTransaction和ManagedTransaction的区别
+      1) JdbcTranscation实际使用的是java.sql.Connection提供的事务操作，依赖数据库本身的支持。
+      2) ManagedTransaction则将事务管理交由应用容器(Weblogic等)管理，自身不提供commit和rollback操作，而是由容器统一管理。
+
+* 数据缓存机制
+  分为一级和二级缓存：
+  1) 一级缓存为SqlSession级别的缓存。
+  2) 二级缓存为mapper级别的缓存，多个SqlSession共享的。
+
+** 一级缓存(SqlSession级别)
+   - 默认开启
+   - 缓存数据保存在SqlSession实例内部的HashMap实例中
+   - 缓存逻辑
+     1) 当在同一个SqlSession实例执行相同的SQL语句时，第一次执行后会将数据以对象id为键保存到内部的HashMap中，后续查询则直接从缓存中读取；
+     2) 若SqlSession实例执行DML(insert,update,delete)并提交到数据，那么一级缓存将被自动清空。
+
+** 二级缓存(mapper级别)
+   - 默认关闭
+     - 在mybatis-config.xml中通过 ~<setting name="cacheEnabled" value="true"/>~ 开启二级缓存
+     - 在使用二级缓存的mapper.xml中通过 ~<cache eviction="LRU" flushInterval="60000" size="512" readOnly="true"/>~ 开启
+       - flushInterval, 刷新间隔毫秒数。默认值为unset，即不刷新。
+       - size, 缓存数目。默认值1024
+       - readOnly, 默认值为false。只读的缓存会给调用者返回相同的实例，因为这些对象不能被修改。可读写的缓存会返回缓存对象的拷贝。
+       - eviction, 回收策略，默认值为LRU
+         - LRU, 最近最少用策略
+         - FIFO, 先进先出策略
+         - SOFT, 软引用策略，移除基于垃圾回收器状态和软引用规则的对象
+         - WEAK, 弱引用策略，更积极地移除基于垃圾回收器状态和弱引用规则的对象
+   - 注意：被二级缓存的对象及其父类必须实现java.io.Serializable接口，因为二级缓存数据存储介质不一定在内存，可能在硬盘或远程服务器。
+   - 缓存数据保存在Mapper内部的HashMap实例中
+   - 缓存逻辑
+     不同的SqlSession实例多次执行相同的mapper的namespace下的sql语句，且传递相同的参数，导致最终生成相同的sql语句，那么第一执行后将结果缓存起来，后续查询均从缓存读取。
+* 注解配置Mapper
+  MyBatis的注解位于org.apache.ibatis.annotations下
+  - ~@Select~, Select语句的SQL映射
+  - ~@SelectProvider~, Select语句的动态SQL映射。允许通过属性type和method指定一个完全限定类名和方法名在执行时返回运行的查询语句
+  - ~@Insert~, Insert语句的SQL映射
+  - ~@InsertProvider~, Insert语句的动态SQL映射。允许通过属性type和method指定一个完全限定类名和方法名在执行时返回运行的插入语句
+  - ~@Update~, Update语句的SQL映射
+  - ~@UpdateProvider~, Update语句的动态SQL映射。允许通过属性type和method指定一个完全限定类名和方法名在执行时返回运行的更新语句
+  - ~@Delete~, Delete语句的SQL映射
+  - ~@DeleteProvider~, Delete语句的动态SQL映射。允许通过属性type和method指定一个完全限定类名和方法名在执行时返回运行的删除语句
+  - ~@Result~, 列和属性间的结果映射。属性包括：
+    - id, 布尔值，表示是否被用于主键映射
+    - column,
+    - property,
+    - javaType,
+    - jdbcType
+    - type Handler
+    - one, 和XML中的 ~<association>~ 相似
+    - many, 和XML中的 ~<collection>~ 相似
+  - ~@Results~, 多个结果映射列表
+  - ~@Options~, 提供配置选项的附加值，通常用于在映射语句上作为附加功能配置出现
+  - ~@One~, 复杂类型的单独属性值映射。必须指定属性select，表示已映射的SQL语句的完全限定名
+  - ~@Many~, 复杂类型的集合属性值映射。必须指定属性select，表示已映射的SQL语句的完全限定名
+  - ~@Param~, 为映射器方法参数定义名字。
+
+** 示例-CRUD
+   #+BEGIN_EXAMPLE java
+   public interface UserMapper{
+     @Insert("insert into user(name, sex) values(#{name}, #{sex})")
+     @Options(useGeneratedKeys=true, keyProperty="id")
+     int saveUser(User user);
+
+     @Delete("delete from user where id = #{id}")
+     int removeUser(@Param("id") Integer id);
+
+     @Update("update user set name=#{name}, sex=#{sex} where id=#{id}")
+     void modifyUser(User user);
+
+     @Select("select * from user where id=#{id}")
+     @Results({
+        @Result(id=true, column="id", property="id"),
+        @Result(column="name", property="name"),
+        @Result(column="sex", property="sex")
+     })
+     User selectUserById(@Param("id") Integer id);
+
+     @Select("select * from user")
+     List<User> selectAllUser();
+   }
+   #+END_EXAMPLE
+
+** 示例-OneToOne
+   #+BEGIN_EXAMPLE java
+   public interface UserMapper{
+     @Select("select * from user where id = #{id}")
+     @Results({
+        @Result(id=true, column="id", property="id"),
+        @Result(column="name", property="name"),
+        @Result(column="clazz_id", property="clazz",
+                one=@One(
+                    select="org.john.mapper.ClazzMapper.selectClazzById",
+                    fetchType=FetchType.EAGER
+                    ))
+     })
+     User selectUserById(@Param("id") Integer id);
+   }
+   #+END_EXAMPLE
+
+** 示例-OneToMany
+   #+BEGIN_EXAMPLE java
+   public interface ClazzMapper {
+     @Select("select * from clazz where id = #{id}")
+     @Results({
+        @Result(id=true, column="id", property="id"),
+        @Result(column="id", property="students",
+                many=@Many(
+                     select="org.john.mapper.UserMapper.selectUserByClazzId",
+                     fetchType=FetchType.LAZY
+                     ))
+     })
+     Clazz getClazzById(@Param("id") Integer id);
+   }
+   #+END_EXAMPLE
+
+** 示例-动态SQL注解
+   - SQL工具类 ~org.apache.ibatis.jdbc.SQL~ 可避免直接使用字符串拼接
+     - ~T SELECT(String columns)~
+     - ~T FROM(String table)~
+     - ~T JOIN(String join)~
+     - ~T INNER_JOIN(String join)~
+     - ~T LEFT_OUTER_JOIN(String join)~
+     - ~T RIGHT_OUTER_JOIN(String join)~
+     - ~T WHERE(String condition)~
+     - ~T OR()~
+     - ~T AND()~
+     - ~T GROUP_BY(String column)~
+     - ~T HAVING(String column)~
+     - ~T ORDER_BY(String column)~
+     - ~T INSERT_INTO(String table)~
+     - ~T VALUES(String column, String value)~
+     - ~T DELETE_FROM(String table)~
+     - ~T UPDATE(String table)~
+     - ~T SET(String set)~
+   - ~*Provider~ 方法接收以下参数：
+     - 无参数
+     - Java对象
+     - java.util.Map对象
+   
+   #+BEGIN_EXAMPLE java
+   publc class UserDynaSqlProvider {
+     public String selectWithParam(Map<String, Object> param){
+       return new SQL(){
+         {
+           SELECT("*");
+           FROM("user");
+           if (param.get("id") != null) {
+             WHERE(" id = #{id} ");
+           }
+           if (param.get("loginname") != null) {
+             WHERE(" loginname = #{loginname} ");
+           }
+         }
+       }.toString();
+     }
+   }
+   #+END_EXAMPLE
+* Spring集成 
+  MyBatis3问世前Spring3的开发工作已经完成，因此Spring3中没有内置对MyBatis3的支持，需要引入MyBatis提供的mybatis-spring.jar来集成。到Spring4时则延续这一做法。
+  1) 在applicationContext.xml配置MyBatis工厂类
+  2) 在DAO层使用Spring注入的工具Bean对数据进行操作
+
+  #+BEGIN_EXAMPLE xml
+  <!-- applicationContext.xml -->
+  xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
+  xmlns:p="http://www.springframework.org/schema/p"
+  xmlns:tx="http://www.springframework.org/schema/tx"
+  xsi:schemaLocation="http://mybatis.org/schema/mybatis-spring
+                      http://mybatis.org/schema/mybatis-spring.xsd
+                      http://www.springframework.org/schema/p
+                      http://www.springframework.org/schema/p.xsd
+                      http://www.springframework.org/schema/tx
+                      http://www.springframework.org/schema/tx.xsd"
+
+  <!-- 注册Spring Bean -->
+  <context:component-scan base-package="org.john"/>           
+  <!-- 引入mapper接口 -->
+  <mybatis:scan base-package="org.john.mapper"/>
+  <!-- 使用PropertyOverrideConfigurer后处理器加载数据源参数 -->
+  <context:property-override location="classpath:db.properties"/>
+  <!-- 配置c3p0数据源 -->
+  <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"/>
+  <!-- 指定SqlSessionFactory为社区开发的实现类 -->
+  <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean" p:dataSource-ref="dataSource"/>
+  <!-- JDBC事务管理器 -->
+  <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager" p:dataSource-ref="dataSource"/>
+  <!-- 启用支持annotation注解方式事务管理 -->
+  <tx:annotation-driven transaction-manager="transactionManager"/>
+  #+END_EXAMPLE
+
+  #+BEGIN_EXAMPLE
+  # db.properties
+  dataSource.driverClass=com.mysql.jdbc.Driver
+  dataSource.jdbcUrl=jdbc:mysql://127.0.0.1:3306/mybatis
+  dataSource.user=root
+  dataSource.password=root
+  dataSource.maxPoolSize=20
+  dataSource.maxIdleTime=1000
+  dataSource.minPoolSize=6
+  dataSource.initialPoolSize=5
+  #+END_EXAMPLE
+
+  #+BEGIN_EXAMPLE xml
+  <!-- spring框架提供的字符集过滤器 -->
+  <!-- spring Web MVC框架提供了org.springframework.web.filter.CharacterEncodingFilter用于解决POST方式造成的中文乱码问题  -->
+  <filter>
+     <filter-name>encodingFilter</filter-name>
+     <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
+     <init-param>
+         <param-name>encoding</param-name>
+         <param-value>UTF-8</param-value>
+     </init-param>
+     <!-- force强制，促使 -->
+     <init-param>
+         <param-name>forceEncoding</param-name>
+         <param-value>true</param-value>
+     </init-param>
+  </filter>
+  <filter-mapping>
+     <filter-name>encodingFilter</filter-name>
+     <url-pattern>/*</url-pattern>
+  </filter-mapping>
+  #+END_EXAMPLE
+
+
+[[MyBatis Spring Adapter][https://github.com/mybatis/spring]]
+
+* 增强工具
+
+** [[http://www.mybatis.org/generator/][MyBatisGenerator]]
+   MyBatis代码生成器，可根据数据库表生成相关代码
+   - POJO
+   - Mapper接口
+   - SQL Mapper XML
+
+** [[https://pagehelper.github.io][MyBatisPageHelper]]
+   - 支持多种数据库
+   - 支持多种分支方式
