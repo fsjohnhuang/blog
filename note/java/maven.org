@@ -1,3 +1,7 @@
+JAR，用于Java程序发布的包
+WAR，用于网站发布的包
+
+
 * 依赖下载流程
 1) 本地仓库
 2) 默认中央仓库(http://repo1.maven.org/maven2/)
@@ -136,10 +140,166 @@
   target/ 输出目录
   #+END_EXAMPLE
 
-* TODO 构建的生命周期和插件(Build lifecycle & plugin)
+* Version规范
+~<major>.<minor>.<incremental>-<qualifier>~
+~<qualifier>~ 中除beta、alpha等值外还有如下值
+- SNAPSHOT, 表示不稳定的版本。作为特殊版本号用于告知Maven该工程处于开发阶段，将经常更新和发布，若有其他工程依赖此类型的artifact，那么Maven会在仓库中寻找其最新版本下载使用。
+- LATEST, 表示为最新版本。
+- RELEASE，表示稳定版。
 
+规范：
+1) 同一个项目中所有模块版本保持一致
+2) 子模块统一继承父模块的版本
+3) 统一在顶层模块POM的 ~<dependencyManagement/>~ 节点中定义所有子模块的依赖版本号，而子模块POM中不添加依赖版本号
+4) 开发测试阶段使用SNAPSHOT
+5) 生产发布阶段使用RELEASE
+6) 新版本迭代只修改顶层的POM版本
 
+Maven遵循“约定优于配置”的策略(convention over configuration)
+1) 任务compile，默认从src/main/java下编译所有java文件，并把输出的class文件存放到target/classes中；
 
-JAR，用于Java程序发布的包
-WAR，用于网站发布的包
-Snapshot，
+* 多模块
+根pom.xml
+#+BEGIN_EXAMPLE xml
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.john</groupId>
+  <artifactId>StudentMIS</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  
+  <!-- 描述子模块 -->
+  <modules>
+    <module>Utils</module>
+    <module>Entities</module>
+  </modules>
+
+  <!-- 子模块也会继承这些properties值 -->
+  <properties>
+    <junit.version>4.12</junit.version>
+  </properties>
+  <!-- 在根pom.xml中通过dependencyManagement节点统一声明依赖的版本号和作用范围，但不会做实质的引入操作。
+       而在子模块pom.xml中通过dependencies节点按需引入依赖。
+    -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>JUnit</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+  <!-- 在根pom.xml中直接通过dependencies节点引入依赖时，其所有子模块均会自动引入相同的依赖，无法做到按需引入。
+    -->
+  <dependencies>
+    <dependency>
+      <groupId>org.other</groupId>
+      <artifactId>Something</artifactId>
+      <version>1.0.0</version>
+      <scope>provider</scope>
+    </dependency>
+  </dependencies>  
+</project>
+#+END_EXAMPLE
+
+子模块的pom.xml
+#+BEGIN_EXAMPLE xml
+<project>
+  <!-- 父模块的坐标 -->
+  <parent>
+    <groupId>com.john</groupId>
+    <artifactId>StudentMIS</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <!-- 子模块的POM信息 -->
+  <modelVersion>4.0.0</modelVersion>
+  <!-- 子模块的groupId和version都保持和父模块一致 -->
+  <artifactId>Utils</artifactId>
+
+  <denpendencies>
+    <!-- 引入其他子模块，编译后会将依赖打包存放到lib目录下 -->
+    <denpendency>
+      <groupId>com.john</groupId>
+      <artifactId>Entity</artifactId>
+    </denpendency>
+    <!-- 引入第三方依赖，version和scope由根pom.xml统一管理。
+         也可设置version和scope，优先级比根pom.xml的高
+      -->
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>JUnit</artifactId>
+    </dependency>
+  </denpendencies>
+</project>
+#+END_EXAMPLE
+
+* 在Tomcat中运行
+#+BEGIN_EXAMPLE xml
+<plugin>
+  <groupId>org.codehaus.mojo</groupId>
+  <artifactId>tomcat-maven-plugin</artifactId>
+  <version>1.1</version>
+  <configuration>
+    <path>/wp</path>
+    <port>8080</port>
+    <uriEncoding>UTF-8</uriEncoding>
+    <url>http://localhost:8080/manager/html</url>
+    <server>tomcat6</server>
+  </configuration>
+</plugin>
+#+END_EXAMPLE
+
+* 在命令行使用Maven指令
+#+BEGIN_EXAMPLE  shell
+# 查看版本号
+mvn -v
+
+# 创建项目
+mvn archetype:generate -DgroupId=com.john -DartifactId=Test -Dversion=1.0.0-SNAPSHOT -DarchetypeArtifactId=maven-archetype-webapp -DinteractiveMode=false
+
+# 为Maven项目生成Eclipse项目元数据
+mvn eclipse:eclipse
+# 清理Eclipse项目元数据
+mvn eclipse:clean
+
+# 为Maven项目生成IDEA项目元数据
+mvn idea:idea
+# 清理IDEA项目元数据
+mvn idea:clean
+
+# 删除原有的class文件
+mvn clean
+
+# 将Java源码编译为class文件
+mvn compile
+
+# 运行单元测试并生成测试报告
+mvn test
+
+# 根据POM.xml中的packaging标签指定，将项目打包为war或jar包
+mvn package
+
+# 编译项目并生成jar包，然后存放到本地仓库中，供其它模块安装和调用
+mvn install
+
+# 生成项目相关信息的网站
+mvn site
+
+# 发布
+mvn deploy
+#+END_EXAMPLE
+
+* Maven生命周期
+  1) default lifecycle
+     1) validate, validate the project is correct and all necessary information is available.
+     2) compile, compile the source code of the project.
+     3) test, test the compiled source code using a suitable unit testing framework. these tests should not require the code be packaged or deployed.
+     4) package, take the compiled code and package it in its distributable format, such as a JAR.
+     5) integration-test, process and deploy the package if necessary into an environment where integration test can be run.
+     6) verify, run any checks to verify the package is valid and meets quality criteria.
+     7) install, install the package into the local repository, for use as a denpendency in other projects locally.
+     8) deploy, done in integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.

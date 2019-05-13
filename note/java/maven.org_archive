@@ -1,0 +1,29 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/blog/note/java/maven.org
+
+
+* Version规范：
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2019-05-13 Mon 10:08
+  :ARCHIVE_FILE: ~/blog/note/java/maven.org
+  :ARCHIVE_CATEGORY: maven
+  :END:
+~<major>.<minor>.<incremental>-<qualifier>~
+~<qualifier>~ 中除beta、alpha等值外还有如下值
+- SNAPSHOT, 表示不稳定的版本。作为特殊版本号用于告知Maven该工程处于开发阶段，将经常更新和发布，若有其他工程依赖此类型的artifact，那么Maven会在仓库中寻找其最新版本下载使用。
+- LATEST, 表示为最新版本。
+- RELEASE，表示稳定版。
+
+规范：
+1) 同一个项目中所有模块版本保持一致
+2) 子模块统一继承父模块的版本
+3) 统一在顶层模块POM的 ~<dependencyManagement/>~ 节点中定义所有子模块的依赖版本号，而子模块POM中不添加依赖版本号
+4) 开发测试阶段使用SNAPSHOT
+5) 生产发布阶段使用RELEASE
+6) 新版本迭代只修改顶层的POM版本
+
+Maven遵循“约定优于配置”的策略(convention over configuration)
+1) 任务compile，默认从src/main/java下编译所有java文件，并把输出的class文件存放到target/classes中；
+
