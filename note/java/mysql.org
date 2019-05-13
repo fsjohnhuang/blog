@@ -1,0 +1,42 @@
+
+连接器，负责处理管理连接、权限验证
+分析器，负责词法、语法分析
+优化器，进行语句优化，生成执行计划，选择索引
+执行器，执行SQL语句并返回结果集
+
+存储引擎
+1) ARCHIVE, 用于数据存档(行被插入后不能修改)
+2) BLACKHOLE, 丢弃写操作，读操作会返回空内容
+3) CSV, 在存储数据时，以逗号分隔各个数据项
+4) FEDERATED, 访问远程白表
+5) InnoDB, 具备外键支持功能的事务存储引擎
+   - 特性
+     1) 插入缓冲(insert buffer)
+     2) 二次写(double write)
+     3) 自适应哈希索引(ahi)
+     4) 预读(read ahead)
+6) MEMORY, 存在内存的表
+7) MERGE, 用来管理多个MyISAM表构成的表集合
+8) MyISAM, 非事务处理存储引擎
+9) NDB, MySQL集群专用存储引擎
+
+InnoDB索引是聚簇索引
+- 主键索引的叶子节点存储的是行数据
+- 非主键索引的叶子节点存储的是主键和其他带索引的列数据
+
+MyISAM索引是非聚簇索引
+- 主键索引的叶子节点存储的是行地址，需要进行一次寻址后才能得到数据
+
+* QA
+1) latin1是什么字符集？
+   对应Java中的ISO-8859-1集，共收录256个字符，在ASCII字符集的基础上扩充128个西欧常用字符（包括德法的字母）。
+2) 为何无法存储emoji表情？
+   字符集使用 *utf8mb4* 而不是 *utf8* ，因为emoji采用4个字节编码，而utf8有可能是2、3、4个字节，而utf8mb4则必定为4个字节。
+   #+BEGIN_EXAMPLE
+   show charset like 'utf8%';
+   | Charset | Description | Default collation | Maxien |
+   +---------+-------------+-------------------+--------+
+   | utf8    |UTF-8 Unicode| utf8_general_ci   | 3      |
+   | utf8mb4 |UTF-8 Unicode| utf8mb4_general_ci| 4      |
+   #+END_EXAMPLE
+3) MySQL5.8后移除了查询缓存特定

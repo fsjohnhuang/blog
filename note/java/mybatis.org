@@ -322,7 +322,7 @@ JavaBeans
   <!-- select, 映射查询语句
        属性：
          - id, 在mapper的namespace下唯一的标识符
-         - parameterType, 入参类型
+         - parameterType, 入参的完全限定类名或别名
          - resultType, 返回值类型的完全限定名或别名，和属性resultMap不能同时使用
          - resultMap, 外部resultMap的命名引用，用于复杂的映射
          - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
@@ -332,6 +332,7 @@ JavaBeans
          - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
          - resultSetType, 结果集类型，FORWARD_ONLY/SCROLL_SENSITIVE/SCROLL_INSENSITIVE。默认值为unset
          - databaseId, 若设置databaseIdProvider，那么MyBatis会加载所有不带databaseId或匹配当期那databaseId的语句。
+                       可设置为oracle、mysql等，元素内部通过 <if test="_databaseId = 'oracle'"></if> 来书写针对特定数据库的SQL语句
          - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。
          - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
     -->
@@ -339,14 +340,26 @@ JavaBeans
     SELECT * FROM USER WHERE ID = #{id}
   </select>
 
-  <!-- 对于支持主键自增的数据库 -->
+  <!-- 对于支持主键自增的数据库(如MySQL,SQLServer支持auto-generated key field)
+       属性：
+         - keyProperty, 默认值为unset,用于设置通过数据库的getGeneratedKeys方法或<selectKey>子元素获取的返回值，将赋值到领域模型的哪个属性中
+         - keyColumn, 设置数据库自增的主键名。对特定数据库(如PostgreSQL)，若自增的主键不为第一个字段则必须设置
+       返回值：为新增记录的主键值
+    -->
   <insert id="insertUser1" useGeneratedKeys="true" keyProperty="id">
     insert into User(name) values(#{name})
   </insert>
    
-  <!-- 对于不支持主键自增的数据库 -->
+  <!-- 对于不支持主键自增的数据库(如Oracle不支持auto-generated key field) -->
   <insert id="insertUser2">
-    <selectKey keyProperty="id" resultType="int" order=“BEFORE" statementType="PREPARED">
+    <!-- <selectKey>在<insert>和<update>元素中插入查询语句
+         属性：
+           - keyProperty, 默认值为unset,用于设置将selectKey操作结果赋值到领域模型的哪个属性中
+           - resultType, 返回值类型的完全限定名或别名
+           - order, 取值范围BEFORE/AFTER，表示在执行insert/update语句前/后执行selectKey操作
+           - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
+      -->
+    <selectKey keyProperty="id" resultType="_int" order=“BEFORE" statementType="PREPARED">
       select squence_user.nextval as id from dual
     </selectKey>
     insert into User(id, name) values(#{id}, #{name})
@@ -367,10 +380,54 @@ JavaBeans
     from User t1
   </select>
 
-  <!--resultMap, 当结果集列名与返回值类型的字段名称不匹配时，通过resultMap设置映射关系-->
+  <!--resultMap, 当结果集列名与返回值类型的字段名称不匹配时，通过resultMap设置映射关系
+      属性：
+        - id, resultMap标签的标识
+        - type, 返回值的完全限定类型或别名
+        - autoMapping, 默认值为true，自动映射为自动查找与字段名小写同名的属性名，并调用setter方法。
+      子元素：
+        - <id>, 设置主键字段映射
+        - <result>, 设置普通字段映射
+        - <discriminator>, 设置动态映射，其下的设置会与同级映射配置整合后作为整体的映射配置
+          - 属性：
+             - column, 以哪个表字段值作为入参
+             - javaType, 将字段值转换为哪个Java类型
+          - 子元素：
+             - case, 条件判断
+               - 属性：
+                 - value, 期待值
+                 - resultType
+                 - resultMap
+               - 子元素：
+                 - <id>
+                 - <result>
+    -->
   <resultMap id="userResultMap" type="org.john.domain.User">
     <id property="id" column="user_id"/>
     <result property="name" column="user_name"/>
+    <result column="juniorHighSchool" property="juniorHighSchool"/>
+    <discriminator column="during" javaType="_int">
+      <case value="4" resultType="org.john.domain.User">
+        <result column="juniorHighSchool" property="seniorHighSchool"/>
+      </case>
+      <case value="5" resultMap="dynamicRM"/>
+      <case value="6" resultMap="dynamicRM"/>
+    </discriminator>
+  </resultMap>
+  <resultMap id="dynamicRM" type="org.john.domain.User">
+    <result column="juniorHighSchool" property="seniorHighSchool"/>
+  </resultMap>
+  <!-- 通过子元素<constructor>指定通过构造方法赋值来实例化领域模型
+       注意：其子元素顺序必须和构造方法的参数列表顺序一致
+       子元素：
+         - <idArg>, 标记入参的主键
+         - <arg>, 标记入参的普通字段
+    -->
+  <resultMap id="userResultMap1" type="org.john.domain.User">
+    <constructor>
+      <idArg column="ID" javaType="_long"/>
+      <arg column="Name" javaType="string"/>
+    </constructor>
   </resultMap>
   <select id="findUser2" resultMap="userResultMap">
     select * from user
@@ -822,7 +879,11 @@ JavaBeans
   #+END_EXAMPLE
 
 
-[[MyBatis Spring Adapter][https://github.com/mybatis/spring]]
+  [[MyBatis Spring Adapter][https://github.com/mybatis/spring]]
+
+** 另一个部分   
+   通过IOC实现即插即拔功能。
+   通过AOP框架将数据库事务委托给Spring处理。
 
 * 增强工具
 

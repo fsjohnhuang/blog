@@ -1,0 +1,145 @@
+* 依赖下载流程
+1) 本地仓库
+2) 默认中央仓库(http://repo1.maven.org/maven2/)
+3) 
+4) 在pom.xml中自定义的远程仓库私有仓库(代理公共中央仓库)
+
+* 中央仓库
+- search.maven.org
+- mvnrepository.com
+- https://maven.aliyun.com/mvn/view
+
+* 配置
+  配置文件路径: ~$MAVEN_HOME/conf/setting.xml~
+  - 配置本地仓库路径
+    #+BEGIN_EXAMPLE xml
+    <localRepository>/path/to/local-repository</localRepository>
+    #+END_EXAMPLE
+  - 配置远程仓库
+    1) 在 ~$MAVEN_HOME/conf/setting.xml~ 或 ~$LOCAL_REPOSITORY/setting.xml~ 中设置
+       - 规则
+         1) 一个respository最多配置一个mirror
+       - 示例
+       #+BEGIN_EXAMPLE xml
+       <mirrors>
+         <mirror>
+           <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
+           <id>alimaven</id>
+           <!-- 仓库描述 -->
+           <name>aliyun maven</name>
+           <!-- 仓库地址 -->
+           <url>https://maven.aliyun.com/repository/central</url>
+           <!-- 设置表达式匹配请求哪些仓库时则使用该mirror配置
+                * 匹配所有仓库请求，当搭建私有仓库时通常使用*匹配所有仓库请求
+                repo1,repo2 配置repo1或repo2仓库
+                *, !repo1 配置除repo1外的其它所有仓库
+                external:* 配置所有非本地的仓库
+             -->
+           <mirrorOf>central</mirrorOf>
+         </mirror>
+       </mirrors>
+       #+END_EXAMPLE
+    2) 在项目的 ~pom.xml~ 中设置
+       #+BEGIN_EXAMPLE xml
+       <repositories>
+         <repository>
+           <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
+           <id>alimaven</id>
+           <!-- 仓库描述 -->
+           <name>aliyun maven</name>
+           <!-- 仓库地址 -->
+           <url>https://maven.aliyun.com/repository/central</url>
+         </repository>
+       </repositories>
+       #+END_EXAMPLE
+* 创建Maven项目
+  #+BEGIN_EXAMPLE bash
+  # 交互式创建
+  mvn archetype:generate
+
+  # 命令式创建
+  mvn archetype:generate -DgroupId=com.john.app -DartifactId=myapp -DarchetypeArtifactId=maven-archetype-quickstart -DinteractiveMode=false
+  #+END_EXAMPLE
+
+* 通过Jetty运行Web项目
+  Jetty相当与IIS Express
+  #+BEGIN_EXAMPLE xml
+  <!--pom.xml-->
+  <!-- 坐标：下面三个元素唯一标识一个项目
+       groupId不仅仅对应公司或组织名，建议具体到项目名
+       artifactId代表模块名
+    -->
+  <groupId>org.john</groupId>
+  <artifactId>Test</artifactId>
+  <version>1.0-SNAPSHOT</version>
+
+  <packaging>war</packaging> <!--指定通过Maven打包输出war包-->
+
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.11</version>
+      <!-- 依赖范围
+           compile, 编译、测试、运行都有效，默认值
+           test, 测试有效
+           provided, 编译、测试有效，如servlet，运行时容器会提供实现
+           runtime, 运行、测试有效，如jdbc，编译时只需相应的接口，测试和运行时才需要具体的实现
+           system, 编译、测试有效。此范围的依赖必须通过systemPath元素显式的指定依赖文件，因而此类依赖是不通过Maven仓库解析的，一般适合本机测试环境下依赖本地的服务。
+        -->
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!-- 插件 -->
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.mortbay.jetty</groupId>
+          <artifactId>maven-jetty-plugin</artifactId>
+          <version>6.1.26</version>
+          <configuration>
+            <webAppSourceDirectory>src/main/webapp</webAppSourceDirectory>
+            <scanIntervalSeconds>3</scanIntervalSeconds>
+            <contextPath>/jetty</contextPath>
+            <connectors>
+              <connector implementation="org.mortbay.jetty.nio.SelectChannelConnector">
+                <port>4000</port>
+              </connector>
+            </connectors>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+  #+END_EXAMPLE
+  #+BEGIN_EXAMPLE bash
+  mvn jetty:run
+  #+END_EXAMPLE
+
+* 项目结构
+  #+BEGIN_EXAMPLE yml
+  pom.xml
+  src/
+    - main/
+      - java/ Java源码目录
+      - resources/ 资源目录
+      - filters/ 资源过滤目录
+      - assembly/ Assembly descriptors
+      - config/ 配置文件目录
+      - webapp/ 网页源码目录
+    - test
+      - java/
+      - resources/
+      - filters/
+  target/ 输出目录
+  #+END_EXAMPLE
+
+* TODO 构建的生命周期和插件(Build lifecycle & plugin)
+
+
+
+JAR，用于Java程序发布的包
+WAR，用于网站发布的包
+Snapshot，

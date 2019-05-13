@@ -1,0 +1,26 @@
+* 介绍
+将Java代码编译为dll提供给Mono和Microsoft .NET Framework调用。
+三大组件：
+1) 通过.NET实现的JVM
+2) 通过.NET实现的Java类库
+3) 支持Java和.NET相互调用的工具库
+基本DLL：
+1) IKVM.OpenJDK.Core.dll
+2) IKVM.Runtime.dll
+3) IKVM.Runtime.JNI.dll
+其他功能DLL： IKVM.OpenJDK.*.dll
+
+* 命令
+#+BEGIN_EXAMPLE bash
+ikvm # 和命令java类似的启动执行程序
+# 和命令javac类似，将java类和jar编译为.NET汇编
+# 选项：
+#  -target:exe|winexe|library|module，配置转译目标：Console可执行文件|WinForm可执行文件|动态链接库(.dll)|.net模块
+#  -out:<file>，配置输出文件路径
+#  -version:M.m.b.r，配置程序集版本
+ikvmc 
+ikvmstub # 和命令javap类似，反汇编
+
+# 转译JAR
+ikvmc -out:Hello.dll -target:library Hello.jar
+#+END_EXAMPLE

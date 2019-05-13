@@ -124,3 +124,40 @@ Allow 18.90.12.145
 |  2 | 数据链路层 | 数据链路层协议 | 数据链路层 | 帧       |
 |  1 | 物理层     | 物理层协议     | 物理层     | 比特     |
 | 层 | 主机A      |                | 主机B      | 数据单位 |
+
+** FTP
+
+*** Client
+    #+BEGIN_EXAMPLE bash
+    # 进入 FTP Client
+    ftp
+    # 连接FTP Server，后续需要输入用户名和密码
+    open <ip>
+
+    # 在FTP Server上执行命令
+    dir
+    mkdir <dir>
+    # rm -rf
+    mrdir <dir>
+    cd <dir>
+    # 下载文件到本地
+    get <file>
+    # 批量下载文件到本地
+    # <pattern> 值如 *.*
+    mget <pattern>
+    # 删除文件
+    delete <pattern>
+    
+    # 在本地上执行命令
+    # ls
+    !dir
+    # cd
+    lcd
+    # 上传文件到FTP Server
+    put <file>
+    # 批量上传文件到FTP Server
+    mput <pattern>
+
+    # 退出FTP Client
+    bye
+    #+END_EXAMPLE
