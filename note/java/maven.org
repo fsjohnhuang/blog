@@ -1,6 +1,7 @@
 JAR，用于Java程序发布的包
 WAR，用于网站发布的包
 
+[[http://maven.apache.org/][官网]]
 
 * 依赖下载流程
 1) 本地仓库
@@ -56,15 +57,6 @@ WAR，用于网站发布的包
          </repository>
        </repositories>
        #+END_EXAMPLE
-* 创建Maven项目
-  #+BEGIN_EXAMPLE bash
-  # 交互式创建
-  mvn archetype:generate
-
-  # 命令式创建
-  mvn archetype:generate -DgroupId=com.john.app -DartifactId=myapp -DarchetypeArtifactId=maven-archetype-quickstart -DinteractiveMode=false
-  #+END_EXAMPLE
-
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express
   #+BEGIN_EXAMPLE xml
@@ -167,6 +159,12 @@ Maven遵循“约定优于配置”的策略(convention over configuration)
   <groupId>com.john</groupId>
   <artifactId>StudentMIS</artifactId>
   <version>1.0.0-SNAPSHOT</version>
+  <!-- jar(默认值)
+       war
+       ear
+       pom, 表示项目仅仅包含了元数据(metadata)
+       内置配置了，不同的打包模式对应的不同goal和phase绑定关系
+    -->
   <packaging>pom</packaging>
   
   <!-- 描述子模块 -->
@@ -258,6 +256,10 @@ Maven遵循“约定优于配置”的策略(convention over configuration)
 # 查看版本号
 mvn -v
 
+
+# 交互式创建
+mvn archetype:generate
+
 # 创建项目
 mvn archetype:generate -DgroupId=com.john -DartifactId=Test -Dversion=1.0.0-SNAPSHOT -DarchetypeArtifactId=maven-archetype-webapp -DinteractiveMode=false
 
@@ -294,7 +296,7 @@ mvn deploy
 #+END_EXAMPLE
 
 * Maven生命周期
-  1) default lifecycle
+  1) default lifecycle, handles the project deployment
      1) validate, validate the project is correct and all necessary information is available.
      2) compile, compile the source code of the project.
      3) test, test the compiled source code using a suitable unit testing framework. these tests should not require the code be packaged or deployed.
@@ -303,3 +305,10 @@ mvn deploy
      6) verify, run any checks to verify the package is valid and meets quality criteria.
      7) install, install the package into the local repository, for use as a denpendency in other projects locally.
      8) deploy, done in integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.
+  2) clean lifecycle, cleans up artifacts created by prior builds
+  3) site lifecycle, generates site documentation for this project
+
+  对于以 ~pre-,post-,process-~ 开头的生命周期阶段，并没mvn命令与之对应。因为这些阶段均用于作准备或会产生对外界无用的临时状态数据。
+
+* Maven 插件
+  Maven的插件称为goal，一个goal可以对应0～N个生命周期阶段，一个生命周期阶段可以对应0~N个goal。

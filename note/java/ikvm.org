@@ -1,3 +1,8 @@
+
+* 下载地址
+http://www.mirrorservice.org/
+源地址为sourceforge.org，但国内无法访问则可通过上述地址访问国内多个无法访问的代码和资源库。
+
 * 介绍
 将Java代码编译为dll提供给Mono和Microsoft .NET Framework调用。
 三大组件：

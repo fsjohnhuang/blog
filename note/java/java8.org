@@ -68,8 +68,18 @@ import java.io.*;
 
 ** Hashtable
 
+** ConcurrentHashMap
+
 * TODO 打包发布
   jar、ear和war的差别
 
 * JNI
 * JNDI
+* QA
+1) CopyOnWrite
+2) 泛型
+3) 线程池
+4) CAS
+5) AQS
+6) JVM
+ 
