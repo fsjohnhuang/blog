@@ -1075,6 +1075,7 @@
 *** Bean的作用域
     1) singleton, Spring容器中最多只有一个实例，无论有多少个Bean引用它，始终指向同一个实例。
        用于无会话状态的Bean(Dao组件、Service组件)
+       注意：默认情况下在Spring容器初始化时就会实例化作用域为singleton的Bean，并将实例存放到内部的Map中，后续从Map中直接获取。
     2) prototype, 每次通过Spring容器获取时，Spring容器都会创建一个全新的实例。
        用于需要保持会话状态的Bean(Struct2的Action类)
     3) request, 同一个HTTP请求中，每次通过Spring容器获取时将返回同一个实例；不在同一个HTTP请求中时则返回全新的实例。即实例仅在当前HTTP Request内有效。
@@ -1101,6 +1102,7 @@
     |   12 | 对于scope为singleton的Bean，若设置destroy-method则调用其值指定的方法                                                                 |
 
 ** Spring IoC/DI
+   Spring IoC通过反射实习。
    IoC和DI只是从不同的角度描述同一个事物。
    - IoC(Inversion of Control, 控制反转)
      - 实例由Spring容器创建，而不是由实例的使用者来创建；
@@ -1155,6 +1157,16 @@
              <!-- 设置注入方式，name为调用者的成员变量名称，ref为被注入的Bean组件id -->
              <constructor-arg index="0" ref="userInfoBean"></constructor-arg>
              <constructor-arg index="1" value="john"></constructor-arg>
+         </bean>
+         #+END_EXAMPLE
+    3) Interface Injection
+       作为注入其他服务的接口，如JNDI数据源注入——由Tomcat或其他服务器中提供具体的JNDI数据源。
+       - 示例
+         #+BEGIN_EXAMPLE xml
+         <bean id="dataSource" class="org.springframework.jndi.JndiObjectFactoryBean">
+           <property name="jndiName">
+             <value>java:comp/env/jdbc/mybatis</value>
+           </property>
          </bean>
          #+END_EXAMPLE
 

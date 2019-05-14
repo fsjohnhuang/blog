@@ -861,3 +861,10 @@ UNREACHABLE! => {"changed": false, "msg": "plaintext: HTTPConnectionPool(host='1
 2) 启动Jenkins
 这时Jenkins已将将这两个环境变量的值读取到内存中，即使后续 ~unset http_proxy~ 和 ~unset https_proxy~ 也无法更新Jenkins的配置。
 因此需要清理这两个环境变量后，重启Jenkins才能生效。
+
+* Continuous Delivery Foundation(CDF)
+  作为Linux Foundation的子基金会致力推动CI/CD开源(open source and vendor neutral)社区生态规范发展，包含Jenkins, Jenkins X, Spinnaker and Tekton。
+  - Jenkins X
+    Cloud Native Jenkins, 用于发布基于Kubernetes的应用。
+  - Spinnaker
+    
