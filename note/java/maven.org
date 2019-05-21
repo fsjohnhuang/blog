@@ -57,6 +57,22 @@ WAR，用于网站发布的包
          </repository>
        </repositories>
        #+END_EXAMPLE
+  - 配置下载依赖的源码和javadoc
+    #+BEGIN_EXAMPLE xml
+    <profiles>
+      <profile>
+        <id>downloadSources</id>
+        <properties>
+          <downloadSources>true</downloadSources>
+          <downloadJavadocs>true</downloadJavadocs>
+        </properties>
+      </profile>
+    </profiles>
+    <activeProfiles>
+      <activeProfile>downloadSources</activeProfile>
+    </activeProfiles>
+    #+END_EXAMPLE
+
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express
   #+BEGIN_EXAMPLE xml
@@ -256,7 +272,6 @@ Maven遵循“约定优于配置”的策略(convention over configuration)
 # 查看版本号
 mvn -v
 
-
 # 交互式创建
 mvn archetype:generate
 
@@ -293,6 +308,12 @@ mvn site
 
 # 发布
 mvn deploy
+
+# 下载源码
+mvn dependency:sources
+
+# 下载javadoc
+mvn dependency:resolve -Dclassifier=javadoc
 #+END_EXAMPLE
 
 * Maven生命周期

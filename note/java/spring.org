@@ -977,8 +977,8 @@
            #+END_EXAMPLE
          - 手工实现root/child ApplicationContext
            #+BEGIN_EXAMPLE java
-           ApplicationContext rootApplicationContext = new ClassPathXmlAttributeContext(new String[] {"applicationContext.xml"});
-           ApplicationContext webApplicationContext = new ClassPathXmlAttributeContext(new String[] {"web.xml"}, rootApplicationContext);
+           ApplicationContext rootApplicationContext = new ClassPathXmlApplicationContext(new String[] {"applicationContext.xml"});
+           ApplicationContext webApplicationContext = new ClassPathXmlApplicationContext(new String[] {"web.xml"}, rootApplicationContext);
            #+END_EXAMPLE
       4) SpEL
          Spring3.0增加的运行时查询和操作对象图的表达式语言。
