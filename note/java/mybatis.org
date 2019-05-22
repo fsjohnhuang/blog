@@ -399,207 +399,290 @@ p  - 常用方法
   </configuration>
   #+END_EXAMPLE
 * SQL映射文件配置
-  #+BEGIN_EXAMPLE xml
-  <mapper namespace="john.mybatis.mapper.UserMapper">
-
-  <!-- select, 映射查询语句
-       属性：
-         - id, 在mapper的namespace下唯一的标识符
-         - parameterType, 可选属性，入参的完全限定类名或别名
-         - resultType, 返回值类型的完全限定名或别名，和属性resultMap不能同时使用
-         - resultMap, 外部resultMap的命名引用，用于复杂的映射。和属性resultType不能同时使用
-         - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
-         - useCache, 为true时语句执行结果被二级缓存，为false时禁用二级缓存。select语句中默认值为true
-         - timeout, 返回请求结果超时时间
-         - fetchSize, 每次返回的结果的最大行数
-         - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
-         - resultSetType, 结果集类型，FORWARD_ONLY/SCROLL_SENSITIVE/SCROLL_INSENSITIVE。默认值为unset
-         - databaseId, 若在mybatis-config.xml中设置databaseIdProvider，则该属性值可设置为databaseIdProvider中设置的数据库厂商别名，否则要设置为数据库厂商全名如“Oracle”,"SQL Server","MySQL","DB2"。
-                       MyBaits会从Connection实例中获取当前操作的数据库信息，然后加载所有不带databaseId或匹配当期那databaseId的语句。
-                       元素内部也可通过 <if test="_databaseId = 'oracle'"></if> 来书写针对特定数据库的SQL语句
-         - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。
-         - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
-    -->
-  <!-- 接口方法为 public Map<String, Object> selectUser(int id) -->    
-  <select id="selectUser" parameterType="int" resultType="map" databaseId="mysql">
-    SELECT * FROM USER WHERE ID = #{id}
-  </select>
-  
-  <!-- 接口方法为 public List<User> selectUsers() -->
-  <!-- 接口方法为 
-       @MapKey("id") // 指定用User的id作为Map的键名
-       public Map<String, User> selectUsers() -->
-  <select id="selectUsers" resultType="org.john.domain.User">
-    SELECT * FROM USER
-  </select>
-
-  <!-- 调用时直接传入 "%john%" 即可 -->
-  <select id="selectUsersLike" resultType="org.john.domain.User">
-    select * from user where name like #{namelike}
-  </select>
-
-  <!-- 对于支持主键自增的数据库(如MySQL,SQLServer支持auto-generated key field)
-       属性：
-         - userGeneratedKeys，默认值为false，用于设置是否获取数据库自增主键值，并且需要通过keyProperty指定将该值保存到POJO的哪个变量中
-           java.sql.Statement中提供一个java.sql.ResultSet getGeneratedKeys()的方法获取数据库自增主键值，而该属性即告知MyBatis调用该方法获取自增主键值
-         - keyProperty, 默认值为unset,用于设置通过数据库的getGeneratedKeys方法或<selectKey>子元素获取的返回值，将赋值到领域模型的哪个属性中
-         - keyColumn, 设置数据库自增的主键名。对特定数据库(如PostgreSQL)，若自增的主键不为第一个字段则必须设置
-       示例
-       // Mapper接口
-       public int insert(User user);
-
-       // 使用
-       UserMapper userMapper = session.getMapper(UserMapper.class);
-       User user = new User();
-       user.setName("john");
-       int count = userMapper.save(user);
-       System.out.println(string.format("影响的记录数: %s", count));
-       System.out.println(string.format("自增主键值: %s", user.getId()));
-    -->
-  <insert id="insertUser1" useGeneratedKeys="true" keyProperty="id">
-    insert into User(name) values(#{name})
-  </insert>
-   
-  <!-- 对于不支持主键自增的数据库(如Oracle不支持auto-generated key field) -->
-  <insert id="insertUser2">
-    <!-- <selectKey>在<insert>和<update>元素中插入查询语句
-         属性：
-           - keyProperty, 默认值为unset,用于设置将selectKey操作结果赋值到领域模型的哪个属性中
-           - resultType, 返回值类型的完全限定名或别名
-           - order, 取值范围BEFORE/AFTER，表示在执行insert/update语句前/后执行selectKey操作
-           - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
-      -->
-    <selectKey keyProperty="id" resultType="_int" order=“BEFORE" statementType="PREPARED">
-      select squence_user.nextval as id from dual
-    </selectKey>
-    insert into User(id, name) values(#{id}, #{name})
-  </insert>
-
-  <!-- <update> 和 <delete> 类似 -->
-
-  <!--sql, 可被其他语句引用的可重用语句块，可循环引用-->
-  <sql id="userColumns">
-    ${alias}.id, ${alias}.name
-  </sql>
-  <select id="findUser">
-    select
-    <include refid="userColumns">
-        <property name="alias" value="t1"/>
-    </include>
-    from User t1
-  </select>
-
-  <!--resultMap, 当结果集列名与返回值类型的字段名称不匹配时，通过resultMap设置映射关系
-      属性：
-        - id, resultMap标签的标识
-        - type, 返回值的完全限定类型或别名
-        - autoMapping, 默认值为true，自动映射为自动查找与字段名小写同名的属性名，并调用setter方法。
-      子元素：
-        - <id>, 设置主键字段映射
-        - <result>, 设置普通字段映射
-        - <discriminator>, 设置动态映射，其下的设置会与同级映射配置整合后作为整体的映射配置
-          - 属性：
-             - column, 以哪个表字段值作为入参
-             - javaType, 将字段值转换为哪个Java类型
-          - 子元素：
-             - case, 条件判断
-               - 属性：
-                 - value, 期待值
-                 - resultType
-                 - resultMap
-               - 子元素：
-                 - <id>
-                 - <result>
-    -->
-  <resultMap id="userResultMap" type="org.john.domain.User">
-    <id property="id" column="user_id"/>
-    <result property="name" column="user_name"/>
-    <result column="juniorHighSchool" property="juniorHighSchool"/>
-    <discriminator column="during" javaType="_int">
-      <case value="4" resultType="org.john.domain.User">
-        <result column="juniorHighSchool" property="seniorHighSchool"/>
-      </case>
-      <case value="5" resultMap="dynamicRM"/>
-      <case value="6" resultMap="dynamicRM"/>
-    </discriminator>
-  </resultMap>
-  <resultMap id="dynamicRM" type="org.john.domain.User">
-    <result column="juniorHighSchool" property="seniorHighSchool"/>
-  </resultMap>
-  <!-- 通过子元素<constructor>指定通过构造方法赋值来实例化领域模型
-       注意：其子元素顺序必须和构造方法的参数列表顺序一致
-       子元素：
-         - <idArg>, 标记入参的主键
-         - <arg>, 标记入参的普通字段
-    -->
-  <resultMap id="userResultMap1" type="org.john.domain.User">
-    <constructor>
-      <idArg column="ID" javaType="_long"/>
-      <arg column="Name" javaType="string"/>
-    </constructor>
-  </resultMap>
-  <select id="findUser2" resultMap="userResultMap">
-    select * from user
-  </select>
-
-  <resultMap id="userResultMap" type="org.john.domain.User">
-    <id property="id" column="user_id"/>
-    <result property="name" column="user_name"/>
-    <!--多对一/一对一-->
-    <association property="clazz" 
-                 javaType="org.john.domain.Clazz"
-                 column="clazz_id"
-                 select="selectClazzWithId"/>
-  </resultMap>
-  <select id="selectClazzWithId" resultType="org.john.domain.Clazz">
-     -- #{id}为org.john.domain.Clazz的id字段
-     select * from clazz where id = #{id}
-  </select>
-  <select id="selectUser" resultMap="userResultMap">
-     select * from user
-  </select>
-
-  <resultMap id="clazzResultMap" type="org.john.domain.Clazz">
-    <id property="id" column="clazz_id"/>
-    <result property="name" column="clazz_name"/>
-    <!--一对多-->
-    <collection property="students"
-                javaType="ArrayList"
-                ofType="org.john.domain.Student"
-                column="clazz_id"
-                select="selectStudentWithClazzId"
-                fetchType="lazy"/>
-   <!-- fetchType值为eager表示立即加载、lazy表示延迟加载
-        要启用延迟必须在mybatis-config.xml中启用lazyLoadingEnabled和关闭aggressiveLazyLoading-->
-  </resultMap>
-  <select id="selectClazz" resultMap="clazzResultMap">
-     select * from clazz
-  </select>
-  <select id="selectUserWithId">
-     -- #{id}为org.john.domain.Clazz的id字段
-     select * from user where clazz_id=#{id}
-  </select>
-  </mapper>
-  #+END_EXAMPLE
-
-  通过mapper接口对象操作数据库
-  #+BEGIN_EXAMPLE java
-  // 定义mapper接口对象
-  public interface ClazzMapper {
-      Clazz selectClazz();
-  }
-
-  public interface UserMapper {
-      User selectUser();
-  }
-
-  // 主入口
-  ClazzMapper cm = session.getMapper(ClazzMapper.class);
-  UserMapper um = session.getMapper(UserMapper.class);
-  Clazz clazz = cm.selectClazz();
-  User user = um.selectUser();
-  #+END_EXAMPLE
   *注意：* 与select/update/delete语句对应的Mapper接口方法，其返回值默认可设置为 ~void,int,long,boolean,Integer,Long,Boolean~ 来获取操作所影响的记录数目。
+
+** 基本映射配置
+   #+BEGIN_EXAMPLE xml
+   <mapper namespace="john.mybatis.mapper.UserMapper">
+
+   <!-- select, 映射查询语句
+        属性：
+          - id, 在mapper的namespace下唯一的标识符
+          - parameterType, 可选属性，入参的完全限定类名或别名
+          - resultType, 返回值类型的完全限定名或别名，和属性resultMap不能同时使用
+          - resultMap, 外部resultMap的命名引用，用于复杂的映射。和属性resultType不能同时使用
+          - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
+          - useCache, 为true时语句执行结果被二级缓存，为false时禁用二级缓存。select语句中默认值为true
+          - timeout, 返回请求结果超时时间
+          - fetchSize, 每次返回的结果的最大行数
+          - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
+          - resultSetType, 结果集类型，FORWARD_ONLY/SCROLL_SENSITIVE/SCROLL_INSENSITIVE。默认值为unset
+          - databaseId, 若在mybatis-config.xml中设置databaseIdProvider，则该属性值可设置为databaseIdProvider中设置的数据库厂商别名，否则要设置为数据库厂商全名如“Oracle”,"SQL Server","MySQL","DB2"。
+                        MyBaits会从Connection实例中获取当前操作的数据库信息，然后加载所有不带databaseId或匹配当期那databaseId的语句。
+                        元素内部也可通过 <if test="_databaseId = 'oracle'"></if> 来书写针对特定数据库的SQL语句
+          - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。
+          - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
+     -->
+   <!-- 接口方法为 public Map<String, Object> selectUser(int id) -->    
+   <select id="selectUser" parameterType="int" resultType="map" databaseId="mysql">
+     SELECT * FROM USER WHERE ID = #{id}
+   </select>
+   
+   <!-- 接口方法为 public List<User> selectUsers() -->
+   <!-- 接口方法为 
+        @MapKey("id") // 指定用User的id作为Map的键名
+        public Map<String, User> selectUsers() -->
+   <select id="selectUsers" resultType="org.john.domain.User">
+     SELECT * FROM USER
+   </select>
+
+   <!-- 调用时直接传入 "%john%" 即可 -->
+   <select id="selectUsersLike" resultType="org.john.domain.User">
+     select * from user where name like #{namelike}
+   </select>
+
+   <!-- 对于支持主键自增的数据库(如MySQL,SQLServer支持auto-generated key field)
+        属性：
+          - userGeneratedKeys，默认值为false，用于设置是否获取数据库自增主键值，并且需要通过keyProperty指定将该值保存到POJO的哪个变量中
+            java.sql.Statement中提供一个java.sql.ResultSet getGeneratedKeys()的方法获取数据库自增主键值，而该属性即告知MyBatis调用该方法获取自增主键值
+          - keyProperty, 默认值为unset,用于设置通过数据库的getGeneratedKeys方法或<selectKey>子元素获取的返回值，将赋值到领域模型的哪个属性中
+          - keyColumn, 设置数据库自增的主键名。对特定数据库(如PostgreSQL)，若自增的主键不为第一个字段则必须设置
+        示例
+        // Mapper接口
+        public int insert(User user);
+
+        // 使用
+        UserMapper userMapper = session.getMapper(UserMapper.class);
+        User user = new User();
+        user.setName("john");
+        int count = userMapper.save(user);
+        System.out.println(string.format("影响的记录数: %s", count));
+        System.out.println(string.format("自增主键值: %s", user.getId()));
+     -->
+   <insert id="insertUser1" useGeneratedKeys="true" keyProperty="id">
+     insert into User(name) values(#{name})
+   </insert>
+    
+   <!-- 对于不支持主键自增的数据库(如Oracle不支持auto-generated key field) -->
+   <insert id="insertUser2">
+     <!-- <selectKey>在<insert>和<update>元素中插入查询语句
+          属性：
+            - keyProperty, 默认值为unset,用于设置将selectKey操作结果赋值到领域模型的哪个属性中
+            - resultType, 返回值类型的完全限定名或别名
+            - order, 取值范围BEFORE/AFTER，表示在执行insert/update语句前/后执行selectKey操作
+            - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
+       -->
+     <selectKey keyProperty="id" resultType="_int" order=“BEFORE" statementType="PREPARED">
+       select squence_user.nextval as id from dual
+     </selectKey>
+     insert into User(id, name) values(#{id}, #{name})
+   </insert>
+
+   <!-- <update> 和 <delete> 类似 -->
+
+   <!--sql, 可被其他语句引用的可重用语句块，可循环引用-->
+   <sql id="userColumns">
+     ${alias}.id, ${alias}.name
+   </sql>
+   <select id="findUser">
+     select
+     <include refid="userColumns">
+         <property name="alias" value="t1"/>
+     </include>
+     from User t1
+   </select>
+
+   <!--resultMap, 当结果集列名与返回值类型的字段名称不匹配时，通过resultMap设置映射关系
+       属性：
+         - id, resultMap标签的标识
+         - type, 返回值的完全限定类型或别名
+         - autoMapping, 默认值为true，自动映射为自动查找与字段名小写同名的属性名，并调用setter方法。
+       子元素：
+         - <id>, 设置主键字段映射
+         - <result>, 设置普通字段映射
+         - <discriminator>, 设置动态映射，其下的设置会与同级映射配置整合后作为整体的映射配置
+           - 属性：
+              - column, 以哪个表字段值作为入参
+              - javaType, 将字段值转换为哪个Java类型
+           - 子元素：
+              - case, 条件判断
+                - 属性：
+                  - value, 期待值
+                  - resultType
+                  - resultMap
+                - 子元素：
+                  - <id>
+                  - <result>
+     -->
+   <resultMap id="userResultMap" type="org.john.domain.User">
+     <id property="id" column="user_id"/>
+     <result property="name" column="user_name"/>
+     <result column="juniorHighSchool" property="juniorHighSchool"/>
+     <discriminator column="during" javaType="_int">
+       <case value="4" resultType="org.john.domain.User">
+         <result column="juniorHighSchool" property="seniorHighSchool"/>
+       </case>
+       <case value="5" resultMap="dynamicRM"/>
+       <case value="6" resultMap="dynamicRM"/>
+     </discriminator>
+   </resultMap>
+   <resultMap id="dynamicRM" type="org.john.domain.User">
+     <result column="juniorHighSchool" property="seniorHighSchool"/>
+   </resultMap>
+   <!-- 通过子元素<constructor>指定通过构造方法赋值来实例化领域模型
+        注意：其子元素顺序必须和构造方法的参数列表顺序一致
+        子元素：
+          - <idArg>, 标记入参的主键
+          - <arg>, 标记入参的普通字段
+     -->
+   <resultMap id="userResultMap1" type="org.john.domain.User">
+     <constructor>
+       <idArg column="ID" javaType="_long"/>
+       <arg column="Name" javaType="string"/>
+     </constructor>
+   </resultMap>
+   <select id="findUser2" resultMap="userResultMap">
+     select * from user
+   </select>
+   #+END_EXAMPLE
+
+** 一对一/多对一关系
+   #+BEGIN_EXAMPLE java
+   package org.john.domain;
+
+   @Data
+   public class Student{
+     private Integer id;
+     private String name;
+     private Clazz clazz;
+   }
+   @Data
+   public class Clazz{
+     private Integer id;
+     private String name;
+   }
+   #+END_EXAMPLE
+
+   #+BEGIN_EXAMPLE xml
+   <!-- 1. 联合查询时，通过级联属性的方式进行映射 -->
+   <select id="getStudentWithClassInfo" resultMap="getStudentWithClassInfo">
+   select a.id, a.name, b.id class_id, b.name class_name
+   from tbl_student a join tbl_class b on (a.class_id = b.id)
+   </select>
+
+   <resultMap id="getStudentWithClassInfo" type="org.john.domain.Student">
+     <id property="id" column="id"/>
+     <result property="name" column="name"/>
+     <result property="clazz.id" column="class_id"/>
+     <result property="clazz.name" column="class_name"/>
+   </resultMap>
+
+   <!-- 2. 联合查询时，通过association关联的方式进行映射 -->
+   <select id="getStudentWithClassInfo" resultMap="getStudentWithClassInfo">
+   select a.id, a.name, b.id class_id, b.name class_name
+   from tbl_student a join tbl_class b on (a.class_id = b.id)
+   </select>
+
+   <resultMap id="getStudentWithClassInfo" type="org.john.domain.Student">
+     <id property="id" column="id"/>
+     <result property="name" column="name"/>
+     <!-- property: 次查询结果存放的POJO属性名
+          javaType: 次查询结果存放的POJO属性的数据类型
+       -->
+     <association property="clazz" javaType="org.john.domain.Clazz">
+       <id property="id" column="class_id"/>
+       <result property="name" column="class_name"/>
+     </association>
+   </resultMap>
+
+   <!-- 3. 分步查询时，通过association关联的方式进行映射 -->
+   <select id="getClassInfo" resultType="org.john.Clazz">
+   -- 次查询
+   select * from tbl_class where id = #{id}
+   </select>
+
+   <select id="getStudent" resultMap="getStudent">
+   -- 主查询
+   select * from tbl_student
+   </select>
+
+   <resultMap id="getStudent" type="org.john.domain.Student">
+     <id property="id" column="id"/>
+     <result property="name" column="name"/>     
+     <!-- property: 次查询结果存放的POJO属性名
+          select: 次查询的id
+          column: 将主查询结果的哪个数据库表字段作为参数传递给次查询
+          fetchType: 次查询执行时机
+                     lazy(默认值)，懒执行，只有在mybatis-config.xml/settings中启动lazyLoadingEnabled和禁用aggressiveLazyLoading才能生效
+                     eager，和主查询一起执行
+          
+       -->
+     <association property="clazz"
+                  select="org.john.mapper.ClassInfoMapper.getClassInfo" column="class_id"
+                  fetchType="lazy"/>
+   </resultMap>
+   #+END_EXAMPLE
+
+** 一对多关系
+   #+BEGIN_EXAMPLE java
+   package org.john.domain;
+
+   @Data
+   public class Student{
+     private Integer id;
+     private String name;
+     private Clazz clazz;
+   }
+   @Data
+   public class Clazz{
+     private Integer id;
+     private String name;
+     private List<Student> students;
+   }
+   #+END_EXAMPLE
+
+   #+BEGIN_EXAMPLE xml
+   <!-- 1. 联合查询，通过collection实现嵌套结果集的方式 -->
+   <select id="getClassInfoWithStudents" resultMap="getClassInfoWithStudents">
+   select a.id, a.name, b.id student_id, b.name student_name
+   from tbl_class a left join tbl_student b on (a.id=b.class_id)
+   where id = #{id}
+   </select>
+   
+   <resultMap id="getClassInfoWithStudents" type="org.john.domain.Clazz">
+     <id property="id" column="id"/>
+     <result property="name" column="name"/>
+     <collection property="students" javaType="ArrayList" ofType="org.john.domain.Student">
+       <id property="id" column="student_id"/>
+       <result property="name" column="student_name"/>
+     </collection>
+   </resultMap>
+
+   <!-- 2. 分步查询时，通过collection方式 -->
+   <select id="getStudentByClassId" resultType="org.john.domain.Student">
+   select id, name
+   from tbl_student
+   where class_id = #{class_id}
+   </select>
+
+   <select id="getClassInfo" resultMap="getClassInfo">
+     <id property="id" column="id"/>
+     <result property="name" column="name"/>
+     <collection property="students" javaType="ArrayList"
+                 select="org.john.mapper.StudentMapper.getStudentByClassId"
+                 column="class_id"
+                 fetchType="lazy">
+     </collection>
+   </select>
+   #+END_EXAMPLE
+
+** 向association和collection子查询传递多个参数
+   由于MyBatis会将参数封装到Map实例中，因此传递多个时直接传递Map字面量即可
+   #+BEGIN_EXAMPLE xml
+   <!-- column="{key1=column1, key2=column2}" -->
+   column="{id=class_id, name=class_name}"
+   #+END_EXAMPLE
+
 * SQL映射文件中的参数
   #+BEGIN_EXAMPLE java
   // 单个入参且入参为primitive value时，入参名称随意即可
@@ -638,128 +721,171 @@ p  - 常用方法
   而0~N为无名参数的键，若该参数设置为命名参数则对应的索引号将被具体设置的名称所替代。
 
 * 动态SQL
-  MyBatis使用基于OGNL的表达式实现动态SQL。
-  - if
-    #+BEGIN_EXAMPLE xml
-    <select id="selectEmployeeByLoginLike" parameterType="hashmap" resultType="org.john.domain.User">
-    select * from user where state = 'ACTIVE'
-    <if test="loginname != null and password != null">
-      and loginname = #{loginname} 
-      and password = #{password}
-    </if>
-    </select>
-    #+END_EXAMPLE
-    #+BEGIN_EXAMPLE java
-    public interface EmployeeMapper{
-        List<User> selectEmployeeByLoginLike(HashMap<String, Object> params);
-    }
-    
-    EmployeeMapper employeeMapper = session.getMapper(EmployeeMapper.class);
-    HashMap<String, Object> params = new HashMap<String, Object>();
-    params.put("loginname", "john");
-    params.put("password", "123");
-    List<User> users = employeemapper.selectEmployeeByLoginLike(params);
-    users.forEach(user -> System.out.println(user.getName()));
-    #+END_EXAMPLE
-  - choose(when, otherwise)
-    if...elif...else语句
-    #+BEGIN_EXAMPLE xml
-    <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
-    select * from user where state = 'ACTIVE'
-    <choose>
-       <when test="id != null">
-       and id = #{id}
-       </when>
-       <when test="loginname != null and password != null">
+  MyBatis使用基于OGNL的表达式实现动态SQL，就是在条件判断、表达式计算中采用OGNL表达式。
+  
+** [[http://commons.apache.org/proper/commons-ognl/][OGNL(Object-Graph Navigation Language)]]
+   | 功能         | 示例                                      |
+   |--------------+-------------------------------------------|
+   | 访问对象属性 | person.name                               |
+   | 调用方法     | person.getName()                          |
+   | 访问静态属性 | @java.lang.Math@PI                        |
+   | 调用静态方法 | @java.util.UUID@randomUUID()              |
+   | 调用构造方法 | new com.atguigu.bean.Person("admin").name |
+   | 运算符       | +,-,*,/                                   |
+   | 逻辑运算符   | in,not in, >, >=,<,<=,==,!=               |
+   | 关系运算符   | &&,||,and,or
+   *注意* xml中 ~<,>,",&&,||~ 等必须转义才能使用
+
+** 动态SQL元素详解
+   - if
+     #+BEGIN_EXAMPLE xml
+     <select id="selectEmployeeByLoginLike" parameterType="hashmap" resultType="org.john.domain.User">
+     select * from user where state = 'ACTIVE'
+     <if test="loginname != null and password != null and loginname != &quot;&quot;">
        and loginname = #{loginname} 
        and password = #{password}
-       </when>
-       <otherwise>
-       and sex = 'male'
-       </otherwise>
-    </choose>
-    </select>
-    #+END_EXAMPLE
-  - where
-    只有一个以上的if条件有值才去插入where子句，并且会自动处理多余的and或or的开头保留字。
-    #+BEGIN_EXAMPLE xml
-    <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
-    select * from user
-    <where>
-       <if test="state != null">
-       state = #{state}
-       </if>
-       <if test="id != null">
-       and id = #{id}
-       </if>
-       <if test="loginname != null and password != null">
-       and loginname = #{loginname} 
-       and password = #{password}
-       </if>
-       <if>
-       and sex = 'male'
-       </if>
-    </where>
-    </select>
-    #+END_EXAMPLE
-  - set
-    自动处理多余的逗号
-    #+BEGIN_EXAMPLE xml
-    <update id="selectUsers" parameterType="hashmap">
-    update user
-    <set>
-      <if test="loginname != null">loginname=#{loginname},</if>
-      <if test="password != null">password=#{password},</if>
-    </set>
-    </update>
-    #+END_EXAMPLE
-  - foreach
-    #+BEGIN_EXAMPLE xml
-    <select id="selectUsers" resultType="org.john.domain.User">
-    select * from user
-    where id in 
-    <!--当入参为List或Array时会自动添加到内部Map实例中，List入参的键名为list，Array入参的键名为array。
-        属性item定义元素引用名称
-        属性index定义元素索引名称
-        属性collection指定入参的键名list|array
-      -->
-    <foreach item="item" index="index" collection="list" open="(" separator="," close=")">
-    #{item}
-    </foreach>
-    </select>
-    #+END_EXAMPLE
-  - bind
-    从OGNL表达式中创建一个变量，并将其绑定到上下文。
-    #+BEGIN_EXAMPLE xml
-    <select id="selectUsre" resultType="org.john.domain.User">
-    <bind name="pattern" value="'%' + _parameter.getName() + '%'"/>
-    select * from user
-    where loginname like #{pattern}
-    </select>
-    #+END_EXAMPLE
-  - trim
-    当标签体有内容时则为内容添加前缀、后缀，而且可以除去内容前后部分内容
-    #+BEGIN_EXAMPLE xml
-    <select id="findActiveBlogLike"
-         resultType="Blog">
-      SELECT * FROM BLOG
-      <!--
-        prefix属性值为添加到内容的前缀信息
-        prefixOverrides属性值为除去内容前的内容，当需要除去多个内容时，使用管道符|分割，注意：空格也将被除去
-      -->
-      <trim prefix="where" prefixOverrides="AND |OR ">
+     </if>
+     </select>
+     #+END_EXAMPLE
+     #+BEGIN_EXAMPLE java
+     public interface EmployeeMapper{
+         List<User> selectEmployeeByLoginLike(HashMap<String, Object> params);
+     }
+     
+     EmployeeMapper employeeMapper = session.getMapper(EmployeeMapper.class);
+     HashMap<String, Object> params = new HashMap<String, Object>();
+     params.put("loginname", "john");
+     params.put("password", "123");
+     List<User> users = employeemapper.selectEmployeeByLoginLike(params);
+     users.forEach(user -> System.out.println(user.getName()));
+     #+END_EXAMPLE
+   - choose(when, otherwise)
+     if...elif...else语句
+     #+BEGIN_EXAMPLE xml
+     <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
+     select * from user where state = 'ACTIVE'
+     <choose>
+        <when test="id != null">
+        and id = #{id}
+        </when>
+        <when test="loginname != null and password != null">
+        and loginname = #{loginname} 
+        and password = #{password}
+        </when>
+        <otherwise>
+        and sex = 'male'
+        </otherwise>
+     </choose>
+     </select>
+     #+END_EXAMPLE
+   - where
+     只有一个以上的if条件有值才去插入where子句，并且会自动处理多余的and或or的开头保留字。
+     #+BEGIN_EXAMPLE xml
+     <select id="selectUsers" parameterType="hashmap" resultType="org.john.domain.User">
+     select * from user
+     <where>
         <if test="state != null">
-             state = #{state}
+        state = #{state}
         </if>
-        <if test="title != null">
-            AND title like #{title}
+        <if test="id != null">
+        and id = #{id}
         </if>
-        <if test="author != null and author.name != null">
-            AND author_name like #{author.name}
+        <if test="loginname != null and password != null">
+        and loginname = #{loginname} 
+        and password = #{password}
         </if>
-      </trim>
-    </select>
-    #+END_EXAMPLE
+        <if>
+        and sex = 'male'
+        </if>
+     </where>
+     </select>
+     #+END_EXAMPLE
+   - set
+     自动处理多余的逗号
+     #+BEGIN_EXAMPLE xml
+     <update id="selectUsers" parameterType="hashmap">
+     update user
+     <set>
+       <if test="loginname != null">loginname=#{loginname},</if>
+       <if test="password != null">password=#{password},</if>
+     </set>
+     </update>
+     #+END_EXAMPLE
+   - foreach
+     #+BEGIN_EXAMPLE xml
+     <select id="selectUsers" resultType="org.john.domain.User">
+     select * from user
+     where id in 
+     <!--当入参为List或Array时会自动添加到内部Map实例中，List入参的键名为list，Array入参的键名为array。
+         属性item定义元素引用名称
+         属性index定义元素索引名称, List或Array时为索引号，Map时为键名
+         属性collection指定将入参哪个键值对传给foreach子句作为被循环的数据集合
+       -->
+     <foreach item="item_id" index="index" collection="ids" open="(" separator="," close=")">
+     #{item_id}
+     </foreach>
+     </select>
+     #+END_EXAMPLE
+     - MySQL批量插入
+       #+BEGIN_EXAMPLE xml
+       <!-- 1. MySQL支持insert into tbl() values(),(),()的批量插入语句 -->
+       <insert id="save" databaseId="mysql">
+       insert into tbl_student(id, name)
+       values
+         <foreach item="student" collection="param1" separator=",">
+         (#{student.id}, #{student.name})
+         </foreach>
+       </insert>
+
+       <!-- 2. MySQL链接参数中添加allowMultiQueries=true启用通过分号分隔来组合多条SQL语句为一条SQL语句
+       <insert id="save" databaseId="mysql">
+         <foreach item="student" collection="param1" separator=";">
+         insert into tbl_student(id, name)
+         values (#{student.id}, #{student.name})
+         </foreach>
+       </insert>
+       #+END_EXAMPLE
+     - Oracle批量插入
+       #+BEGIN_EXAMPLE xml
+       <insert id="save" databaseId="oracle">
+       insert into tstudent(name,age) 
+       <foreach collection="param1" item="student" open="(" close=")" separator="union all">
+       select #{student.name} as a, #{student.age} as b from dual
+       </foreach>
+       </insert>
+       #+END_EXAMPLE
+   - bind
+     从OGNL表达式中创建一个变量，并将其绑定到上下文。
+     #+BEGIN_EXAMPLE xml
+     <select id="selectUsre" resultType="org.john.domain.User">
+     <bind name="pattern" value="'%' + _parameter.getName() + '%'"/>
+     select * from user
+     where loginname like #{pattern}
+     </select>
+     #+END_EXAMPLE
+   - trim
+     当标签体有内容时则为内容添加前缀、后缀，而且可以除去内容前后部分内容
+     #+BEGIN_EXAMPLE xml
+     <select id="findActiveBlogLike"
+          resultType="Blog">
+       SELECT * FROM BLOG
+       <!--
+         prefix属性值为添加到内容的前缀信息
+         prefixOverrides属性值为除去内容前的内容，当需要除去多个内容时，使用管道符|分割，注意：空格也将被除去
+       -->
+       <trim prefix="where" prefixOverrides="AND | OR">
+         <if test="state != null">
+              state = #{state}
+         </if>
+         <if test="title != null">
+             AND title like #{title}
+         </if>
+         <if test="author != null and author.name != null">
+             AND author_name like #{author.name}
+         </if>
+       </trim>
+     </select>
+     #+END_EXAMPLE
 * 事务管理
   事务4个特性：
   1) 原子性(Atomicity), 事务作为应用中不可再分割的最小逻辑执行单位。
@@ -1182,7 +1308,7 @@ public interface Transaction {
        1) ~#{}~ 在预处理阶段会被数据库的占位符(如MySQL的 ~?~)替换，并通过绑定参数的方式处理SQL注入
           - 可附加属性
             1) javaType
-            2) jdbcType
+            2) jdbcType, 设置当Java类型null对应的jdbc类型，默认为OTHER，这个MySQL能够识别使用，但Oracle无法识别从而抛出异常
                #+BEGIN_EXAMPLE sql
                insert into user(name, email) values(#{name}, #{email, jdbcType=NULL})
                #+END_EXAMPLE
@@ -1192,13 +1318,23 @@ public interface Transaction {
             6) typeHandler
             7) jdbcTypeName
             8) expression(未来准备支持的功能)
-       2) ~?{}~ 以普通字符串拼接的方式将SQL语句和参数值进行拼接，因此不会处理SQL注入的问题
+       2) ~${}~ 以普通字符串拼接的方式将SQL语句和参数值进行拼接，因此不会处理SQL注入的问题
      - 应用场景？？
-       1) ~?{}~ 应用于拼接表名等原生jdbc不支持占位符的地方
+       1) ~${}~ 应用于拼接表名等原生jdbc不支持占位符的地方
           #+BEGIN_EXAMPLE sql
           select * from ${year}_salary
           select * from user order by ${name} ${order}
           #+END_EXAMPLE
-          
+       2) 模糊查询
+          1) 通过 ~#{}~
+             #+BEGIN_EXAMPLE sql
+             -- 入参值为"%john%"
+             select * from user where name #{name_like}
+             #+END_EXAMPLE
+          2) 通过 ~${}~
+             #+BEGIN_EXAMPLE sql
+             -- 入参值为"john"，但存在SQL注入的安全问题
+             select * from user hwere name '%${name_like}%'
+             #+END_EXAMPLE
   2) Mapper接口如何跟xml文件中的sql建立关联
      MyBatis通过动态代理的形式根据接口生成代理对象
