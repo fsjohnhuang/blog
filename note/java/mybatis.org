@@ -16,6 +16,10 @@ JavaBeans
 3) 公有getter和setter
 4) 无参构造方法
 
+
+* 资源
+  官方GitHub主页：https://github.com/mybatis
+
 * 简单示例
   - src/mybatis-config.xml
     #+BEGIN_EXAMPLE xml
@@ -261,9 +265,9 @@ p  - 常用方法
               即数据库表字段为A_COL，自动对应POJO成员变量aCol
             -->
           <setting name="mapUnderscoreToCamelCase" value="false"/>
-          <!--MyBatis利用本地缓存机制(local cache)防止循环引用(circular references)和加速重复嵌套查询。
-              SESSION, 缓存一个会话中执行的所有查询（默认值）
-              STATEMENT, 相同SqlSession的不同调用将不会共享数据
+          <!--MyBatis3.3+利用本地缓存机制(local cache)防止循环引用(circular references)和加速重复嵌套查询。
+              SESSION, 缓存一个会话中执行的所有查询（默认值）,即启用一级缓存
+              STATEMENT, 相同SqlSession的不同调用将不会共享数据，即禁用一级缓存
             -->
           <setting name="localCacheScope" value="SESSION"/>
           <!--当没有为参数提供特定的JDBC类型时，为空值(null)指定原生JDBC的类型。
@@ -733,7 +737,7 @@ p  - 常用方法
    | 调用构造方法 | new com.atguigu.bean.Person("admin").name |
    | 运算符       | +,-,*,/                                   |
    | 逻辑运算符   | in,not in, >, >=,<,<=,==,!=               |
-   | 关系运算符   | &&,||,and,or
+   | 关系运算符   | &&,and,or                                 |
    *注意* xml中 ~<,>,",&&,||~ 等必须转义才能使用
 
 ** 动态SQL元素详解
@@ -886,6 +890,18 @@ p  - 常用方法
        </trim>
      </select>
      #+END_EXAMPLE
+ 
+** 内置变量 ~_parameter~ 和 ~_databaseId~
+   在动态SQL中可以引用内置变量 ~_parameter~ 和 ~_databaseId~
+   - ~_parameter~ 就是入参Map实例自身
+     #+BEGIN_EXAMPLE xml
+     <select id="xxx">
+     -- 下面的语句和 select * from user where id=#{param1} 是等价的
+     select * from user where id=#{_parameter.param1}
+     </select>
+     #+END_EXAMPLE
+   - ~_databaseId~ 若在mybatis-config.xml中设置了databaseIdProvider为数据库厂商命名别名，那么这个变量的时就是那个别名，否则为原名
+
 * 事务管理
   事务4个特性：
   1) 原子性(Atomicity), 事务作为应用中不可再分割的最小逻辑执行单位。
@@ -934,14 +950,31 @@ public interface Transaction {
 * 数据缓存机制
   分为一级和二级缓存：
   1) 一级缓存为SqlSession级别的缓存。
-  2) 二级缓存为mapper级别的缓存，多个SqlSession共享的。
+  2) 二级缓存为namespace级别的缓存，多个SqlSession共享的。
 
 ** 一级缓存(SqlSession级别)
    - 默认开启
-   - 缓存数据保存在SqlSession实例内部的HashMap实例中
+   - 缓存数据保存在SqlSession实例内部的Map实例中
    - 缓存逻辑
-     1) 当在同一个SqlSession实例执行相同的SQL语句时，第一次执行后会将数据以对象id为键保存到内部的HashMap中，后续查询则直接从缓存中读取；
+     1) 当在同一个SqlSession实例执行相同的SQL语句时，第一次执行后会将数据以对象id为键保存到内部的Map中，后续查询则直接从缓存中读取；
      2) 若SqlSession实例执行DML(insert,update,delete)并提交到数据，那么一级缓存将被自动清空。
+   - 缓存失效的4种情况
+     1) 查询不在同一个SqlSession中执行
+     2) 查询在同一个SqlSession中执行，但查询条件不同
+     3) 查询在同一个SqlSession中执行，多次查询操作之间插入DML操作
+        insert/update/delete节点提供一个flushCache属性，用于设置该操作是否会清除一级和二级缓存，默认值为true。而select节点也提供flushCache属性，不过默认值为false。
+     4) 手动清除一级缓存
+        #+BEGIN_EXAMPLE java
+        SqlSession sqlSession = SqlSessionFactory.openSession();
+        try{
+          sqlSession.selectOne("xxx");
+          sqlSession.clearCache(); // 手动清理一级缓存
+          sqlSession.selectOne("xxx");
+        }
+        finally {
+          sqlSession.close();
+        }
+        #+END_EXAMPLE
 
 ** 二级缓存(mapper级别)
    - 默认关闭
@@ -955,11 +988,42 @@ public interface Transaction {
          - FIFO, 先进先出策略
          - SOFT, 软引用策略，移除基于垃圾回收器状态和软引用规则的对象
          - WEAK, 弱引用策略，更积极地移除基于垃圾回收器状态和弱引用规则的对象
-   - 注意：被二级缓存的对象及其父类必须实现java.io.Serializable接口，因为二级缓存数据存储介质不一定在内存，可能在硬盘或远程服务器。
+   - *注意* 被二级缓存的对象及其父类必须实现java.io.Serializable接口，因为二级缓存数据存储介质不一定在内存，可能在硬盘或远程服务器。
+   - ~select~ 节点提供useCache属性用于在当前namespace已启用二级缓存的前提下，单独启用或禁用二级缓存，默认为true。
    - 缓存数据保存在Mapper内部的HashMap实例中
    - 缓存逻辑
      不同的SqlSession实例多次执行相同的mapper的namespace下的sql语句，且传递相同的参数，导致最终生成相同的sql语句，那么第一执行后将结果缓存起来，后续查询均从缓存读取。
-* 注解配置Mapper
+   - 缓存失效
+     各个namespace的二级缓存失效是独立的，互不干扰。
+     1) 多次查询操作之间插入DML操作
+        insert/update/delete节点提供一个flushCache属性，用于设置该操作是否会清除一级和二级缓存，默认值为true。而select节点也提供flushCache属性，不过默认值为false。
+     2) 由于符合eviction条件被清理
+
+** 集成第三方缓存作为二级缓存
+   通过实现org.apache.ibatis.cache.Cache接口，我们可以将各种成熟的缓存中间件集成到MyBatis中。
+   而MyBatis已经提供ehcache(hibernate默认的缓存中间件),redis等的集成适配器包。
+
+** 引用其它namespace的二级缓存策略
+   #+BEGIN_EXAMPLE xml
+   <mapper namespace="org.john.mapper.StudentMapper">
+     <!-- namespace: 设置为被引用的namespace
+       -->
+     <cache-ref namespace="org.john.mapper.ClassMapper"/>
+   </mapper>
+   #+END_EXAMPLE
+
+** 查询时缓存逻辑流程
+   1) 发起查询操作
+   2) 若启用二级缓存
+      1) 调用CachingExecutor，在二级缓存匹配查询
+      2) 若命中则直接返回记录，并退出查询流程
+   3) 调用Executer
+   4) 若启用一级缓存
+      1) 从Local Cache匹配查询
+      2) 若命中则直接返回记录，并退出查询流程
+   5) 执行JDBC查询
+
+* 通过注解配置SQL映射
   MyBatis的注解位于org.apache.ibatis.annotations下
   - ~@Select~, Select语句的SQL映射
   - ~@SelectProvider~, Select语句的动态SQL映射。允许通过属性type和method指定一个完全限定类名和方法名在执行时返回运行的查询语句
@@ -1124,13 +1188,34 @@ public interface Transaction {
     </property>
   </bean>
 
-  <!-- 指定SqlSessionFactory为社区开发的实现类 -->
+  <!-- 
+    创建SqlSessionFactory实例
+    指定SqlSessionFactory为社区开发的实现类 -->
   <!--<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean" p:dataSource-ref="dataSource"/>-->
   <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
     <property name="dataSource" ref="dataSource"/>
-    <!-- 在当前classpath中读取MyBatis配置文件sqlMapConfig.xml -->
-    <property name="configLocation" value="classpath:sqlMapConfig.xml"/>
+    <!-- 在当前classpath中读取MyBatis配置文件mybatis-config.xml -->
+    <property name="configLocation" value="classpath:mybatis-config.xml"/>
+    <!-- 指定SQL映射文件位置  -->
+    <property name="mapperLocations" value="classpath:org/john/mapper/*.xml"/>
   </bean>
+
+  <!-- 扫描所有Mapper接口，从而实现自动注入(@Autowired) -->
+  <mybatis-spring:scan base-package="org.john.dao"/>
+  <!-- 以前的写法
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+      <!--递归扫描value值指定包下的文件-->
+      <property name="basePackage" value="org.john.dao"/>
+      <property name="sqlSessionFactoryBeanName" value="sqlSessionFactroy"/>
+      <!-- 若指定了sqlSessionTemplate, 那么sqlSessionFactory将被忽略 -->
+      <property name="sqlSessionTemplateBeanName" value="sqlSessionTemplate"/>
+      <!-- 表示通过该注解标识的接口将被识别为Mapper接口 -->
+      <property name="annotationClass" value="org.springframework.stereotype.Repository"/>
+      <!-- 表示继承该接口的接口将被识别为Mapper接口
+      <property name="mapperInterface" value="">
+      -->
+    </bean>
+    -->
 
   <!-- JDBC事务管理器 -->
   <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager" p:dataSource-ref="dataSource"/>
@@ -1294,9 +1379,95 @@ public interface Transaction {
    - Mapper接口
    - SQL Mapper XML
 
+   QBC风格的条件查询
+
 ** [[https://pagehelper.github.io][MyBatisPageHelper]]
    - 支持多种数据库
    - 支持多种分支方式
+  
+* 运行原理
+  | 参数映射  -->    | SQL解析 -->     | SQL执行 -->    | 结果处理和映射   |
+  |------------------+-----------------+----------------+------------------|
+  | 配置             | 配置            | SimpleExecutor | 配置             |
+  | 映射解析         | 解析            | BatchExecutor  | 转换             |
+  | 类型解析         | SQL语句动态生成 | ReuseExecutor  |                  |
+  | ParameterHandler | SqlSource       | Executor       | ResultSetHandler | 
+
+  #+BEGIN_EXAMPLE java
+  InputStream inputStream = Resources.getResourceAsStream("mybatis-config.xml");
+  SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
+  /* 内部调用栈
+     - XmlConfigBuilder parser = new XmlConfigBuilder(inputStream, null, null);
+       parser.parse() :: Configuration
+       - parser:XPathParser.evalNode("/configuration") 查找根节点并作为起点供parseConfiguration方法遍历获取其他配置项
+       - parseConfiguration(XNode root) 内部通过如settingsElement(Properties props)等方法遍历获取子配置项，并添加到全局配置Configuration对象(包含mybatis-config.xml和所有SQL映射文件的信息)中。
+         - mapperElement(XNode parent)
+           if ("package".equals(child.getName())){
+             // package优先级最高    
+           }
+           else {
+             if (resource != null && url == null && mapperClass == null){
+               // resource优先级第二高  
+             }
+             else if (resource == null && url != null && mapperClass == null){
+               // url优先级第三高  
+             }
+             else if (resource == null && url == null && mapperClass != null){
+               // mapperClass优先级最低  
+             }
+           }
+           - XMLMapperBuilder mapperParser = new XMLMapperBuilder(mapperInputStream, configuration) 通过上述4种方式获取SQL映射文件后，构造XMLMapperBuilder实例对其进行解析
+           - mapperParser.parse() 内部会通过configuration.isResourceLoaded(mapperInputStream)避免重复解析
+             - configurationElement(XNode root) 和parseConfiguration一样以mapper节点为入口对SQL映射文件进行遍历获取子配置信息
+               - buildStatementFromContext(context.evalNodes("select|insert|update|delete"))
+                 - XMLStatementBuilder statementBuilder = new XMLStatementBuilder(configuration)
+                 - statementBuilder.parseStatementNode() 解析select/insert/update/delete节点
+                   - 获取所有属性后调用 builderAssistant.addMappedStatement() :: MappedStatement 对应一个CRUD标签的所有信息
+                     MappedStatement.sqlSource 就是对应预处理后的SQL脚本
+                     - 内部会将这个MappedStatement通过configuration.addMappedStatement()添加到Configuration对象中
+                 - 若statementBuilder.parseStatementNode() 解析过程中出现异常，则会调用configuration.addIncompleteStatement(statementBuilder)
+             每次执行mapperParser.parse()均会执行
+             - parsePendingResultMaps()
+             - parsePendingCacheRefs()
+             - parsePendingStatements()
+
+       Configuration.mappedStatements 包含所有SQL映射文件中的预处理后CRUD语句
+       Configuration.mapperRegistry.knownMappers :: HashMap<K,V> 以Mapper接口为键，org.ibatis.binding.MapperProxyFactory为值
+       
+       - build(configuration)
+         - new DefaultSqlSessionFactory(configuration)
+   */
+
+  SqlSession sqlSession = sqlSessionFactory.openSession();
+  /* 内部调用栈
+     - openSessionFromDataSource(configuration.getDefaultExecutorType(), null, false) :: SqlSession
+       configuration.getDefaultExecutorType()::String 获取mybatis-config.xml中settings/setting[name=defaultExecutorType]的值，默认为SIMPLE
+       - 读取environments节点的信息
+       - Executor executor = configuration.newExecutor(tx, execType) tx为事务对象，execType就是SIMPLE/BATCH/REUSE
+         - 根据execType值创建SimpleExecutor/BatchExecutor/ReuseExecutor
+         - 若启用二级缓存则创建CachingExecutor，并将上述的具体Executor包装在CachingExecutor内部，实际操作数据库的操作依然为具体的Executor处理，CachingExecutor只是在此基础上添加缓存逻辑
+         - executor = (Executor) interceptorChain.pluginAll(executor) 调用拦截器链
+           - 遍历所有拦截器并调用 executor = interceptor.plugin(executor) 加工Executor实例
+       - new DefaultSqlSession(configuration, executor, autoCommit)
+   */
+  StudentMapper studentMapper = sqlSession.getMapper(StudentMapper.class);
+  /* 内部调用栈
+     - configuration.getMapper()
+       - mapperRegistry.getMapper()
+         - 创建MapperProxyFactory实例并调用实例的newInstance(sqlSession)方法
+           - MapperProxy mapperProxy = new MapperProxy(sqlSession, mapperInterface, mapperMethod)
+           - Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] {mapperInterface}, mapperProxy)
+   */
+  studentMapper.getStudent(1);
+  /* 内部调用栈
+     - invoke
+       - 判断调用的方法是否在Object还是在接口中定义的，若在Object中定义则马上执行后退出
+       - MapperMethod mapperMethod = cachedMapperMethod(method) 将调用的方法转换为MyBatis可以识别处理的MapperMethod
+       - mapperMethod.execute(sqlSession, args)
+         - 
+   */
+  #+END_EXAMPLE
+
 * 源码分析
   1) Configuration
   2) SqlSessionFactory

@@ -1007,7 +1007,26 @@
       5) Test
 
    核心容器: BeanFactory 和 ApplicationContext
-   
+
+** 包分类说明
+   - AOP
+     - com.springsource.net.sf.cglib-x.x.x.jar
+     - com.springsource.org.aopalliance-x.x.x.jar
+     - com.springsource.org-aspectj.weaver
+     - spring-aop-x.x.x.jar
+     - spring-aspects-x.x.x.jar
+   - IOC
+     - spring-beans-x.x.x.jar
+     - spring-context-x.x.x.jar
+     - spring-core-x.x.x.jar
+     - spring-expression-x.x.x.jar
+   - JDBC
+     - spring-jdbc-x.x.x.jar
+     - spring-orm-x.x.x.jar
+     - spring-tx-x.x.x.jar
+   - Web
+     - spring-web-x.x.x.jar
+     - spring-webmvc-x.x.x.jar
 ** Bean的配置和实例化
    通过配置文件(XML或Properties文件)注册并管理Bean之间的依赖关系。
    
