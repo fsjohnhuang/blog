@@ -210,26 +210,44 @@ p  - 常用方法
   #+BEGIN_EXAMPLE xml
   <?xml !>
   <configuration>
-      <!-- 引入外部配置，并在当前文档中动态替换。
-           引入外部配置的资源定位方式
+      <!-- 设置内联属性或引入外部配置，并在当前文档中动态替换。
+           1. 设置内联属性
+           <properties>
+             <property name="prop_name" value="prop_value"/>
+           </properties>
+           2. 引入外部配置的资源定位方式
            resource: 通过类路径引入，如org/john/test.xml。类路径就是编译后以lib或target为父目录的路径
            url: 通过网络或本地路径引入，http://www.test.com/test.xml或file:///c:\test.xml
 
-           如：db.properties的内容为
+           加载顺序
+           1. 读取property子元素的值
+           2. 根据properies元素的resource或url读取属性文件，并覆盖同名属性值
+           3. 读取作为方法参数传递的属性值，并覆盖同名属性值
+
+           
+           示例：
+           1. 通过方法传递属性值
+              InputStream cfgStream = Resources.getResourceAsStream("mybatis-config.xml")
+              InputStream propsStream = Resources.getResourceAsStream("db.properties");
+              Properties props = new Properties();
+              props.load(propsStream);
+              SqlSessionFactory factory = new SqlSessionFactoryBuilder().build(cfgStream, props);
+
+           2. 外部db.properties的内容为
                  username=root
                  password=root
-               配置文件中其他部分动态替换为
-               <property name="username" value="${username}"/>
-               <property name="password" value="${password}"/>
+              配置文件中其他部分动态替换为
+              <property name="username" value="${username}"/>
+              <property name="password" value="${password}"/>
         -->
       <properties resource="db.properties"/>
       <!-- 改变MyBatis运行时行为 -->
       <settings>
           <!--开启映射器的缓存-->
           <setting name="cacheEnabled" value="true"/>
-          <!--开启关联对象延迟加载，在特定关联关系中可通过设置fetchType属性来覆盖该属性值-->
+          <!--开启关联对象延迟加载，在特定关联关系中可通过设置fetchType属性来覆盖该属性值，默认值为false-->
           <setting name="lazyLoadingEnabled" value="true"/>
-          <!--为true时会使带有延迟加载属性的对象立即加载，默认值为true。因此需要设置为false-->
+          <!--为true时会使带有延迟加载属性的对象立即被完整加载，默认值为true。因此要启用延迟加载，那么lazyLoadingEnabled需要设置为true，并且aggressiveLazyLoading为false-->
           <setting name="aggressiveLazyLoading" value="false"/>
           <!--允许单一语句返回多结果集-->
           <setting name="multipleResultSetsEnabled" value="true"/>
@@ -1392,6 +1410,10 @@ public interface Transaction {
   | 映射解析         | 解析            | BatchExecutor  | 转换             |
   | 类型解析         | SQL语句动态生成 | ReuseExecutor  |                  |
   | ParameterHandler | SqlSource       | Executor       | ResultSetHandler | 
+
+  DefaultSqlSessionFactory implements SqlSessionFactory
+  SqlSessionManager implements SqlSessionFactory, SqlSession
+  DefaultSqlSession implements SqlSession
 
   #+BEGIN_EXAMPLE java
   InputStream inputStream = Resources.getResourceAsStream("mybatis-config.xml");
