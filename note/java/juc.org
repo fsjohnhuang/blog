@@ -1,0 +1,476 @@
+JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程池、异步IO和轻量级任务框架，还提供多线程上下文的Collection实现等。
+
+* valatile 关键字
+  用于保证 *内存可见性*, 相对 synchronzied 关键字为一种轻量级的线程缓存和主存间的同步策略。但不具备如下特性
+  - 互斥性
+  - 原子性
+    #+BEGIN_EXAMPLE java
+    int i = 10;
+
+    i = i++;
+    /* 底层将拆分为非原子性的三个步骤
+       int temp = i;
+       i = i + 1;
+       i = temp;
+     */
+    #+END_EXAMPLE
+    - 多线程下操作非原子性引发的问题
+      #+BEGIN_EXAMPLE java
+      public class Test(){
+        public static void main(String[] args){
+          NonatomicThread nt = new NonatomicThread();
+          for (int k = 0; k < 50; k++){
+            new Thread(nt).start();
+          }
+        }
+      }
+
+      class NonatomicThread() implements Runnable{
+        private int i = 0;
+        private volatile int j = 0;
+        
+        public void run(){
+          Systme.out.println(i++);
+          Systme.out.println(j++);
+        }
+      }
+      #+END_EXAMPLE
+      上述代码不管变量有没有添加volatile修饰，由于 ~System.out.println(i++)~ 底层分为
+      #+BEGIN_EXAMPLE
+      int temp = i; // 1
+      i = i + 1;    // 2
+      System.out.println(temp); // 3
+      #+END_EXAMPLE
+      那么有可能线程A执行完步骤1后被挂起，轮到线程2执行步骤1，那么线程1和线程2缓存中的局部变量temp的值都是0,然后线程A和B各自执行后续步骤2和3，最终输出均为0。
+    - 包 ~java.util.concurrent.atomic~ 中提供常用的原子数据类型，而这些都是通过CAS实现原子操作而不是通过同步锁机制，因此效率更高
+      - AtomicBoolean
+      - AtomicInteger
+      - AtomicIntegerArray
+      - AtomicIntegerFiledUpdater
+      - AtomicLong
+      - AtomicLongArray
+      - AtomicLongFiledUpdater
+      - AtomicReference
+      - AtomicReferenceArray
+      - AtomicReferenceFiledUpdater
+      - AtomicMarkableReference
+      - AtomicStampedReference
+      #+BEGIN_EXAMPLE java
+      import java.util.concurrent.AtomicInteger;
+
+      class AtomicThread() implements Runnable{
+        private AtomicInteger i = new AtomicInteger(0);
+        
+        public void run(){
+          Systme.out.println(i.getAndIncrement());
+        }
+      }
+      #+END_EXAMPLE
+  - CAS(Compare-And-Swap)
+    由底层硬件提供的对并发操作共享数据的支持
+    - 原理
+      - 3个操作数：内存值 V、预估值 A 和 更新值 B
+      - 逻辑
+        1) 将更新操作发生前获取的数据作为预估值 A
+        2) 当更新操作即将发生时，重新获取变量的当前值作为内存值 V
+        3) 将内存值 V 和 预估值 A 作比较，若相等则 将其更新为更新值 B
+        4) 若内存值 V 和 预估值 A 不相等则抛弃当前更新操作或执行其它预定义操作
+      - 通过synchronized同步锁模拟CAS的逻辑
+        #+BEGIN_EXAMPLE java
+        public class App(){
+          public static void main(String[] args){
+            final CAS cas = new CAS(0);
+            for (int i = 0; i < 10 ; ++i){
+              new Thread(new Runnable(){
+                public void run(){
+                  boolean swapped = false;
+                  while(!swapped){
+                    Integer k = cas.getValue();
+                    Integer newVal = k + 1;
+                    swapped = cas.compareAndSwap(k, newVal);
+                  }
+                }
+              });
+            }
+          }
+        }
+
+        class CAS{
+          private Object value;
+          public CAS(Object value){
+            this.value = value;
+          }
+
+          public Object getValue(){
+            return this.value;
+          }
+          
+          private void setValue(Object val){
+            this.value = val;
+          }
+
+          public synchronized boolean compareAndSwap(Object expectedValue, Object newValue){
+            Object val = getValue();
+            boolean swapped = val.equals(expectedValue);
+            if (swapped){
+              setValue(newValue);
+
+              System.out.println(getValue());
+            }
+            
+            return swapped;
+          }
+        }
+        #+END_EXAMPLE
+
+** 示例
+   #+BEGIN_EXAMPLE java
+   public class VolatileDemo {
+     public static void main(String[] args){
+       // 主线程
+       ThreadDemo td = new ThreadDemo();
+       new Thread(td).start();
+       
+       while(true){
+         if (td.getFlag()){
+           System.out.println("------");
+           break;
+         }
+       }
+     }
+   }
+   
+   class ThreadDemo implements Runnable {
+     // 主存、主线程缓存、线程1缓存都存储flag变量值的副本
+     private boolean flag = false;
+     public boolean getFlag(){
+       return this.flag;
+     }
+
+     public void run(){
+       // 线程1
+       try {
+         Thread.sleep(200);
+       }
+       catch (InterruptedException e){
+         e.printStackTrace();
+       }
+
+       flag = true;
+       System.out.println("flag=" + getFlag());
+     }
+   }
+   #+END_EXAMPLE
+   上述代码主线程调用 ~td.getFlag()~ 时将一直返回 ~false~, 即使线程1中 ~getFlag()~ 已经返回 ~true~ 。
+   |                  | 初始状态                          |                 |
+   |------------------+-----------------------------------+-----------------|
+   |                  | 主存，flag=false                  |                 |
+   | 主线程flag=false |                                   | 线程1flag=false |
+   |------------------+-----------------------------------+-----------------|
+   |                  | 线程1flag更新为true，且回写到主存 |                 |
+   |------------------+-----------------------------------+-----------------|
+   |                  | 主存，flag=true                   |                 |
+   | 主线程flag=false |                                   | 线程1flag=true  |
+   由于主线程一直在循环中运行，无法从主存同步数据到主线程的缓存，因此导致数据不一致。
+** 解决办法
+   1) 通过synchronized触发从主存同步数据的操作
+      #+BEGIN_EXAMPLE java
+      public class VolatileDemo {
+        public static void main(String[] args){
+          // 主线程
+          ThreadDemo td = new ThreadDemo();
+          new Thread(td).start();
+
+          while(true){
+            synchronized(td) {
+              if (td.getFlag()){
+                System.out.println("------");
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      #+END_EXAMPLE
+   2) 通过volatile关键字
+      #+BEGIN_EXAMPLE java
+      class ThreadDemo implements Runnable {
+        // 通过volatile标识的变量，将时刻和主存的变量同步
+        private volatile boolean flag = false;
+        public boolean getFlag(){
+          return this.flag;
+        }
+
+        public void run(){
+          // 线程1
+          try {
+            Thread.sleep(200);
+          }
+          catch (InterruptedException e){
+            e.printStackTrace();
+          }
+
+          flag = true;
+          System.out.println("flag=" + getFlag());
+        }
+      }
+      #+END_EXAMPLE
+* ConcurrentHashMap
+  HashMap 和 Hashtable 间的差别在 HashMap 非线性安全，而 Hashtable 为线性安全。
+  而 ConcurrentHashMap 内部采用 *锁分段* 机制替代 Hashtable 中的同步锁机制，因此比 Hashtable 有以下两方面的优势
+  1) 性能更好
+     - JDK1.5~1.7的版本
+       - 参数
+       - concurrentLevel 设置分段数目，初始化确定后后期不能修改。
+       - 数据结构(假设 concurrentLevel 为2)
+         | 分段     | HashEntry数组 | 链表    |
+         |----------+---------------+---------|
+         | Segment1 | HashEntry11   | item111 |
+         |          |               | item112 |
+         |          | HashEntry12   | item121 |
+         | Segment2 | HashEntry21   | item211 |
+         |          | HashEntry22   | item221 |
+         |          |               | item222 |
+         然后并不像 Hashtable 那样对整个哈稀列表进行同步锁，而是对分段进行同步锁，那么多个线程若读取不同分段的数据，那么就可并行操作 ConcurrentHashMap 实例了。
+         #+BEGIN_EXAMPLE java
+         static class Segment<K,V> extends ReentrantLock implements Serializable{
+           // ....
+         }
+
+         class ConcurrentHashMap{
+           public void put(K key, V value){
+             // 第一次计算哈稀值用于指定Segment的位置
+             // 第二词计算哈稀值用于指定HashEntry的位置
+             // 然后调用 Segment 实例的 tryLock 方法尝试获取锁， 若获取失败则当前线程会以自旋的方式继续调用 tryLock 方法尝试获取锁，直到超过尝试次数上限才挂起等待被唤醒继续执行
+           }
+         }
+         #+END_EXAMPLE
+     - JDK1.8的版本
+       - 数据结构
+         采用Node数组+链表+红黑树结构，丢弃Segment的概念，底层采用CAS实现而不是采用同步锁机制。
+  2) 能保证复合操作的原子性
+     #+BEGIN_EXAMPLE java
+     Hashtable ht = new Hashtable();
+     if (!ht.containsKey("a")){ // 步骤1
+       ht.put("a", System.currentTimeMills()) // 步骤2
+     }
+     #+END_EXAMPLE
+     步骤1和2都分别采用同步锁，但两步应该作为一个原子性操作被加锁同步才对。
+  
+  多线程环境中可使用 
+  - ConcurrentSkipListMap 替代 TreeMap
+  - ConcurrentHashMap 替代 HashMap
+  - CopyOnWriteArrayList 替代 ArrayList ，当读取操作比写入操作多得多时
+
+* 迭代非线性安全的集合
+  #+BEGIN_EXAMPLE java
+  import java.util.Collections;
+  import java.util.HashMap;
+  
+  public class App{
+    public static void main(String[] args){
+      HashMap<String, String> hashMap = Collections.synchronizedMap(new HashMap<String, String>());
+      Set ks = hashMap.keySet();
+      synchronized(hashMap){
+        Iterator i = ks.iterator();
+        while (i.hasNext()){
+          System.out.println(i.next());
+        }
+      }
+    }
+  }
+  #+END_EXAMPLE
+
+* CountDownLatch
+  可用于等待其它一个或多个线程达到某个状态时，在执行当前线程的后续任务。
+  #+BEGIN_EXAMPLE java
+  public class App {
+    public static void main(String[] args){
+      int threadCount = 5;
+      final CountDownLatch cdl = new CountDownLatch(threadCount);
+      
+      for (int i = 0; i < threadCount; i++){
+        new Thread(new Runnable(){
+          public void run(){
+            Thread.sleep(new Random().nextInt(10));
+            cdl.countDown();
+          }
+        }).start();
+      }
+
+      // 挂起当前线程直到其内部状态值变为0后才恢复执行
+      cdl.await();
+    }
+  }
+  #+END_EXAMPLE
+
+* 创建执行线程的方式
+  1) 
+  2) 
+  3) 实现Callable接口
+     相对与Runnable，实现Callable接口的执行线程可以返回执行结果和抛出异常。
+     #+BEGIN_EXAMPLE java
+     public class App {
+       public static void main(String[] args){
+         ThreadDemo td = new ThreadDemo();
+         // 实现Future接口的TaskFuture用于接收Callable的call方法返回值和异常
+         TaskFuture<Integer> tf = new TaskFuture<Integer>(td);
+         new Thread(tf).start();
+
+         try {
+           // 该操作会挂起当前线程，直到获取返回值为止
+           Integer result = tf.get();
+           System.out.println(result);
+         }
+         catch(InterruptedException | ExecutionException e){
+           e.printStackTrace();
+         }
+       }
+     }
+
+     class ThreadDemo implements Callable<Integer>{
+       @Override
+       public Integer call() throws Exception {
+         int sum = 0;
+         for (int i = 0; i < 100; ++i){
+           sum += i;
+         }
+
+         return sum;
+       }
+     }
+     #+END_EXAMPLE
+  4) 
+
+* 解决多线程安全问题的方法
+  1) 同步代码块 ~synchronized~
+  2) 同步方法 ~public synchronized <type> <method_name>(<arg>*)~
+  3) 同步锁 ~lock~ 和 ~unlock~
+     JDK1.5引入的新特性
+     - 注意：将 ~unlock~ 放在 finally 语句块中保证解锁。
+     - 示例
+       #+BEGIN_EXAMPLE java
+       import java.util.concurrent.locks.Lock;
+       import java.util.concurrent.locks.ReentrantLock;
+
+       class ThreadDemo implements Runnable{
+         private int i = 0;
+         private Lock lock = ReentrantLock();
+         
+         public void decrement(){
+           lock.lock();
+           try{
+             i--;
+           }
+           finally{
+             lock.unlock();
+           }
+         }
+       }
+       #+END_EXAMPLE
+   
+* 等待唤醒和防止虚假唤醒
+  1) 同步方法的方式
+     #+BEGIN_EXAMPLE java
+     class Clerk{
+       private int production = 0;
+       
+       public synchronized void produce(){
+         // 通过将wait放置到循环体中，防止虚假唤醒的出现
+         // 虚假唤醒就是两个或多个线程都在判断条件的临界点(如production==1)进入等待状态，当被唤醒时它们都直接往下执行导致共享数据值超出业务范围。
+         while(this.prodcution == 1){
+           System.out.println("full");
+           this.wait(); // 从Object继承而来的
+         }
+
+         System.out.println(string.format("producing:%s", ++this.producing));
+         this.notifyAll(); // 从Object继承而来的
+       }
+
+       public synchronized void sale(){
+         while(this.prodcution == 0){
+           System.out.println("empty");
+           this.wait();
+         }
+
+         System.out.println(string.format("saling:%s", --this.producing));
+         this.notifyAll();
+       }
+     }
+     #+END_EXAMPLE
+  2) 同步锁的方式
+     #+BEGIN_EXAMPLE java
+     class Clerk{
+       private int production = 0;
+       private Lock lock = ReentrantLock();
+       private Condition condition = lock.newCondition();
+       
+       public void produce(){
+         lock.lock();
+         try {
+           // 通过将wait放置到循环体中，防止虚假唤醒的出现
+           // 虚假唤醒就是两个或多个线程都在判断条件的临界点(如production==1)进入等待状态，当被唤醒时它们都直接往下执行导致共享数据值超出业务范围。
+           while(this.prodcution == 1){
+             System.out.println("full");
+             condition.await();
+           }
+
+           System.out.println(string.format("producing:%s", ++this.producing));
+           condition.signalAll();
+         }
+         finally{
+           lock.unlock();
+         }
+       }
+
+       public void sale(){
+         lock.lock();
+         try {
+           while(this.prodcution == 0){
+             System.out.println("empty");
+             condition.wait();
+           }
+
+           System.out.println(string.format("saling:%s", --this.producing));
+           condition.notifyAll();
+         }
+         finally{
+           lock.unlock();
+         }
+       }
+     }
+     #+END_EXAMPLE
+* 读写锁(java.util.concurrent.locks.ReadWriteLock)
+  由一组锁组成——读锁(read lock) 和 写锁(write lock)
+  仅有读操作时，读锁允许并发执行读操作
+  若有写操作时，则只能串行执行写、读/写操作
+  #+BEGIN_EXAMPLE java
+  class ThreadDemo{
+    private int i = 0;
+    private ReadWriteLock rwl = new ReentrantReadWriteLock();
+
+    public void set(i){
+      rwl.writeLock().lock();
+      try{
+        this.i = i;
+      }
+      finally{
+        rwl.writeLock().unlock();
+      }
+    }
+
+    
+    public void get(){
+      rwl.readLock().lock();
+      try{
+        System.out.println(this.i);
+      }
+      finally{
+        rwl.readLock().unlock();
+      }
+    }
+  }
+  #+END_EXAMPLE
+
+  

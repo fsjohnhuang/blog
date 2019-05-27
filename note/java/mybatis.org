@@ -1480,7 +1480,7 @@ public interface Transaction {
            - MapperProxy mapperProxy = new MapperProxy(sqlSession, mapperInterface, mapperMethod)
            - Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] {mapperInterface}, mapperProxy)
    */
-  studentMapper.getStudent(1);
+  studentMapper.getStudent(1); // 启动了二级缓存
   /* 内部调用栈
      - invoke
        - 判断调用的方法是否在Object还是在接口中定义的，若在Object中定义则马上执行后退出
@@ -1493,10 +1493,11 @@ public interface Transaction {
          - 然后调用SqlSession.selectOne等方法执行数据库操作，以selectOne为例子
            - 调用selectList取多行记录，然后返回第一行记录
              - MappedStatement ms = configuration.getMappedStatement(statement) 获取经过预处理的SQL语句信息
-             - executor.query(ms, wrapCollection(parameter)， rowBounds)
+             - executor::CachingExecutor.query(ms, wrapCollection(parameter)， rowBounds)
                wrapCollection 将collection,array封装到Map实例中
                - BoundSql boundSql = ms.getBoundSql(parameterObject) 取出预处理后的SQL和入参映射及入参值等信息
-               - CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql)
+               - CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql) 生成一级和二级缓存用的键名
+               - 
 
  
    */
