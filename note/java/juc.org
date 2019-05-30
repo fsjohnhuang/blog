@@ -346,6 +346,20 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
 * 解决多线程安全问题的方法
   1) 同步代码块 ~synchronized~
   2) 同步方法 ~public synchronized <type> <method_name>(<arg>*)~
+     - 实例同步方法
+       实例同步方法是针对实例自身 ~this~ 加锁
+       #+BEGIN_EXAMPLE java
+       public class MyClass implements Runnable{
+         public synchronized void run(){}
+       }
+       #+END_EXAMPLE
+     - 类同步方法
+       类同步方法是针对类自身 ~MyClass.class~ 加锁
+       #+BEGIN_EXAMPLE java
+       public class MyClass{
+         public static synchronized void run(){}
+       }
+       #+END_EXAMPLE
   3) 同步锁 ~lock~ 和 ~unlock~
      JDK1.5引入的新特性
      - 注意：将 ~unlock~ 放在 finally 语句块中保证解锁。
@@ -472,5 +486,100 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
     }
   }
   #+END_EXAMPLE
+* 线程池
+  #+BEGIN_EXAMPLE yaml
+  java.util.concurrent.Executor: 负责线程的使用和调度的接口
+    - java.util.concurrent.ExecutorService: 子接口，线程池的主要接口
+      - java.util.concurrent.ThreadPoolExecutor: 线程池的实现类
+      - java.util.concurrent.ScheduledExecutorService: 子接口，负责线程调度
+        - java.util.concurrent.ScheduledThreadPoolExecutor: 继承ThreadPoolExecutor，实现ScheduledExecutorService
+  工具类java.util.concurrent.Executors
+  - Executors.newFixedThreadPool(): 创建固定大小的线程池
+  - Executors.newCachedThreadPool(): 创建大小不固定的线程池
+  - Executors.newSingleThreadExecutor(): 创建仅含单个线程的线程池
+  - Executors.newScheduledThreadPool(): 创建大小固定可设置延迟或定时执行的线程池
+  #+END_EXAMPLE
 
-  
+** 示例
+   #+BEGIN_EXAMPLE java
+   // 创建固定大小的线程池
+   ExecutorService fixedPool = Executors.newFixedThreadPool(2);
+
+   // 分配任务
+   fixedPool.submit(new Runnable(){
+     public void run(){}
+   });
+   FutureTask<String> future = fixedPool.submit(new Callable<String>(){
+     public String call() throws Exception {
+       return "helloworld";
+     }
+   });
+
+   // 关闭线程池，否则主线程会被挂起
+   pool.shutdown();
+   //pool.shutdownNow() 不等待线程池内的线程空闲即马上关闭线程池
+
+
+   // 创建计划任务线程池
+   ScheduledExecutorService pool = Executors.newScheduledThreadPool();
+   FutureTask<String> future = pool.schedule(new Callable<String>(){
+     public String call() throws Exception {
+       System.out.println(Thread.currentThread().getName());
+       return "helloworld";
+     }
+   }, 10, TimeUnit.SECONDS);
+   #+END_EXAMPLE
+
+* ForkJoinPool
+  JDK1.7引入的新特性，就是将一个大任务拆分(fork)为若干个小任务，再对小任务进行并行运算，最后将结果汇总(join)。
+
+** work-stealing(工作窃取)模式
+   假如现在有两个线程分别在两个核上工作，然后每个线程队列中分别包含5个任务，当一个线程被阻塞而另一个线程已经将其线程队列中的任务执行完，那么空闲的线程会从被阻塞的线程队列中窃取任务来执行。
+   
+** 示例
+   #+BEGIN_EXAMPLE java
+   public class App 
+   {
+       public static void main( String[] args )
+       {
+         ForkJoinPool pool = new ForkJoinPool();
+         ForkJoinTask<Long> task = new ForkJoinSum(0, 1000000);
+         Long sum = pool.invoke(task);
+         System.out.println(sum);
+       }
+   }
+   
+   class ForkJoinSum extends RecursiveTask<Long>{
+     private static final long serialVersionUID = -6479713183174303413L;
+     private static final long THRESHOLD = 100000L; // 临界值
+     
+     private long start;
+     private long end;
+     
+     public ForkJoinSum(long start, long end) {
+       this.start = start;
+       this.end = end;
+     }
+     
+     @Override
+     public Long compute() {
+       long dVal = end - start;
+       long sum = 0;
+       if (dVal < this.THRESHOLD) {
+         for (int i = 1; i <= dVal; i++) {
+           sum += i;
+           }
+       }
+       else {
+         long middle = dVal/2;
+         ForkJoinSum left = new ForkJoinSum(start, start+middle);
+         ForkJoinSum right = new ForkJoinSum(start+middle+1, end);
+         left.fork();
+         right.fork();
+         sum = left.join() + right.join();
+       }
+     
+       return sum;
+     }
+   }
+   #+END_EXAMPLE

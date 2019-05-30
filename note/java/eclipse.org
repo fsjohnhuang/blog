@@ -1,0 +1,4 @@
+* 快捷键
+#+BEGIN_EXAMPLE 
+ctrl+shift+o 导入包
+#+END_EXAMPLE

@@ -1,3 +1,39 @@
+* 8种基本数据类型
+  - byte, 1byte signed integer
+    - default 0
+    - min -128
+    - max 127
+  - short, 2byte signed integer
+    - default 0
+    - min -32768
+    - max 32767
+  - int, 4byte signed integer
+    - default 0
+    - min -2,147,483,648
+    - max 2,147,483,647
+  - long, 8byte signed integer
+    - default 0L
+    - min -9,223,372,036,854,775,808
+    - max 9,223,372,036,854,775,807
+  - float, 4byte IEEE 754 float
+    - default 0.0f
+    - 不能用于表示精确的值，如货币
+  - double, 8byte IEEE 754 float
+    - default 0.0d
+    - 不能用于表示精确的值，如货币
+  - boolean
+    - default false
+  - char, a 2byte Unicode character
+    - default \u0000
+    - min \u0000
+    - max \uffff
+  
+  8种基本数据类型的包装类的属性
+  SIZE，返回数据类型所占的位数
+  MIN_VALUE，返回最小值
+  MAX_VALUE，返回最大值
+
+
 * 修饰符
 用于定义类、方法和变量，通常放在语句的最前端
 
@@ -9,7 +45,7 @@
 
 *** 接口的默认访问修饰符
 1) 变量默认为 ~public static final~
-2) 方法默认为 ~public~
+2) 方法默认为 ~public abstract~
 
 ** 非访问控制修饰符
 1) final 用来修饰类、方法和变量，类不能被继承、方法不能被重定义、变量为常量
@@ -24,7 +60,7 @@
 6) transient 修饰变量不参与类的序列化
 
 * 枚举
-1) 可单独声明或在类中声明
+1) 可单独声明或在类和接口中声明
 2) 枚举中可定义方法、变量和构造函数 ???
 #+BEGIN_EXAMPLE java
 class FreshJuice {
@@ -56,6 +92,27 @@ public class FreshJuiceTest {
 import java.io.*;
 #+END_EXAMPLE
 
+* 面对对象编程
+
+** 接口
+   实现接口的抽象类可不实现接口的所有方法，否则则需要实现接口的所有方法。
+   1) 接口和抽象类的区别
+      1) 接口不能包含静态代码块和静态方法
+      2) 一个类可实现多个接口，但只能继承一个抽象类
+      3) 接口的方法不能有方法体，而抽象类中的非抽象方法将包含方法体
+      4) 接口的成员变量修饰符只能为 ~public static final~ ，抽象类的成员变量修饰符和普通实现类一样
+   2) 接口定义
+      #+BEGIN_EXAMPLE java
+      [public|private] interface <接口名称> [extends <其它接口名称>...]{
+      }
+      #+END_EXAMPLE
+      注意： 接口支持多继承，即可通过 ~extends~ 继承多个父接口
+   3) 标记接口
+      不包含任何属性和方法，仅用于表明它的实现类属于一个特定的类型拥有某个或某些权利。
+
+** 注解
+   1) ~@Override~ 指示该方法为重写父类的同名方法，那么在编译时会检查被标识的方法签名是否与父类签名一致，若不一致则编译失败。
+
 * 异常处理
 
 ** 异常/错误
@@ -74,7 +131,88 @@ import java.io.*;
   jar、ear和war的差别
 
 * JNI
-* JNDI
+* JNDI(Java Naming and Directory Interface)
+  是一组在Java中访问命名和目录服务的API。
+  1) 命名服务
+     将名称和对象联系起来，让我们可以通过名称访问对象。
+  2) 目录服务
+     基于命名服务上作增强，使得对象不仅有名称还有属性。
+  
+  JNDI组成
+  1) 应用编程接口(API)
+  2) 服务提供者接口(SPI,Service Provider Interface)
+  3) LDAP服务提供者、NIS服务提供者、文件系统服务提供者等
+
+  优点：通过名称引用Java对象或资源，而不必知道对象或资源的物理位置。
+   
+  JNDI现在可访问的命名和目录服务有
+  1) DNS
+  2) XNam
+  3) Novell目录服务
+  4) LDAP
+  5) CORBA对象服务
+  6) 文件系统
+  7) Windows的注册表
+  8) RMI
+  9) DSML v1&v2
+  10) NIS
+  
+  在J2EE环境下，JNDI的主要用途
+  1) 获得Java事务API中的UserTransaction接口的引用
+  2) 获得如JDBC、JMS等连接到资源工厂
+  3) 在EJB组件中，查找其他EJB组件
+
+  JNDI的概念
+  1) Atomic Name(原子名)
+     不可分割的名字，如/ETC/FSTAB中的ETC和FSTAB均为Atomic Name
+  2) Compound Name(复合名)
+     由0或多个Atomic Name组成，如/ETC/FSTAB就是Compound Name
+  3) Binding(绑定)
+     名字和对象或资源的关联
+  4) Context(上下文)
+     包含0或多个Binding，如java/MySql中java为Context，而MySql为名字，整体和某个对象或资源关联起来了
+  5) Subcontext(子上下文)
+     上下文的上下文，如java/ejb/helloBean中ejb为Subcontext
+  6) 命名系统
+     构成命名空间定义的语法语义
+  7) 命名空间
+     根据命名系统的语法约定由原子名、复合名、上下文构成的结构，如文件系统的命名空间由目录和文件名组成
+  8) 合成名
+     由多个命名系统组成的名字，如URL ~http://java.sun.com/product/index.html~
+     1) http来自URL scheme-id命名系统
+     2) java.sum.com来自DNS命名系统
+     3) product、index.html来自文件系统的命名系统
+
+** 工具包
+   - ~javax.naming~ 提供访问命名服务的类和接口
+     - Context 命名服务操作的入口
+   - ~javax.naming.directory~ 对 ~javax.naming~ 扩充，提供访问目录服务的功能
+     - DirContext 目录服务操作的入口
+   - ~javax.naming.event~ 对访问命名和目录服务提供事件通知的支持
+     - NamingEvent 命名或目录服务产生的事件
+     - NamingListener 事件监听
+   - ~javax.naming.ldap~ 提供对LDAPv3扩展操作和控件的支持
+     - LdapContext LDAP目录服务操作的入口
+   - ~javax.naming.spi~ 允许动态插入不同实现。为有兴趣创建服务提供者的开发者提供的。
+
+** LDAP(Light Directory Access Protocol)
+   相当于简易版本的RDBMS，以树状的层次结构存储数据，适用于读多写少的场景。（优化过读取操作）
+   
+*** 概念
+    1) DN(Distinguished Name)
+       标记记录路径的唯一标识。其中Base DN为基准DN，即从哪个DN开始搜索(搜索范围分为One Level和Subtree)。而RDN为叶子节点本身的标识。
+    2) DC(Domain Component)
+       记录所属区域
+    3) OU(Organization Unit)
+       组织单元
+    4) CN/UID
+       记录的名字
+   
+*** 运维工具
+    1) 查看工具 —— Free LDAP Browser
+   
+*** 
+
 * QA
 1) CopyOnWrite
 2) 泛型
@@ -82,4 +220,6 @@ import java.io.*;
 4) CAS
 5) AQS
 6) JVM
+7) 实现java.io.Serializable接口的类需要定义 ~private static final long serialVersionUID~ ?
  
+

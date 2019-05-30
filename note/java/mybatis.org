@@ -208,7 +208,10 @@ p  - 常用方法
 * MyBatis配置文件
   默认配置信息已经在org.apache.ibatis.session.Configuration类中设置。(在Eclipse中通过Navigation/Open Type工具查看)
   #+BEGIN_EXAMPLE xml
-  <?xml !>
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE configuration
+    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-config.dtd">
   <configuration>
       <!-- 设置内联属性或引入外部配置，并在当前文档中动态替换。
            1. 设置内联属性
@@ -1398,6 +1401,7 @@ public interface Transaction {
    - SQL Mapper XML
 
    QBC风格的条件查询
+
 
 ** [[https://pagehelper.github.io][MyBatisPageHelper]]
    - 支持多种数据库
