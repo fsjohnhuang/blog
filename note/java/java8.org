@@ -769,6 +769,16 @@ public class FreshJuiceTest {
 * TODO 打包发布
   jar、ear和war的差别
 * TODO 反射
+  Class类，即Java所有类型的类型类
+  获取方式
+  1) ~类名.class~
+  2) ~实例.getClass()~
+  3) ~Class.forName("全限定类名")~ ， 通过类加载器加载获取。
+     
+  #+BEGIN_EXAMPLE java
+  
+  #+END_EXAMPLE
+
 * TODO JNI
 
 * 文档注释
