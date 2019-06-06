@@ -1559,3 +1559,11 @@
   2) URI和URL的区别？
 
 
+
+
+IOC容器设计原理
+AOP设计原理
+FactoryBean和BeanFactory
+Spring事务处理机制
+基于SpringJDBC手写ORM框架
+SpringMVC9大组件

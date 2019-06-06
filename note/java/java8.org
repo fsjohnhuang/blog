@@ -94,6 +94,8 @@
   // 定义容量为5的int数组
   int[] c = new int[5];
   int[] d = {1,2,3,4,5};
+  
+  String[] strs = new String[]{"a", "b"};
 
   // 2×n的二维数组
   int[][] e = new int[2][];
@@ -104,6 +106,11 @@
   e[1][0] = 4;
   e[1][1] = 6;
   e[1][2] = 7;
+
+  int[] nums = new int[]{1,2,3};
+  Integer[] iNums = new Integer[]{1,2,3};
+  Object[] oINums = (Object[])iNums; // 强制转换成功
+  Object[] oNums = (Object[])nums; // 强制转换失败
   #+END_EXAMPLE
 
 ** ~java.util.Arrays~ 操作数组的帮助类
@@ -119,6 +126,7 @@
      1) ~new Date()~ 使用当前日期时间初始化对象
      2) ~new Date(long millisec)~ 参数作为相对于1970/1/1起的毫秒数来初始化对象
    - 实例方法
+     很多方法已经被标识为deprecated，建议使用Calender来操作
      - ~boolean after(Date date)~ 判断Date实例是否在入参之后
      - ~boolean before(Date date)~ 判断Date实例是否在入参之前
      - ~Object clone()~ 复制实例副本
@@ -131,14 +139,20 @@
 
 ** 日期时间字符串格式化
    1) ~java.text.SimpleDateFormat~
+      继承 ~java.text.DateFormat~ ，提供locale-sensitive的日期和格式化字符串之间的相互转换功能。
+      - 日期时间转换为格式化字符串
       #+BEGIN_EXAMPLE java
-      Date now = new Date();
-      SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
-      System.out.println(ft.format(now));
+      // 假定当前时区为东8(即GMT+8)
+      // 因此所有时间的默认时区均为东8
+      Date now = new Date(); // 假设日期时间为 2019-04-21 00:00:00
+      SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+      String gmt8 = ft.format(now); // 2019-04-21 00:00:00
+      ft.setTimeZone(TimeZone.getInstance("GMT")); // 设置时区为0时区
+      String gmt = ft.format(now); // 2019-04-20 16:00:00
       #+END_EXAMPLE
-      - 将字符串解析为日期时间对象
+      - 将字符串解析为日期时间
         #+BEGIN_EXAMPLE java
-        SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+        SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Date date = ft.parse("2019-02-02 00:02:00");
         #+END_EXAMPLE
    2) ~System.out.printf~
@@ -205,6 +219,16 @@
    c1.add(Calendar.YEAR, 1);
    c1.add(Calendar.YEAR, -1);
    #+END_EXAMPLE
+
+*** Date和Calendar转换
+    #+BEGIN_EXAMPLE java
+    // Calendar转Date
+    Calendar cale = Calendar.getInstance();
+    Date date = cale.getTime();
+
+    // Date转Calendar
+    cale.setTime(date);
+    #+END_EXAMPLE
 
 * IO
 
@@ -435,7 +459,7 @@ public class FreshJuiceTest {
      5) 在子类方法中可通过 ~super~ 调用父类中被重写的方法
      6) 静态方法不存在重写，父类和子类的静态方法各自独立
    - 重载(Overload)
-     在同一个类中多个名称相同但方法参数列表不同的实例方法，重载方法的返回值类型可相同也可以不同
+     在同一个类中多个名称相同但方法参数列表不同的实例或静态方法，重载方法的返回值类型可相同也可以不同
      1) 重载方法必须具有不同的参数列表，仅返回值类型不同是无法区分方法的
 
 ** 多态
@@ -514,21 +538,79 @@ public class FreshJuiceTest {
        #+END_EXAMPLE
    
 ** 方法的可变参数
-   JDK1.5引入的特性，支持传递同类型的可变参数给方法
+   JDK1.5引入的特性，支持传递同类型的可变参数给方法，并且必须作为最后一个参数。
    #+BEGIN_EXAMPLE java
    public class Test{
-     public void printMax(double... numbers){
+     public void printMax(String str, double... numbers){
        // do something
      }
 
      public void execute(){
+       String firstArg = "the first argument";
        double[] vals = {1d,2d,3d};
-       this.printMax(1d,2d);
-       this.printMax(vals);
+       this.printMax(firstArg, 1d,2d);
+       this.printMax(firstArg, vals);
      }
    }
-
    #+END_EXAMPLE
+
+*** 方法重载优先匹配固定参数
+    若调用的方法能匹配到固定参数重载方法和可变参数重载方法，那么优先匹配固定参数重载方法。
+    #+BEGIN_EXAMPLE java
+    public class Test{
+      public static String concat(String a, String b){
+        System.out.println("concat(String a, String b)");
+        return a + b;
+      }
+      public static String concat(String... strs){
+        System.out.println("concat(String... strs)");
+        StringBuilder sb = new StringBuilder();
+        for (String str : strs){
+          sb.append(str);
+        }
+        return sb.toString();
+      }
+
+      public static void main(String[] args){
+        concat("a", "b"); // concat(String a, String b)
+        concat("a", "b", "c"); // concat(String... strs)
+      }
+    }
+    #+END_EXAMPLE
+
+*** 如匹配到多个可变参数重载方法，则会报编译时异常
+    #+BEGIN_EXAMPLE java
+    public class Test{
+      public static void test(String a, Integer... b){
+        System.out.println("Integer");
+      }
+      public static void test(String a, String... b){
+        System.out.println("String");
+      }
+
+      public static void main(String[] args){
+        // test("abc", null); 由于无法判断null的数据类型，因此会抛出编译时异常
+        String[] b = null;
+        test("abc", b); // String
+      }
+    }    
+    #+END_EXAMPLE
+
+*** 反射
+    由于反射是在运行时获取类、方法等的元数据，而可变参数在运行时被编译为数组。因此通过反射调用可变参数方法时，可变参数用数组代替。
+    #+BEGIN_EXAMPLE java
+    public class Test{
+      public static void print(String... strs){
+        System.out.println(strs[0]);
+      }
+
+      public static void main(String[] args){
+        Method method = Test.class.getMethod("print", String[].class);
+        method.invoke(null, new String[]{"a", "b"}); // 成功
+        method.invoke(null, "a", "b"); // 抛出java.lang.IllegalArgumentException: wrong number of arguments
+      }
+    }
+    #+END_EXAMPLE
 
 * TODO 异常处理
 
@@ -686,8 +768,8 @@ public class FreshJuiceTest {
 * TODO 注解
 * TODO 打包发布
   jar、ear和war的差别
-
-* JNI
+* TODO 反射
+* TODO JNI
 
 * 文档注释
   | 标签          | 说明                                               |
@@ -930,6 +1012,28 @@ public class FreshJuiceTest {
    https://www.ibm.com/developerworks/cn/java/j-introducing-junit5-part1-jupiter-api/index.html
 
 ** 断言库
+
+* Java8新特性
+  
+** Lambda表达式
+
+** 方法引用
+
+** 函数式接口
+
+** 默认方法
+
+** 新工具
+
+** Stream API
+
+** Date Time API
+
+** Optional类
+
+** Nashorn JavaScript引擎
+
+** Base64
 
 * QA
 1) CopyOnWrite

@@ -1,0 +1,29 @@
+1) Java内存模型
+   1) 线程通信
+   2) 消息传递
+2) 内存模型
+   1) 重排序
+   2) 顺序一致性
+   3) Happens-Before
+   4) As-if-Serial
+3) Synchronized
+   1) 同步、重量级锁
+   2) Synchronized原理
+   3) 锁优化(自旋锁、轻量级锁、重量级锁、偏向锁)
+4) Volatile
+   1) Volatile实现机制
+   2) 内存语义
+   3) 内存模型
+5) Dcl
+6) 并发基础
+   1) Aqs
+   2) Cas
+7) 锁
+   1) Reentrantlock
+   2) Reentrantreadwritelock
+   3) Condition
+8) 开发工具类
+   1) Cyclicbarrier
+   2) Countdownlatch
+   3) Semphore
+

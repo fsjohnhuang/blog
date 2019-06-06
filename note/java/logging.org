@@ -1,50 +1,139 @@
-* log4j
+* [[http://logging.apache.org/log4j/2.x/][Log4j 2]]
+Log4j已经停止维护，而Log4j2采用无锁异步(LMAX Disruptor)等新技术，因此在异步输出日志的性能上远远高于Log4j和Logback(作为Log4j的替代者拥有比其更好的特性，作为SLF4J的内置日志框架实现)。
+Log4j在高并发下会出现死锁导致CPU使用率异常飙升。
+
+** 示例——默认配置
+
 #+BEGIN_EXAMPLE java
 package org.john
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class LogTest {
+  private static final Logger logger = LogManager.getLogger(LogTest.class);
+
   public static void main(String[] args) {
-    Logger logger = Logger.getLogger(LogTest.class);
-    logger.debug("message");
-    logger.info("message");
-    logger.error("message");
+    logger.trace("trace level");
+    logger.debug("debug level");
+    logger.info("info level");
+    logger.warn("warn level");
+    logger.error("error level"); // 默认日志级别为ERROR
+    logger.fatal("fatal level");
+
+    logger.error("the more efficient style of string concatenation {} {}", "one", "two");
   }
 }
 #+END_EXAMPLE
 
-#+BEGIN_EXAMPLE
-# log4j.properties
-# 指定全局日志等级等于或低于INFO的日志信息输出到名为stdout的目的地
-log4j.rootCategory=INFO, stdout, logfile, rollinglogfile, dailyrollinglogfile
-# 指定特定Logger的日志等级等于或低于DEBUG的日志信息输出到名为stdout的目的地
-log4j.logger.org.john.LogTest=DEBUG
-# 日志输出到控制台
-log4j.appender.stdout=org.apatche.log4j.ConsoleAppender
-log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
-log4j.appender.stdout.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
+** 配置文件
+配置文件可以为.xml/.json/.jsn格式，Log4j2会在classpath目录中搜索log4j2.xml、log4j.json和log4j.jsn等名称的文件，若没有找到则是用默认配置。
+搜索顺序：
+1) classpath下名为 log4j-test.json 或者log4j-test.jsn文件
+2) classpath下名为 log4j2-test.xml
+3) classpath下名为 log4j.json 或者log4j.jsn文件
+4) classpath下名为 log4j2.xml
 
-# 日志输出到文件
-log4j.appender.logfile=org.apatche.log4j.FileAppender
-log4j.appender.logfile.File=LogTest.log
-log4j.appender.logfile.layout=org.apache.log4j.PatternLayout
-log4j.appender.logfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
-
-# 日志滚动输出到文件，日志大小到达100MB后创建新的日志文件
-log4j.appender.rollinglogfile=org.apatche.log4j.RollingFileAppender
-log4j.appender.rollinglogfile.File=LogTest.log
-log4j.appender.rollinglogfile.Append=true
-log4j.appender.rollinglogfile.MaxFileSize=100MB
-log4j.appender.rollinglogfile.layout=org.apache.log4j.PatternLayout
-log4j.appender.rollinglogfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
-
-# 日志按日滚动输出到文件
-log4j.appender.dailyrollinglogfile=org.apatche.log4j.DailyRollingFileAppender
-log4j.appender.dailyrollinglogfile.File=LogTest.log
-log4j.appender.dailyrollinglogfile.layout=org.apache.log4j.PatternLayout
-log4j.appender.dailyrollinglogfile.layout.ConverionPattern=%d %p [%C.%M(%L)] - <%m>%n
-
+若从其它位置读取配置文件，则采用如下方式
+#+BEGIN_EXAMPLE java
+Qpublic static void main(String[] args) throws IOException{
+  FileInputStream input = new FileInputStream("/path/to/log4j2.xml");
+  final ConfigurationSource conf = new ConfigurationSource(input);
+  Configurator.initialize(null, source);
+  
+  // LogManager.ROOT_LOGGER_NAME 显式指定采用配置文件中Configuration/Loggers/Root的配置。
+  // 若采用其它名称，若找不到对应的配置则采用父日志配置，即以Configuration/Loggers/Root的配置作为兜底。
+  Logger logger = LogMananger.getLogger(LogManager.ROOT_LOGGER_NAME);
+}
 #+END_EXAMPLE
+
+
+*** 配置文件详解
+- Configuration
+  - 属性
+    - status
+      控制Log4j2日志框架本身的日志级别，取值范围: ~trace,debug,info,warn,error,fatal~
+      若设置为trace则可以看到Log4j2加载配置文件等日志信息。
+    - monitorInterval
+      指定每隔多少秒重新加载配置文件，从而实现更新配置后不重启应用让配置生效的效果。
+  - 子元素
+    - Appenders
+      设置输出目的地信息。
+      - 子元素
+        - Console
+          向System.out输出日志信息
+          - 属性
+            - target 目的地，取值范围: ~SYSTEM_OUT,SYSTEM_ERR~
+        - File
+          向单个文件输出日志信息
+        - RollingRandomAccessFile
+          向文件输出日志信息，并根据日期、文件大小归档日志文件，而归档文件采用滚动覆盖的方式。
+          - 属性
+            - fileName 日志文件的位置和名称
+            - filePattern 当发生归档操作时，归档文件的重命名规则
+              ~$${date:yyyy-MM}/log-%d{yyyy-MM-dd HH-mm}-%i.log~
+          - 子元素
+            - Policies
+              - 子元素
+                - SizeBasedTriggeringPolicy 基于文件大小触发归档操作
+                  - 属性
+                    - size 如10MB
+                - TimeBasedTriggeringPolicy 基于时间触发归档操作
+                  - 属性
+                    - interval 若filePattern中为HH-mm则n分钟归档一次，若为HH则n小时归档一次
+            - DefaultRolloverStrategy
+              - 属性
+                - max 指定归档文件的最大个数
+        - NoSql
+          向MongoDB输出日志信息
+        - Flume
+          向Apache Flume输出日志信息
+        - Async
+          通过子元素AppenderRef指定哪个Appender采用异步日志输出机制。
+        - PatternLayout
+          作为Console,File,RollingRandomAccessFile的子元素设置日志信息格式
+          #+BEGIN_EXAMPLE
+          %d{HH:mm:ss.SSS} 表示输出到毫秒的时间
+          %t 输出当前线程名称
+          %-5level 输出日志级别，-5表示左对齐并且固定输出5个字符，如果不足在右边补0
+          %logger 输出logger名称，因为Root Logger没有名称，所以没有输出
+          %msg 日志文本
+          %n 换行
+          
+          其他常用的占位符有：
+          %F 输出所在的类文件名，如Log4j2Test.java
+          %L 输出行号
+          %M 输出所在方法名
+          %l 输出语句所在的行数, 包括类名、方法名、文件名、行数
+          #+END_EXAMPLE
+        - Filters
+          作为Console,File,RollingRandomAccessFile的子元素设置更精准的日志输出条件
+          过滤条件有三个值 ~ACCEPT,DENY,NEUTRAL~ ，若组合过滤器中前面的过滤器使用 ~ACCEPT~ 那么就会将日志信息直接输出，不再运行后续的过滤器。
+          - 子元素
+            - ThresholdFilter
+              - 属性
+                - level 过滤的日志级别
+                - onMatch 当日志级别大于等于level的日志级别(fatal大于trace)，则返回onMatch值，默认为NEUTRAL
+                - onMismatch 否则返回onMismatch值，默认为DENY
+              - 示例
+                #+BEGIN_EXAMPLE xml
+                <Filters>
+                  <ThresholdFilter level="INFO"/>
+                  <ThresholdFilter level="WARN" onMatch="DENY" onMismatch="NEUTRAL"/>
+                </Filters>
+                #+END_EXAMPLE
+    - Loggers
+      - 子元素
+        - Root
+          根日志对象
+        - Logger
+          子日志对象
+          - 属性
+            - level 日志级别
+            - additivity 是否将日志信息同时输出到父日志对象的Appender中，默认为true
+          - 子元素
+            - AppenderRef 指定Appender
+              - 属性
+                - ref 指定Appender的name值
 
 * log4j+jcl(Jakarta Commons Logging, 即commons logging)
 jcl提供的是一个日志接口，同时兼容轻量级和不依赖具体的日志实现工具。即作为日志工具的一个简单的日志操作抽象，允许使用不同的具体日志实现工具。
@@ -80,29 +169,121 @@ public class LogTest {
 4) 若JRE1.4+则使用JRE内置日志。失败进入步骤5
 5) 使用jcl内建的SimpleLog
 
-* log4j+slf4j(Simple Logging Facade for Java)
-与jcl一样为日志接口，但具有如下优点：
-1) 受类加载器影响较小，不易产生内存溢出
-2) 可方便部署到OSGI环境中
+* slf4j(Simple Logging Facade for Java)
+与jcl一样为日志接口并不一个具体的日志实现框架。
+具有如下优点：
+1) 面向接口编程，更换底层日志实现框架时不用修改业务代码；
+1) 受类加载器影响较小，不易产生内存溢出；
+2) 可方便部署到OSGI环境中。
 
+** 集成Log4j2
 依赖包：
 - logj4-1.2.16.jar
-- slf4j-api-1.6.0.jar, slf4j基本API包
-- slf4j-log4j12-1.6.0.jar, log4j支持包
-- jcl-over-slf4j-1.6.0.jar, 若项目已经使用了jcl，现在要更换为slf4j则添加这个包并删除commons-logging包。代码级别使用和jcl一样的API，但底层桥接到slf4j的API
+- slf4j-api-x.x.x.jar, slf4j基本API包
+  提供Logger和LoggerFactory类。
+- log4j-slf4j-impl.jar, log4j2支持包
+  作为连接slf4j和log4j2的桥梁。里面的StaticLoggerBinder类会创建实现ILoggerFactory接口的org.slf4j.impl.Log4jLoggerFactory实现类，其内部就会通过Log4j2的LogMananger创建Logger实例。
+- jcl-over-slf4j-x.x.x.jar, 若项目已经使用了jcl，现在要更换为slf4j则添加这个包并删除commons-logging包。代码级别使用和jcl一样的API，但底层桥接到slf4j的API
 
+pom.xml
+#+BEGIN_EXAMPLE xml
+<!-- slf4j核心包-->  
+<dependency>  
+    <groupId>org.slf4j</groupId>  
+    <artifactId>slf4j-api</artifactId>  
+    <version>1.7.26</version>  
+</dependency>  
+<dependency>  
+    <groupId>org.slf4j</groupId>  
+    <artifactId>jcl-over-slf4j</artifactId>  
+    <version>1.7.26</version>  
+    <scope>runtime</scope>  
+</dependency>  
+<!--核心log4j2jar包-->  
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-api</artifactId>  
+    <version>2.11.2</version>  
+</dependency>  
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-core</artifactId>  
+    <version>2.11.2</version>  
+</dependency>  
+<!--用于与slf4j保持桥接-->  
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-slf4j-impl</artifactId>  
+    <version>2.11.2</version>  
+</dependency>  
+<!--web工程需要包含log4j-web，非web工程不需要-->  
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-web</artifactId>  
+    <version>2.11.2</version>  
+    <scope>runtime</scope>  
+</dependency>  
+<!--需要使用log4j2的AsyncLogger需要包含disruptor-->  
+<dependency>  
+    <groupId>com.lmax</groupId>  
+    <artifactId>disruptor</artifactId>  
+    <version>3.2.0</version>  
+</dependency>  
+#+END_EXAMPLE
+
+代码：
 #+BEGIN_EXAMPLE java
 package org.john;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LogTest {
-  private static final Log logger = LogFactory.getLog(LogTest.class);  
+  private static final Logger logger = LoggerFactory.getLogger(LogTest.class);  
 
   public static void main(String[] args) {
-    logger.debug("message");
+    logger.debug("message {} found in {}", "test", "abc");
     logger.info("message");
     logger.error("message");
   }
 }
 #+END_EXAMPLE
+
+* [[http://perf4j.codehaus.org/][Perf4J]]
+方便地输出系统性能日志，然后借助其他报表工具将日志以图表形式展现。
+
+* 方法论
+1) 日志信息的组成
+   - 必须包含的信息
+     ~%d{HH:mm:ss.SSS} %-5level [%thread][%logger{0}] %m%n~
+     1) 描述信息
+     2) 上下文信息
+     3) 当前时间(精确到毫秒)
+     4) 日志级别
+     5) 线程名称
+     6) 简单的日志名称
+   - 无需包含的信息(由于在日志模式中获取类名、方法名和行号会带来严重的性能问题)
+     1) 文件名
+     2) 全限定类名
+     3) 代码行号
+     4) 方法名
+2) 将方法的参数和返回值输出到日志中
+   可以方便地找到死锁和线程饥饿(starvation)等问题。
+   #+BEGIN_EXAMPLE java
+   public String printDocument(Document doc, Mode mode){
+     logger.debug("Entering printDocument(doc={}, mode={})", doc, mode);
+     String id = "";
+     logger.debug("Leaving printDocument():{}", id);
+     return id;
+   }
+   #+END_EXAMPLE
+3) 用日志记录与外部系统的交互
+4) 直接将异常抛给日志框架，方能保存异常堆栈信息
+   #+BEGIN_EXAMPLE java
+   try{
+     // throws Exception instance
+   }
+   catch(Exception e){
+     logger.error("", e);
+   }
+   #+END_EXAMPLE
+   

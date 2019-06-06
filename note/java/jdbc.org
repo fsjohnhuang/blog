@@ -1,0 +1,279 @@
+JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统的、通用的SQL数据库存取和操作的公共接口，具体实现类由各RDBMS厂商提供。
+
+JDBC接口组成：
+1) 面向应用的API
+   Java API，抽象接口，供应用开发人员使用(连接数据库、执行SQL语句、获取结果)
+2) 面向数据库的API
+   Java Driver API，供SQL数据库厂商开发数据库驱动程序用。
+   ~java.sql.Driver~ 是所有驱动程序必须实现的接口，当在应用程序不必要直接使用 ~java.sql.Driver~ ，而是使用 ~java.sql.DriverManager~ 去调用具体的Driver实现。
+   - JDBC驱动程序分为4种类型
+     1) JDBC-ODBC桥
+     2) 部分本地API+部分Java的驱动程序
+     3) JDBC网络的纯Java驱动程序(具有性能、可移植性、功能上的优势)
+     4) 本地协议的纯Java驱动程序(具有性能、可移植性、功能上的优势)
+        完全由Java编写，JDBC驱动程序通过与数据库建立的Socket连接，采用具体厂商网络协议把JDBC调用转换为直接连接的网络调用。
+
+JDBC URL: 用于标识一个被注册的驱动程序，驱动程序管理通过JDBC URL选择正确的驱动程序，从而建立到数据库的连接。
+JDBC URL由3部分组成，各部分用冒号(:)分隔。
+1) 协议: JDBC URL中的协议均为jdbc
+2) 子协议: 子协议用于标识一个数据库驱动程序，如mysql,oracle等
+3) 子名称: 依赖子协议而变化，用于定位数据库服务位置
+
+示例：
+1) Oracle: ~jdbc:oracle:thin@localhost:1521:sid~
+2) SQLServer: ~jdbc:microsoft:sqlserver//localhost:1433;DatabaseName=sid~
+3) MySQL: ~jdbc:mysql://localhost:3306/sid~
+
+示例
+1) 直接使用 ~java.sql.Driver~
+   #+BEGIN_EXAMPLE java
+   public static void main(String[] args) {
+     Driver driver = new com.mysql.jdbc.Driver();
+
+     String jdbcUrl = "jdbc:mysql://127.0.0.1:3306/test";
+     Properties props = new Properties();
+     props.put("user", "root");
+     props.put("password", "123");
+     
+     Connection conn = driver.connect(jdbcUrl, props);
+   }
+   #+END_EXAMPLE
+2) 通过反射使用 ~java.sql.Driver~
+   #+BEGIN_EXAMPLE java
+   public static void main(String[] args){
+     InputStream in = getClass().getClassLoader().getResourceAsStream("db.properties");
+     Properties props = new Properties();
+     props.load(in);
+     Connection conn = getConnection(props.getProperty("jdbc.driverClass")
+     , props.getProperty("jdbc.jdbcUrl")
+     , props.getProperty("jdbc.user")
+     , props.getProperty("jdbc.password"));
+   }
+
+   public static Connection getConnection(String driverClass, String jdbcUrl, String user, String password) throws Exception{
+     Driver driver = (Driver) Class.forName(driverClass).newInstance();
+     Properties props = new Properties();
+     props.put("user", "root");
+     props.put("password", "123");
+     
+     Connection conn = driver.connect(jdbcUrl, props);
+     return conn;
+   }
+   #+END_EXAMPLE
+3) 通过驱动程序管理器 ~java.sql.DriverManager~
+   好处：可以注册多个驱动程序，然后通过不同的JDBC URL来获取对应的数据库的驱动程序。
+   #+BEGIN_EXAMPLE java
+   public static Connection getConnection(String driverClass, String jdbcUrl, String user, String password) throws Exception{
+     // 加载数据库驱动程序
+     Class.forName(driverClass);
+     /*
+     * 驱动程序中一般存在静态代码块在加载驱动时自动执行驱动注册到驱动管理器的操作，因此不用在这里手动执行如下代码
+     * DriverManager.registerDriver(Class.forName(driverClass).newInstance())
+     */
+     
+     // 通过DriverManager获取Connection实例
+     Connection conn = DriverManager.getConnection(jdbcUrl, user, password);
+     return conn;
+   }   
+   #+END_EXAMPLE
+
+* 通过Statement执行SQL脚本
+  #+BEGIN_EXAMPLE java
+  public void execute(String sql){
+    Connection conn = null;
+    Statement stat = null;
+    try{
+      conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
+      stat = conn.createStatement();
+      // 可执行DML
+      stat.executeUpdate(sql);
+    }
+    finally{
+      try{
+        if(stat != null) stat.close();
+      }
+      catch(Exception e){}
+      try{
+        if(conn != null) conn.close();
+      }
+      catch(Exception e){}
+    }
+  }
+
+  public List<User> query(String sql){
+    List<User> users = new LinkedList<User>();
+    Connection conn = null;
+    Statement stat = null;
+    try{
+      conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
+      stat = conn.createStatement();
+      // 可执行DQL
+      ResultSet rs = stat.executeQuery(sql);
+
+      /***
+      * ResultSet为结果集，通过调用实例方法next()判断游标是否到达最后一行，若不是则游标移动到后面一行记录，并返回true。(相当于将Iterator的hasMore()和next()方法组合在一起)
+      * 通过实例方法getXxx(int columnIndex)通过列索引或getXxx(String columnLabel)通过列别名获取列值，columnIndex从1开始
+      */
+      while (rs.next()){
+        User user = new User();
+        user.setId(rs.getInt(1)); 
+        user.setName(rs.getString(2));
+        user.setDateCreated(rs.getDate(3));
+        users.add(user);
+      }
+
+      return users;
+    }
+    finally{
+      try{
+        if(stat != null) stat.close();
+      }
+      catch(Exception e){}
+      try{
+        if(conn != null) conn.close();
+      }
+      catch(Exception e){}
+    }
+  }
+  #+END_EXAMPLE
+
+* 通过PreparedStatement执行SQL脚本
+  优点：
+  1) 采用参数绑定形式的SQL脚本，而不是拼接SQL脚本，提高数据库执行SQL脚本的效率；
+  2) 自动处理SQL注入问题。
+  
+  #+BEGIN_EXAMPLE java
+  // sql为 insert into user(name, age, datecreated) values(?, ?, ?)
+  public void execute(String sql){
+    Connection conn = null;
+    PreparedStatement stat = null;
+    try{
+      conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
+      stat = conn.preparedStatement(sql);
+      stat.setString(1, "john"); // 索引从1开始
+      stat.setInt(2, 18);
+      stat.setDate(3, new java.sql.Date(new java.util.Date().getTime()));
+      // 可执行DML
+      stat.executeUpdate();
+    }
+    finally{
+      try{
+        if(stat != null) stat.close();
+      }
+      catch(Exception e){}
+      try{
+        if(conn != null) conn.close();
+      }
+      catch(Exception e){}
+    }
+  }
+
+  // sql为 select * from user where name = ? or age > ?
+  public List<User> query(String sql){
+    List<User> users = new LinkedList<User>();
+    Connection conn = null;
+    PreparedStatement stat = null;
+    try{
+      conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
+      stat = conn.preparedstatement(sql);
+      stat.setString(1, "john");
+      stat.setInt(2, 18);
+      // 可执行DQL
+      ResultSet rs = stat.executeQuery();
+
+      /***
+      * ResultSet为结果集，通过调用实例方法next()判断游标是否到达最后一行，若不是则游标移动到后面一行记录，并返回true。(相当于将Iterator的hasMore()和next()方法组合在一起)
+      * 通过实例方法getXxx(int columnIndex)通过列索引或getXxx(String columnLabel)通过列别名获取列值，columnIndex从1开始
+      */
+      while (rs.next()){
+        User user = new User();
+        user.setId(rs.getInt(1)); 
+        user.setName(rs.getString(2));
+        user.setDateCreated(rs.getDate(3));
+        users.add(user);
+      }
+
+      return users;
+    }
+    finally{
+      try{
+        if(stat != null) stat.close();
+      }
+      catch(Exception e){}
+      try{
+        if(conn != null) conn.close();
+      }
+      catch(Exception e){}
+    }
+  }
+  #+END_EXAMPLE
+
+** 利用反射封装结果集
+   #+BEGIN_EXAMPLE java
+   public <T> T query(Class<T> clazz, String sql, Object[] args){
+    T entity = null;
+    Connection conn = null;
+    PreparedStatement stat = null;
+    try{
+      conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
+      stat = conn.preparedstatement(sql);
+      for (int i = 0; i < args.length; i++){
+        stat.setObject(i+1, args[i]);
+      }
+
+      // 可执行DQL
+      ResultSet rs = stat.executeQuery();
+
+      /***
+      * ResultSetMetaData实例方法
+      * getColumnLabel(int columnIndex):String 返回指定列的别名
+      * getColumnCount():Intger 返回结果集每行的列数
+      * getColumnTypeName(int columnIndex):String 返回指定列的数据库特定的类型名称
+      * getColumnDisplaySize(int columnIndex):Intger 返回指定列的最大标准宽度，单位为字符
+      * isNullable(int columnIndex):boolean 表示指定列是否可为空
+      * isAutoIncrement(int columnIndex):boolean 指示指定列是否自动编号，这样该列只允许读操作
+      */
+      ResultSetMetaData rsmd = rs.getMetaData();
+
+      if (rs.next()){
+        entity = clazz.newInstance();
+        for (int i = 0; i < rsmd.getColumnCount(); i++){
+          String label = rsmd.getColumnLabel(i + 1);
+          Object val = rs.getObject(i + 1);
+          // 利用Apache的BeanUtils操作
+          BeanUtils.setProperty(entity, label, val);
+        }
+      }
+
+      return entity;
+    }
+    finally{
+      try{
+        if(stat != null) stat.close();
+      }
+      catch(Exception e){}
+      try{
+        if(conn != null) conn.close();
+      }
+      catch(Exception e){}
+    }     
+   }
+   #+END_EXAMPLE
+
+* DAO(Data Access Object)
+  指仅仅包含操作数据库的逻辑(CRUD)，而不包含业务相关逻辑。
+
+* 通过JDBC驱动处理元数据
+  #+BEGIN_EXAMPLE java
+    /***
+      * getURL():String 返回数据库的URL字符串
+      * getUserName():String 返回当前数据库用户名
+      * isReadOnly():boolean 表示数据库是否只允许读操作
+      * getDatabaseProductName():String 返回数据库的产品名称
+      * getDatabaseProductVersion():String 返回数据库的版本号
+      * getDriverName():String 返回驱动程序名称
+      * getDriverVersion():String 返回驱动程序版本号
+      * 还能获取数据表、触发器、存储过程等信息
+      */
+    DatabaseMetaData dmd = conn.getMetaData();
+  #+END_EXAMPLE
