@@ -177,6 +177,7 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
   #+END_EXAMPLE
 
 * 通过PreparedStatement执行SQL脚本
+  ~java.sql.PreparedStatement~ 为 ~java.sql.Statement~ 的派生类。
   优点：
   1) 采用参数绑定形式的SQL脚本，而不是拼接SQL脚本，提高数据库执行SQL脚本的效率；
   2) 自动处理SQL注入问题。
@@ -188,12 +189,28 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
     PreparedStatement stat = null;
     try{
       conn = getConnection("com.mysql.jdbc.Driver", "jdbc:mysql://localhost:3306/test", "root", "123");
-      stat = conn.preparedStatement(sql);
+      /* 
+      * 若如MySQL支持数据库自增列，那么通过第二个参数设置为Statemenet.RETURN_GENERATED_KEYS即可，
+      * 默认值为Statement.NO_GENERATED_KEYS。
+      */ 
+      stat = conn.preparedStatement(sql, Statement.RETURN_GENERATED_KEYS);
       stat.setString(1, "john"); // 索引从1开始
       stat.setInt(2, 18);
       stat.setDate(3, new java.sql.Date(new java.util.Date().getTime()));
-      // 可执行DML
-      stat.executeUpdate();
+      // 可执行DML，返回受影响的行数
+      int effectedRecordCount = stat.executeUpdate();
+      
+      // 获取数据库自增列的数据
+      ResultSet rs = stat.getGeneratedKeys();
+      ResultSetMetaData rsmd = rs.getMetaData();
+      int columnCount = rsmd.getColumnCount();
+      while(rs.next()){
+        for (int i = 0; i < columnCount; i++){
+          String name = rsmd.getColumnName(i+1); // 列名为 GENERATED_KEY
+          Object value = rs.getObject(i+1);
+          System.out.printf("%s: %s %n");
+        }
+      }
     }
     finally{
       try{
@@ -321,3 +338,266 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
    */
   DatabaseMetaData dmd = conn.getMetaData();
   #+END_EXAMPLE
+* 操作LOB
+  LOB(Large Object, 大对象)，是一种用来存储大量二进制或文本数据的数据类型(最大容量为4GB)。
+  - Oracle分为内部和外部2类LOB
+    1) 内部LOB
+       以字节流的形式存储在数据库内部，因此可参数事务，和像处理普通数据一样可对其进行备份和恢复擦作。
+       3种内部LOB：
+       1) BLOB(二进制数据)， 适用于存储如图片、视频、音频等二进制数据
+       2) CLOB(单字节字符数据)，适用于存储超长文本数据
+       3) NCLOB(多字节字符数据)，适用于存储超长文本数据
+    2) 外部LOB
+       该类型的数据为只读，不能参与事务，也不能单单通过数据库对其进行备份和恢复。
+       1种外部LOB：
+       1) BFILE，仅存储数据在操作系统中的位置信息，而数据的实体以外部文件的形式存储在操作系统的文件系统中。
+  - MySQL的BLOB分为4种
+    1) TinyBlob(最大255B)
+    2) Blob(最大65KB)
+    3) MediumBlob(最大16MB)
+    4) LongBlob(最大4GB)
+
+** 示例
+   #+BEGIN_EXAMPLE java
+   public void saveBlob(String avatar){
+     String sql = "insert into user(uid, avatar) values(?, ?)";
+     Connection conn = null;
+     PreparedStatement stat = null;
+     InputStream in = null
+     try{
+       conn = getConnection();
+       stat = conn.preparedStatement(sql);
+       stat.setString(1, "john");
+       in = FileInputStream(avatar);
+       stat.setBlob(2, in);
+       
+       stat.executeUpdate();
+     }
+     finally {
+       if (in != null){
+         try{
+           in.close()
+         }
+         catch(Exception e){}
+       }
+       if (stat != null){
+         try{
+           stat.close()
+         }
+         catch(Exception e){}
+       }
+       if (conn != null){
+         try{
+           conn.close()
+         }
+         catch(Exception e){}
+       }
+     }
+   }
+
+   public void readBlob(String uid){
+     String sql = "select avatar from user where uid = ?";
+     Connection conn = null;
+     PreparedStatement stat = null;
+
+     try{
+       conn = getConnection();
+       stat = conn.preparedStatement(sql);
+       stat.setString(1, uid);
+
+       ResultSet rs = stat.executeQuery();
+       while(rs.next()){
+         Blob blob = rs.getBlob(1);
+         InputStream in = blob.getBinaryStream();
+         
+         OutputStream out = new FileOutputStream("avatar/" + uid + ".jpg");
+         byte[] buffer = new byte[1024];
+         int len = 0;
+         while ((len = in.read(buffer)) != -1){
+           out.write(buffer, 0, len);
+         }
+         
+         out.close();
+         in.close();
+       }
+     }
+     finally {
+       if (in != null){
+         try{
+           in.close()
+         }
+         catch(Exception e){}
+       }
+       if (stat != null){
+         try{
+           stat.close()
+         }
+         catch(Exception e){}
+       }
+       if (conn != null){
+         try{
+           conn.close()
+         }
+         catch(Exception e){}
+       }
+     }
+   }
+   #+END_EXAMPLE
+
+* 事务
+  #+BEGIN_EXAMPLE java
+  public void doIt(){
+    Connection conn = getConnection();
+    
+    try{
+      // 事务开始前，取消默认的自动提交设置
+      conn.setAutoCommit(false);
+      
+      // 从同一个conn中获取Statement或其派生类执行数据库操作
+  
+      // 执行正常时进行事务提交操作
+      conn.commit();
+    }
+    catch (Exception e){
+      try{
+        // 执行异常则进行事务回滚操作
+        conn.rollback();
+      }
+      catch(SQLException e){}
+    }
+  }
+  #+END_EXAMPLE
+
+** 事务隔离级别
+   | 隔离级别        | 描述                                                                                                                |
+   |-----------------+---------------------------------------------------------------------------------------------------------------------|
+   | READ UNCOMMITED | 允许事务读取其它事务未提交的变更。存在脏读、不可重复读和幻读的问题                                                  |
+   | READ COMMITED   | 只允许事务读取其它事务已经提交的变更。存在不可重复读和幻读的问题                                                    |
+   | REPEATABLE READ | 在事务持续期间，通过禁止其它事务对指定字段提交变更(CUD)，从而确保该事务可以从该字段重复读取相同的值。存在幻读的问题 |
+   | SERIALIZABLE    | 在事务持续期间，通过禁止其它事务对指定表提交变更(CUD)，从而确保该事务可以从该表重复读取相同的行数。                 |
+
+   Oracle支持 ~READ COMMITED~ (默认) 和 ~SERIALIZABLE~ 2种事务级别
+   MySQL支持全部，默认为 ~REPEATABLE READ~
+  
+   #+BEGIN_EXAMPLE java
+   Connection conn = getConnection();
+   /*
+   * Connection.TRANSACTION_NONE
+   * Connection.TRANSACTION_READ_UNCOMMITED
+   * Connection.TRANSACTION_READ_COMMITED
+   * Connection.TRANSACTION_REPEATABLE_READ
+   * Connection.TRANSACTION_SERIALIZABLE
+   */
+   conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITED);
+   #+END_EXAMPLE
+
+* 批量操作
+  ~Statement实例.addBatch(String sql)~ 或 ~PreparedStatement实例.addBatch()~, 添加需要批量处理的SQL语句
+  ~Statement实例.executeBatch()~, 执行批量处理语句
+  ~Statement实例.clearBatch()~, 清理上一批次通过 ~addBatch~ 添加的批量处理SQL语句，从而添加下一批次的批量处理语句
+  
+  批量的场景：
+  1) 多条SQL语句的批量处理
+  2) 一条SQL语句的批量处理
+
+** 示例
+   #+BEGIN_EXAMPLE java
+   Connection conn = getConnect();
+   PreparedStatement stat = conn.preparedStatement(sql);
+  
+   for (int i = 0; i < 100000; i++){
+     stat.setString(1, "test" + 1);
+    
+     // 逐条执行
+     // stat.executeUpdate();
+
+     // 批量执行
+     stat.addBatch();
+   }
+
+   stat.executeBatch();
+   stat.clearBatch();
+   #+END_EXAMPLE
+
+* 数据库连接池
+  ~javax.sql.DataSource implements CommonDataSource~ 接口定义连接池规范，通常由服务器(Weblogic,WebSphere,Tomcat等)提供实现，也有一些开源组织提供的实现：
+  1) DBCP
+  2) C3P0
+
+  DataSource通常被称为数据源，包含连接池和连接池管理器两部分。
+
+** Commons DBCP示例
+   1) 代码配置
+      #+BEGIN_EXAMPLE java
+      BasicDataSource dataSource = new BasicDataSource();
+      dataSource.setUsername("root");
+      dataSource.setPassword("123");
+      dataSource.setUrl("jdbc:mysql://127.0.0.1/hello");
+      dataSource.setDriverClassName("com.mysql.jdbc.Driver");   
+
+      // 设置初始化连接数
+      dataSource.setInitialSize(10);
+      // 设置最大连接数
+      dataSource.setMaxActive(50);
+      // 设置空闲时至少保持的连接数
+      dataSource.setMinIdle(5);
+      // 等待连接池分配连接的最大等待毫秒数，超过则抛出异常
+      dataSource.setMaxWait(1000 * 5);
+
+      Connection conn = dataSource.getConnection();
+      #+END_EXAMPLE
+   2) properties配置
+      #+BEGIN_EXAMPLE java
+      InputStream in = getClass().getClassLoader().getResourceAsStream("db.properties");
+      Properties props = new Properties();
+      props.load(in);
+      BasicDataSource ds = BasicDataSourceFactory.createDataSource(props);
+      #+END_EXAMPLE
+      #+BEGIN_EXAMPLE ini
+      username=
+      password=
+      driverClassName=
+      url=
+      
+      initialSize=
+      maxActive=
+      minIdle=
+      maxWait=
+      #+END_EXAMPLE
+
+** C3P0示例
+   1) 代码配置
+      #+BEGIN_EXAMPLE java
+      ComboPooledDataSource dataSource = new ComboPooledDataSource();
+      dataSource.setUser("root");
+      dataSource.setPassword("123");
+      dataSource.setJdbcUrl("jdbc:mysql://127.0.0.1/hello");
+      dataSource.setDriverClassName("com.mysql.jdbc.Driver");   
+
+      Connection conn = dataSource.getConnection();
+      #+END_EXAMPLE
+   2) properties配置
+      #+BEGIN_EXAMPLE java
+      InputStream in = getClass().getClassLoader().getResourceAsStream("db.properties");
+      Properties props = new Properties();
+      props.load(in);
+
+      #+END_EXAMPLE
+      #+BEGIN_EXAMPLE ini
+      user=
+      password=
+      driverClassName=
+      jdbcUrl=
+      
+      initialSize=
+      maxActive=
+      minIdle=
+      maxWait=
+      #+END_EXAMPLE
+   
+
+
+
+
+
+   
