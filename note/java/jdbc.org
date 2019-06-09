@@ -578,26 +578,161 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
       #+END_EXAMPLE
    2) properties配置
       #+BEGIN_EXAMPLE java
-      InputStream in = getClass().getClassLoader().getResourceAsStream("db.properties");
-      Properties props = new Properties();
-      props.load(in);
-
+      ComboPooledDataSource dataSource = new ComboPooledDataSource("helloc3p0"); // 在配置文件中匹配name特性值相同的named-config的配置。
+      Connection conn = dataSource.getConnection();
       #+END_EXAMPLE
-      #+BEGIN_EXAMPLE ini
-      user=
-      password=
-      driverClassName=
-      jdbcUrl=
+      #+BEGIN_EXAMPLE xml
+      <!-- 文件名为c3p0-config.xml，即会自动被搜索到并加载 -->
+      <c3p0-config>
+        <named-config name="helloc3p0">
+          <property name="user">root</property>
+          <property name="password">123</property>
+          <property name="driverClass">com.mysql.jdbc.Driver</property>
+          <property name="jdbcUrl">jdbc:mysql://localhost:123/test</property>
+          
+          <!-- 若数据连接池的连接数不足时，一次性向服务器申请的连接数 -->
+          <property name="acquireIncrement">50</property>
+          <property name="initialPoolSize">100</property>
+          <property name="minPoolSize">50</property>
+          <property name="maxPoolSize">1000</property>
+          <!-- C3P0数据库连接池可以维护的Statement个数 -->
+          <property name="maxStatements">0</property>
+          <!-- 每个连接同时可以使用的Statement对象的个数 -->
+          <property name="maxStatementsPerConection">5</property>
+        </named-config>
+      </c3p0-config>
+      #+END_EXAMPLE
+   
+
+
+
+* Apache DBUtils
+对JDBC的简单封装，极大地简化JDBC编码的工作量。
+API:
+- ~org.apache.commons.dbutils.QueryRunner~
+  #+BEGIN_EXAMPLE java
+  Connection conn = getConnection();
+  String sql = "delete from user where id in (?, ?)";
+  QueryRunner runner = new QueryRunner();
+  try{
+    runner.update(conn, sql, 11, 22);
+  }
+  catch (Exception e){
+    e.printStackTrace();
+  }
+  finally {
+    if (conn != null){
+      try{
+        conn.close();
+      }
+      catch (Exception e){}
+    }
+  }
+  #+END_EXAMPLE
+- ~org.apache.commons.dbutils.ResultSetHandler~
+  #+BEGIN_EXAMPLE java
+  Connection conn = getConnection();
+  String sql = "select * from user where id = ?";
+  QueryRunner runner = new QueryRunner();
+  try{
+    User user = runner.query(conn, sql, new org.apache.commons.dbutils.handler.BeanHandler(User.class), 11);
+    // List<User> users = runner.query(conn, sql, new org.apache.commons.dbutils.handler.BeanListHandler(User.class), 11);
+  }
+  catch (Exception e){
+    e.printStackTrace();
+  }
+  finally {
+    if (conn != null){
+      try{
+        conn.close();
+      }
+      catch (Exception e){}
+    }
+  }
+  #+END_EXAMPLE
+- 工具类 ~org.apache.commons.dbutils.DbUtils~
+ 
+* 调用存储过程/函数
+  #+BEGIN_EXAMPLE java
+  public void callFunction(){
+    // 第一个参数为返回值
+    // 第二个参数为IN类型的参数
+    // 第三个参数为OUT类型或IN OUT类型的参数
+    String sql = "{?= call function_name[(?, ?)]}";
+    Connection conn = null;
+    CallableStatement stat = null;
+    
+    try{
+      conn = getConnection();
+      stat = conn.preparedCall(sql);
+      // 通过registerOutParameter方法注册 返回值、OUT参数或IN OUT参数
+      stat.registerOutParameter(1, java.sql.Types.NUMERIC);
+      stat.registerOutParameter(3, java.sql.Types.NUMERIC);      
+      // 通过setXxx方法注册 IN参数
+      // 通过setNull方法注册null值作为参数值
+      stat.setString(2, "john");
       
-      initialSize=
-      maxActive=
-      minIdle=
-      maxWait=
-      #+END_EXAMPLE
-   
+      // 执行数据库操作
+      stat.execute();
 
+      // 通过getXxx方式获取返回值、OUT参数或IN OUT参数的值
+      double result1 = stat.getDouble(1);
+      double result3 = stat.getDouble(3);
+    }
+    catch(Exception e){
+      e.printStackTrace();
+    }
+    finally {
+      if (stat != null){
+        try{
+          stat.close();
+        }catch(Exception e){}
+      }
+      if (conn != null){
+        try{
+          conn.close();
+        }catch(Exception e){}
+      }
+    }
+  }
+  public void callProcedure(){
+    String sql = "{call procedure_name[(?, ?)]}";
 
+    // 第一个参数为IN类型的参数
+    // 第二个参数为OUT类型或IN OUT类型的参数
+    String sql = "{call procedure_name[(?, ?)]}";
+    Connection conn = null;
+    CallableStatement stat = null;
+    
+    try{
+      conn = getConnection();
+      stat = conn.preparedCall(sql);
+      // 通过registerOutParameter方法注册 返回值、OUT参数或IN OUT参数
+      stat.registerOutParameter(2, java.sql.Types.NUMERIC);
+      // 通过setXxx方法注册 IN参数
+      // 通过setNull方法注册null值作为参数值
+      stat.setString(1, "john");
+      
+      // 执行数据库操作
+      stat.execute();
 
-
-
-   
+      // 通过getXxx方式获取OUT参数或IN OUT参数的值
+      double result1 = stat.getDouble(2);
+    }
+    catch(Exception e){
+      e.printStackTrace();
+    }
+    finally {
+      if (stat != null){
+        try{
+          stat.close();
+        }catch(Exception e){}
+      }
+      if (conn != null){
+        try{
+          conn.close();
+        }catch(Exception e){}
+      }
+    }
+  }
+  #+END_EXAMPLE

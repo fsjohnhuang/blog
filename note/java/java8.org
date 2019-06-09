@@ -769,16 +769,135 @@ public class FreshJuiceTest {
 * TODO 打包发布
   jar、ear和war的差别
 * TODO 反射
-  Class类，即Java所有类型的类型类
-  获取方式
-  1) ~类名.class~
-  2) ~实例.getClass()~
-  3) ~Class.forName("全限定类名")~ ， 通过类加载器加载获取。
-     
+Class类(类型类)，即所有Java类型的均为Class类的实例。连8种基本数据类型和void类型，都是Class类的实例。
+#+BEGIN_EXAMPLE java
+public Class{
+  private Class(ClassLoader classLoader);
+}
+#+END_EXAMPLE
+获取方式
+1) ~类名.class~
+2) ~实例.getClass()~
+3) ~Class.forName("全限定类名")~ ， 通过类加载器加载获取，前提是相关的class文件在classpath下。
+
+** 示例
+- 反射的对象
   #+BEGIN_EXAMPLE java
+  package com.john;
   
+  public interface Animal{}
+  
+  public class User{
+    public String say(String suffix){
+      return "User: " + suffix;
+    }
+  }
+  
+  public class Student extends User implements Animal{
+    private String name;
+    public int age;
+  
+    public void getName(){
+      return this.name;
+    }
+  
+    private void setName(String name){
+      this.name = name;
+    }
+  
+    public static final String JOB = "student";
+    public static String GET_JOB(){
+      return JOB:
+    }
+  
+    public Student(){
+    }
+  
+    public Student(String name, int age){
+      this.name = name;
+      this.age = age;
+    }
+  
+    @Override
+    public String say(String suffix){
+      return "Student: " + suffix;
+    }
+  }
+  #+END_EXAMPLE
+- 反射操作  
+  #+BEGIN_EXAMPLE java
+  // 获取全限定类名
+  Student student = new Student();
+  student.getClass().getName(); // 返回com.john.Student
+  
+  // 3种获取Class类实例的方法
+  Class<?> cObj1 = Student.class;
+  Class<?> cObj2 = student.getClass();
+  Class<?> cObj3 = Class.forName("com.john.Student");
+
+  // 实例化
+  Student student1 = (Student)cObj1.newInstance(); // 调用无参构造方法
+  Student student2 = (Student)cObj1.newInstance("john", 25); // 调用含参构造方法
+  
+  // 获取接口的Class类实例
+  Class<?>[] interfaces = cObj1.getInterfaces();
+
+  // 获取父类的Class类实例
+  Class<?> superClass = cObj1.getSuperclass();
+
+  // 获取所有构造方法
+  Constructor<?>[] cs = cObj1.getConstructors();
+  
+  // 获取当前类(不含父类和接口)所有方法(包含public、protected、default、private)
+  Method[] fs = cObj1.getDeclaredMethods(); 
+  // 获取当前类及从父类继承而来的所有公共方法
+  Method[] fs1 = cObj1.getMethods();
+  for (Method f : fs){
+    // 获取方法名称
+    String functionName = f.getName();
+    // 获取方法修饰符
+    Modifier<?>[] ms = f.getModifiers();
+    String modifierNames = Modifier.toString(ms); // 方法所有修饰符组成的字符串
+    // 获取方法入参列表类型
+    Class<?>[] parameterTypes = f.getParameterTypes();
+    // 获取方法声明抛出的异常
+    Class<?>[] exceptionTypes = f.getExceptionTypes();
+  }
+
+  // 获取当前类(不含父类和接口)所有属性(包含public、protected、default、private)
+  Field[] fields = cObj1.getDeclaredFields();
+  // 获取当前类及从父类继承而来的所有公共属性
+  Field[] fields1 = cObj1.getFields();
+
+  // 调用实例方法
+  Method mSay = cObj1.getDeclaredMethod("say", String.class);
+  String ret = (String) mSay.invoke(student, "Hello"); // 输出 Student: Hello
+
+  // 调用静态方法
+  Method mGetJob = cObj1.getMethod("GET_JOB");
+  String ret1 = (String) mGetJob.invoke(null);
+  
+  // 访问privat字段
+  Field field = cObj1.getDeclaredField("name");
+  field.setAccessible(true); // 私有成员字段必须暴力反射后才能读写
+  field.set(student, "set by reflect");
+  String name = (String)field.get(student);
+
+  // 操作数组
+  Integer[] array = [1,2,3];
+  Class<?> clazz = array.getClass();
+  if (clazz.isArray()){
+    System.out.println("is array");
+  }
+  // 获取数组元素数据类型
+  Class<?> componentClazz = array.getClass().getComponentType();
+  // 实例化
+  Object newArray = Array.newInstance(componentClazz, 10);
+  Integer len = Array.getLength(newArray);
+  System.arraycopy(array, 0, newArray, 0, len);
   #+END_EXAMPLE
 
+     
 * TODO JNI
 
 * 文档注释
