@@ -337,7 +337,8 @@ p  - 常用方法
           MyBatis3.4后已经内置并自动引入JSR310的typeHandler了。
         -->
       <typeHandlers>
-          <typeHandler handler="org.apache.ibatis.type.InstanceTypeHandler"/>
+          <!-- 定义当数据库数据类型为VARCHAR，而Java类型为String时，使用自定义类型转换器 -->
+          <typeHandler jdbcType="VARCHAR" javaType="string" handler="com.john.typeHandler.MyStringTypeHandler"/>
       </typeHandlers>
 
       <!-- plugins(插件)

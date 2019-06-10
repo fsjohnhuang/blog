@@ -474,8 +474,8 @@ public class FreshJuiceTest {
 ** 注解
    1) ~@Override~ 指示该方法为重写父类的同名方法，那么在编译时会检查被标识的方法签名是否与父类签名一致，若不一致则编译失败。
 
-** 泛型
-   从Java5引入的特性，提供了编译时类型安全检查机制。泛型本质为 *参数化类型* ，即为所操作的数据类型指定一个参数。
+** 泛型(generics/parameterized type)
+   从Java5引入的特性，提供了编译时类型安全检查机制，防止运行时的执行与数据类型不符的非法操作。泛型本质为 *参数化类型* ，即为所操作的数据类型指定一个参数。
    注意点：
    1) 类型参数只能代表 *引用类型* 不能是原始类型
 
@@ -530,13 +530,78 @@ public class FreshJuiceTest {
          System.out.println(data.get(0) + 1);       
        }
        #+END_EXAMPLE
-    3) 带 ~super~ 的有界泛型通配符，用于对不关心应类型参数具体值但需要限制为某类及其三层父类类型，如Object类型
+    3) 带 ~super~ 的有界泛型通配符，用于对不关心应类型参数具体值但需要限制为某类及父类、基类类型，如Object类型
        #+BEGIN_EXAMPLE java
        void printNumber(List<? super Number> data){
          System.out.println(data.get(0) + 1);       
        }
        #+END_EXAMPLE
    
+*** TODO 底层原理
+    类型擦写(type erasure)：编译器在编译时会将所有类型信息擦除掉，在运行时不存在任何类型相关的信息。如 ~List<String>~ 在运行时只剩下 ~List~ ，这样就能兼容Java5之前版本的二进制类库。
+    https://www.cnblogs.com/xh0102/p/5729528.html
+
+*** 泛型的型变(type variance)——协变(convariance)和逆变(contravariance)
+    型变(type variance)
+    #+BEGIN_QUOTE
+    Type variance refers to the techniques by which we can allow, or not allow, subtyping in our parameterized types.
+    #+END_QUOTE
+    假设现在存在 ~List<Orange>~ 和 ~List<Fruit>~ 两个类型，它们可以存在以下任一个关系：
+    1) 不型变(invariance): ~List<Orange>~ 和 ~List<Fruit>~ 两者没有任何关系；
+    2) 协变(covariance): ~List<Orange>~ 为 ~List<Fruit>~ 的子类型；
+    3) 逆变(cotravariance): ~List<Fruit>~ 为 ~List<Orange>~ 的子类型；
+    
+    *子类(Subclass)* 和 *子类型(Subtype)* 不是一个概念，子类一定是子类型，但子类型不一定是子类。如 ~List<Orange>~ 是 ~List<? extends Fruit>~ 的子类型，但不是子类。
+
+**** Java中的协变
+     #+BEGIN_EXAMPLE java
+     List<? extends Object> oList;
+     List<String> sList = new LinkedList<String>();
+     sList.add("hello");
+     oList = sList;
+
+     for (int i = 0; i < oList.size(); i++){
+       System.out.println(oList.get(i));
+     }
+
+     // 编译失败
+     // oList.add("123");
+     #+END_EXAMPLE
+     Java编译器通过限制方法参数列表中包含类型参数的方法调用，保证运行时的类型安全。也就是方法签名如 ~void test(T a)~ ，其中的 ~T~ 会被 ~? extends Object~ 替换掉，即使方法体并没有用到。
+
+     *特点：*
+     1) 禁止向泛型类执行写入操作
+     2) 允许安全地从泛型类中读取数据
+     
+**** Java中的逆变
+     #+BEGIN_EXAMPLE java
+     List<? super Fruit> superFruitList = new LinkedList<Object>();
+     superFruitList.add(new Orange());
+     superFruitList.add(new Fruit());
+     
+     Object o = superFruitList.get(0);
+     Fruit f = (Fruit)superFruitList.get(1);
+     #+END_EXAMPLE
+
+     *特点：*
+     1) 允许安全地向泛型类执行写入操作
+     2) 无法保证运行时从泛型类中读取数据类型的安全性
+
+**** 为什么需要泛型的型变
+     在泛型类型安全的基础上，提高API的灵活性。
+
+*** 类型参数的命名约定
+    - ~E~ Element，广泛用于Java Collection中
+    - ~K~ Key
+    - ~N~ Number
+    - ~T~ Type
+    - ~V~ Value
+    - ~S,U,V~ 第2,3,4个类型参数
+
+*** QA
+    1) ~List<String>~ 的变量可以赋值给 ~List<Object>~ 吗？
+       不能，Java中这两个类型是完全没有关系的。
+
 ** 方法的可变参数
    JDK1.5引入的特性，支持传递同类型的可变参数给方法，并且必须作为最后一个参数。
    #+BEGIN_EXAMPLE java
@@ -612,11 +677,175 @@ public class FreshJuiceTest {
     }
     #+END_EXAMPLE
 
-* TODO 异常处理
+** 内部类
+   作用：
+   1) 当要实现的接口方法与当前类的方法签名冲突时，可通过内部类实现接口方法(内部类可访问外部类所有成员)；
+   2) 通过内部类继承其它类型，达到多继承的效果；
+    
+*** 分类
+    1) 成员内部类
+       #+BEGIN_EXAMPLE java
+       public class Fruit {
+         private double price = 100;
+        
+         private class InnerPrice implements Price{
+           public double getPrice(){
+             // discount 在Price接口中定义
+             return price * discount;
+           }
+         }
 
-** 异常/错误
+         public class InnerTimeToMarket extends TTM {
+           private double price = 200;
 
-* 集合类型
+           @Override
+           public Date getTTM(){
+             // 当内部类和外部类存在同名成员变量/方法时，调用外部类成员变量/方法则要采用如下方式
+             // 即内部类拥有指向外部类的引用
+             System.out.printf("OuterClass price is: %d", Fruit.this.price);
+             System.out.printf("InnerClass price is: %d", price);
+             return new Date();
+           }
+         }
+
+         public Price askPrice(){
+           return new InnerPrice();
+         }
+       }
+      
+       // 调用
+       Fruit f = new Fruit();
+       // 通过private或protected隐藏内部类，调用则只需调用接口或父类约定的方法即可
+       Price p = f.askPrice();
+       p.getPrice();
+
+       // 通过public暴露内部类，需要先实例化外部类，再实例化其内部类
+       Fruit.InnerTimeToMarket ttm = f.new InnerTimeToMarket();
+       #+END_EXAMPLE
+       - 注意：
+         1) 成员内部类不能拥有静态变量
+         2) 成员内部类不能拥有静态方法
+         3) 成员内部类不能拥有静态内部类
+         4) 成员内部类可定义 ~static final~ 常量
+    2) 静态内部类
+       #+BEGIN_EXAMPLE java
+       public static class Fruit {
+         private static double price = 100;
+        
+         public static class InnerTimeToMarket extends TTM {
+           private static double price = 200;
+
+           @Override
+           public Date getTTM(){
+             // 当内部类和外部类存在同名静态变量/方法时，调用外部类静态变量/方法则要采用如下方式
+             System.out.printf("InnerClass price is: %d", Fruit.price);
+             System.out.printf("InnerClass price is: %d", price);
+             return new Date();
+           }
+         }
+       }
+
+       // 调用
+       Fruit.InnerTimeToMarket ttm = new Fruit.InnerTimeToMarket();
+       Date time = ttm.getTTM();
+       #+END_EXAMPLE
+       - 注意：
+         1) 静态内部类必须定义在静态类中
+         2) 静态内部类中仅能访问外部类的静态变量和静态方法
+    3) 局部内部类
+       #+BEGIN_EXAMPLE java
+       if (true){
+         final String name = "john";
+         class InnerClass{
+           public void print(){
+             System.out.println(name);
+           }
+         }
+         InnerClass n = new InnerClass();
+       }
+       #+END_EXAMPLE
+       - 注意
+         1) 定义在成员方法的局部内部类，可以访问外部类的所有成员变量和成员方法
+         2) 定义在静态方法的局部内部类，可以访问外部类的所有静态变量和静态方法
+         3) 局部内部类可以访问方法中的修饰为 ~final~ 的局部变量和方法入参
+            - 原理：
+              由于局部变量随调用栈帧的释放而被回收，而内部类实例有可能依然可被访问，两者生命周期不一致。而实际上局部变量将作为构造方法入参，参与局部内部类的实例化过程。但存在如下问题，局部变量为基础类型时，Java默认采用传值方式传参。为避免开发人员误会在局部内部类操作的结果会影响到局部变量，因此通过 ~final~ 修饰局部变量，将基本类型的变量标记为常量，引用类型的则直接传递引用本身。
+    4) 匿名内部类
+       #+BEGIN_EXAMPLE java
+       // new interfacename(){} 或 new superclassname(){}
+       if (true){
+         Fruit f = new Fruit(){
+           public double getPrice(){
+             return 1d;
+           }
+         }
+       }
+       #+END_EXAMPLE
+
+* 异常处理
+  1) 异常类型
+     - ~java.lang.Throwable~ 所有异常的顶层父类
+       - ~java.lang.Error~ 包括虚拟机错误和线程死锁，无法被程序员捕获处理，因此一旦抛出Error异常程序则会挂掉。
+       - ~java.lang.Exception~ 可被获取和处理
+         - ~java.lang.Runtime~ 运行时异常
+         
+  2) 异常分类
+     1) unchecked exception(非检查性异常)
+        Error类型异常、Runtime类型及其派生类异常。这类异常在编译时不被提发现和提示，开发人员应该通过修改代码的方式来杜绝这类异常，而不是依赖异常处理器处理(~try...catch~)处理。
+        | 异常                            | 描述                                                                                                                 |
+        |---------------------------------+----------------------------------------------------------------------------------------------------------------------|
+        | ArithmeticException             | 当出现异常的运算条件时，抛出此异常。例如，一个整数"除以零"时，抛出此类的一个实例。                                   |
+        | ArrayIndexOutOfBoundsException  | 用非法索引访问数组时抛出的异常。如果索引为负或大于等于数组大小，则该索引为非法索引。                                 |
+        | ArrayStoreException             | 试图将错误类型的对象存储到一个对象数组时抛出的异常。                                                                 |
+        | ClassCastException              | 当试图将对象强制转换为不是实例的子类时，抛出该异常。                                                                 |
+        | IllegalArgumentException        | 抛出的异常表明向方法传递了一个不合法或不正确的参数。                                                                 |
+        | IllegalMonitorStateException    | 抛出的异常表明某一线程已经试图等待对象的监视器，或者试图通知其他正在等待对象的监视器而本身没有指定监视器的线程。     |
+        | IllegalStateException           | 在非法或不适当的时间调用方法时产生的信号。换句话说，即 Java 环境或 Java 应用程序没有处于请求操作所要求的适当状态下。 |
+        | IllegalThreadStateException     | 线程没有处于请求操作所要求的适当状态时抛出的异常。                                                                   |
+        | IndexOutOfBoundsException       | 指示某排序索引（例如对数组、字符串或向量的排序）超出范围时抛出。                                                     |
+        | NegativeArraySizeException      | 如果应用程序试图创建大小为负的数组，则抛出该异常。                                                                   |
+        | NullPointerException            | 当应用程序试图在需要对象的地方使用 null 时，抛出该异常                                                               |
+        | NumberFormatException           | 当应用程序试图将字符串转换成一种数值类型，但该字符串不能转换为适当格式时，抛出该异常。                               |
+        | SecurityException               | 由安全管理器抛出的异常，指示存在安全侵犯。                                                                           |
+        | StringIndexOutOfBoundsException | 此异常由 String 方法抛出，指示索引或者为负，或者超出字符串的大小。                                                   |
+        | UnsupportedOperationException   | 当不支持请求的操作时，抛出该异常。                                                                                   |
+     2) checked exception(检查性异常)
+        编译时会发现、提示并强制开发人员添加异常处理器或throws申明异常，才能通过编译的异常类型。
+        | 异常                       | 描述                                                                                                                       |
+        |----------------------------+----------------------------------------------------------------------------------------------------------------------------|
+        | ClassNotFoundException     | 应用程序试图加载类时，找不到相应的类，抛出该异常。                                                                         |
+        | CloneNotSupportedException | 当调用 Object 类中的 clone 方法克隆对象，但该对象的类无法实现 Cloneable 接口时，抛出该异常。                               |
+        | IllegalAccessException     | 拒绝访问一个类的时候，抛出该异常。                                                                                         |
+        | InstantiationException     | 当试图使用Class类中的newInstance方法创建一个类的实例，而指定的类对象因为是一个接口或是一个抽象类而无法实例化时，抛出该异常 |
+        | InterruptedException       | 一个线程被另一个线程中断，抛出该异常。                                                                                     |
+        | NoSuchFieldException       | 请求的变量不存在                                                                                                           |
+        | NoSuchMethodException      | 请求的方法不存在                                                                                                           |
+  3) 异常处理器
+     #+BEGIN_EXAMPLE java
+     try{
+       
+     }
+     catch(IOException e){
+       // catch 语句块所捕获的顺序为自上而下，因此异常类型的顺序为子类到父类
+     }
+     catch(Exception e){
+     }
+     finally{
+       // 不能在finally 语句块中调用return，否则会覆盖返回值
+     }
+
+     return "something";
+     #+END_EXAMPLE
+  4) 自定义异常
+     #+BEGIN_EXAMPLE java 
+     public class MyException extends Exception{
+       public MyException(String message){
+         super(message);
+       }
+     }
+     #+END_EXAMPLE
+
+* TODO 集合类型
 
 ** Java2出现的
 *** ~java.util.BitSet~ (位集合)
@@ -768,7 +997,7 @@ public class FreshJuiceTest {
 * TODO 注解
 * TODO 打包发布
   jar、ear和war的差别
-* TODO 反射
+* 反射
 Class类(类型类)，即所有Java类型的均为Class类的实例。连8种基本数据类型和void类型，都是Class类的实例。
 #+BEGIN_EXAMPLE java
 public Class{
@@ -778,7 +1007,8 @@ public Class{
 获取方式
 1) ~类名.class~
 2) ~实例.getClass()~
-3) ~Class.forName("全限定类名")~ ， 通过类加载器加载获取，前提是相关的class文件在classpath下。
+3) ~Class.forName("全限定类名")~ ， 通过Bootstrap ClassLoader加载获取，前提是相关的class文件在classpath下。
+4) ~this.getClass().getClassLoader().loadClass("全限定类名")~ ，使用指定的ClassLoader加载获取。
 
 ** 示例
 - 反射的对象
@@ -897,7 +1127,92 @@ public Class{
   System.arraycopy(array, 0, newArray, 0, len);
   #+END_EXAMPLE
 
-     
+** ~public static native java.lang.Class sun.reflect.Reflection.getCallerClass(int depth)~
+   用于获取调用该方法的类/父类/祖先类信息
+   #+BEGIN_EXAMPLE java
+   package com.test;
+
+   public class C {
+     public void test(){
+       Class<?> clazz0 = java.reflect.Reflection.getCallerClass(0);
+       Class<?> clazz1 = java.reflect.Reflection.getCallerClass(1);
+       Class<?> clazz2 = java.reflect.Reflection.getCallerClass(2);
+       System.out.println(clazz0.getName());
+       System.out.println(clazz1.getName());
+       System.out.println(clazz2.getName());
+     }
+   }
+
+   public class P {
+     public static void main(String[] args){
+       C c = new C();
+       c.test();
+       // java.reflect.Reflection
+       // com.test.C
+       // com.test.P
+     }
+   }
+   #+END_EXAMPLE
+
+* 从classpath获取资源
+  ClassLoader是从classpath中读取资源的类，一般情况通过ClassLoader加载字节码文件(.class文件)，但它提供两个方法加载其他资源。
+  - ~public URL getResource(String name)~
+    实际代码中一般是通过 ~YourClass.class.getResource(String name)~ 来调用，通过委托底层依然是调用ClassLoader的该方法。
+  - ~public InputStram getResourceAsStream(String name)~
+    实际代码中一般是通过 ~YourClass.class.getResourceAsStream(String name)~ 来调用，通过委托底层依然是调用ClassLoader的该方法。
+  - ~public static URL getSystemResource(String name)~ 静态方法调用该方法获取classpath下的资源。
+  - ~public static InputStream getSystemResourceAsStream(String name)~ 静态方法调用该方法获取classpath下的资源。
+ 
+** 示例
+   #+BEGIN_EXAMPLE java
+   package com.test;
+   
+   public class App {
+     public static void main(String[] args){
+       Class<?> clazz = App.class;
+       
+       clazz.getResource(""); // 返回当前.class文件所在目录的绝对URI，如file:///d:\workspace\john\bin\com\test
+       clazz.getResource("/"); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
+       clazz.getClassLoader().getResource(""); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
+       ClassLoader.getSystemResource(""); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
+       Thread.currentThread().getContextClassLoader().getResource(""); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
+     }
+   }
+   #+END_EXAMPLE
+
+** ResourceBundle
+   基于类路径读取属性文件，因此属性文件必须包含在classpath下，并通过全限定类名读取属性文件，并且提供缓存功能，若要更新则要手动清除。
+   #+BEGIN_EXAMPLE java
+   ResourceBundle bundle = ResourceBundle.getBundle("com.test.properties.test01");
+   System.out.println(bundle.getString("jdbc.driver");
+   Enumeration<String> keys = bundle.getKeys();
+   while (keys.hasMoreElements()){
+     String key = keys.nextElement();
+     System.out.printf("%s: %s%n", key, bundle.getString(key));
+   }
+   #+END_EXAMPLE
+
+*** properties文件
+    1) 行注释: 以 ~#~ 开头
+    2) 编码: ~ISO-8859-1~, 该编码不支持中文，中文需转换为Unicode编码才行。
+       
+* ClassLoader(类加载器)
+  1) Bootstrap ClassLoader
+     C++实现，作为Ext ClassLoader的父类加载器，负责jdk_home/lib目录下的核心API或-Xbootclasspath指定的jar包装入工作。
+  2) System ClassLoader
+     负责 ~java -classpath/-Djava.class.path~ 所指目录下的类和jar包装入工作。
+  3) Ext ClassLoader
+     作为App ClassLoader的父类加载器，负责jdk_home/lib/ext目录下的jar包或-Djava.ext.dirs指定目录下的jar包装入工作。
+  4) App ClassLoader
+     负责加载用户类。
+  5) Customer ClassLoader
+     一般都继承App ClassLoader，用户自定义。
+
+** 获取ClassLoader的方法
+   1) ~this.getClass().getClassLoader()~
+   2) ~Thread.currentThread().getContextClassLoader()~ 获取当前线程的ClassLoader
+   3) ~ClassLoader.getSystemClassLoader()~ 获取系统入口点使用的ClassLoader
+
 * TODO JNI
 
 * 文档注释
