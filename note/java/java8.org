@@ -335,20 +335,61 @@
 
 * 枚举
 1) 可单独声明或在类和接口中声明
-2) 枚举中可定义方法、变量和构造函数 ???
-#+BEGIN_EXAMPLE java
-class FreshJuice {
-  enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
-  FreshJuiceSize size;
-}
+   #+BEGIN_EXAMPLE java
+   class FreshJuice {
+     enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
+     FreshJuiceSize size;
+   }
+   
+   public class FreshJuiceTest {
+     public static void main(String []args) {
+       FreshJuice juice = new FreshJuice();
+       juice.size = FreshJuice.FreshJuiceSize.LARGE;
+     }
+   }
+   #+END_EXAMPLE
+2) 枚举中可定义方法、变量和构造函数
+   #+BEGIN_EXAMPLE java
+   // 枚举类Sex
+   public enum Sex {
+     MALE(1, "男性"), FEMALE(2, "女性"); // 枚举值MALE和FEMALE
 
-public class FreshJuiceTest {
-  public static void main(String []args) {
-    FreshJuice juice = new FreshJuice();
-    juice.size = FreshJuice.FreshJuiceSize.LARGE;
-  }
-}
-#+END_EXAMPLE
+     private int id;
+     private String name;
+     
+     private Sex(int id, String name){
+       this.id = id;
+       this.name = name;
+     }
+
+     public int getId(){
+       return this.id;
+     }
+
+     public void setId(int id){
+       this.id = id;
+     }
+
+     public String getName(){
+       return this.name;
+     }
+
+     public void setName(String name){
+       this.name = name;
+     }
+
+     public static Sex getSex(int id){
+       if (id == 1){
+         return MALE;
+       }
+       else if (id == 2){
+         return FEMALE;
+       }
+
+       return null;
+     }
+   }
+   #+END_EXAMPLE
 
 * 源文件声明规则
 1) 一个源文件中只能有一个public类

@@ -30,7 +30,7 @@ JavaBeans
     <configuration>
         <!-- 指定Myatis所用日志的具体实现 -->
         <settings>
-            <setting name="logImpl" value="LOG4J"/>
+            <setting name="logImpl" value="LOG4J2"/>
         </settings>
         <!-- 数据库环境配置 -->
         <environments default="sqlite">
@@ -83,14 +83,21 @@ JavaBeans
       public boolean save(User user);
     }
     #+END_EXAMPLE
-  - log4j.properties
+  - log4j2.xml
     #+BEGIN_EXAMPLE
-    # src/log4j.properties
-    log4j.rootLogger=ERROR, stdout
-    log4j.logger.org.john.mapper.UserMapper=DEBUG
-    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
-    log4j.appender.stdout.layout = org.apache.log4j.PatternLayout
-    log4j.appender.stdout.layout.ConversionPattern = [%-5p] %d{yyyy-MM-dd HH:mm:ss,SSS} method:%l%n%m%n
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration>
+      <Appenders>
+        <Console name="stdout" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+      </Appenders>
+      <Loggers>
+        <Root level="TRACE">
+          <AppenderRef ref="stdout"/>
+        </Root>
+      </Loggers>
+    </Configuration>
     #+END_EXAMPLE
   - 程序入口
     #+BEGIN_EXAMPLE java
@@ -304,7 +311,7 @@ p  - 常用方法
           <!--指定MyBatis所用日志的具体实现，未指定时将自动查找
               值范围：SLF4J|LOG4J|LOG4J2|JDK_LOGGING|COMMONS_LOGGING|STDOUT_LOGGING|NO_LOGGING
             -->
-          <setting name="logImpl" value="LOG4J"/>
+          <setting name="logImpl" value="LOG4J2"/>
           <!--指定创建具有延迟加载能力的对象所用到的代理工具
               CGLIB
               JAVASSIT(默认值)
@@ -337,8 +344,17 @@ p  - 常用方法
           MyBatis3.4后已经内置并自动引入JSR310的typeHandler了。
         -->
       <typeHandlers>
-          <!-- 定义当数据库数据类型为VARCHAR，而Java类型为String时，使用自定义类型转换器 -->
+          <!-- 
+            1. 通过jdbcType和javaType作为匹配标识，注册自定义/第三方类型转换器。
+               若SQL映射文件中result节点的jdbcType、javaType和typeHandler节点的匹配时，则自动采用handler属性执行的类型转换器。
+               若SQL映射文件中变量绑定如 #{roleName javaType=string, jdbcType=VARCHAR}，则自动采用handler属性执行的类型转换器。
+            2. 若SQL映射文件中result节点指定typeHandler属性则直接将其作为类型转换器。
+               若SQL映射文件中变量绑定如 #{roleName ,typeHandler=com.john.typeHandler.MyStringTypeHandler}，则直接将其作为类型转换器。
+            -->
           <typeHandler jdbcType="VARCHAR" javaType="string" handler="com.john.typeHandler.MyStringTypeHandler"/>
+
+          <!-- 也可通过包扫描注册，那么jdbcType和javaType就采用注解MappedTypes和MappedJdbcTypes的值 -->
+          <package name="com.john.typeHandler"/>
       </typeHandlers>
 
       <!-- plugins(插件)
@@ -349,8 +365,12 @@ p  - 常用方法
            StatementHandler(prepare,parameterize,batch,update,query)
         -->
 
-      <!--objectFactory(对象工厂)
-         在创建结果对象实例时，会使用对象工厂实例来完成。
+      <!-- objectFactory(对象工厂)
+           在创建结果对象实例时，会使用对象工厂去构建POJO。
+           默认的ObjectFactory为org.apache.ibatis.reflection.factory.DefaultObjectFactory
+           <objectFactory type="com.john.factory.MyObjectFactory">
+             <property name="name" value="MyObjectFactory"/>
+           </objectFactory>
         -->
 
       <!--数据源列表-->
@@ -358,9 +378,13 @@ p  - 常用方法
           <environment id="dev">
               <!-- 每个environment节点下必须包含transactionManager和dataSource节点 -->
               <!--数据库事务管理配置，结合Spring时Spring会使用自带的管理器来覆盖这部分的设置。
-                  JDBC, 直接使用JDBC的提交和回滚设置，依赖从数据源得到的连接来管理事务范围。(JdbcTransactionFactory)
-                  MANAGED, 让容器来管理事务的整个生命周期，它不提交和回滚一个廉洁。(ManagedTransactionFactory)
-                  自定义事务管理器，通过实现TranscationManager接口即可，然后type值指定自定义事务管理器的全限定类名
+                  1. JDBC, 直接使用JDBC的提交和回滚设置，依赖从数据源得到的连接来管理事务范围。(JdbcTransactionFactory)
+                    <transactionManager type="JDBC">
+                      <property name="autoCommit" value="false"/> <!-- 自动提交事务，默认为true -->
+                    </transactionManager>
+                  2. MANAGED, 让容器来管理事务的整个生命周期，在JNDI数据源中经常使用，它执行事务提交和回滚，而是交由容器处理。(ManagedTransactionFactory)
+
+                  3. 自定义事务管理器，通过实现TranscationManager接口即可，然后type值指定自定义事务管理器的全限定类名
                 -->
               <transactionManager type="MANAGED">
                   <property name="closeConnection" value="false"/>
@@ -368,22 +392,43 @@ p  - 常用方法
               <!--
                   UNPOOLED, 每次请求时打开和关闭数据库连接(UnpooledDataSourceFactory)
                   POOLED, 启用数据库连接池(PooledDataSourceFactory)
-                  - poolMaximumActiveConnections, 在任意时间最大的正使用的连接数，默认值为10
-                  - poolMaximumIdleConnections, 在任意时间最大的空闲连接数
-                  - poolMaximumCheckoutTime, 在被强制返回前，池中连接被checkout的时间，默认值2000ms
-                  - poolTimeToWait, 等待获取可用连接的超时时间，若超时则创建一个新的连接，默认值2000ms
-                  - poolPingQuery, 发送到数据库的侦测查询，用于检查连接是否处于正常工作状态。默认值为NO PING QUERY SET
-                  - poolPingEnabled, 启用数据库的侦测查询，默认值为false。启用后要设置poolPingQuery为用于侦测用的SQL语句。
-                  - poolPingConnectionsNotUsedFor, 配置poolPingQuery的执行频率
+                    - poolMaximumActiveConnections, 在任意时间最大的正使用的连接数，默认值为10
+                    - poolMaximumIdleConnections, 在任意时间最大的空闲连接数
+                    - poolMaximumCheckoutTime, 在被强制返回前，池中连接被checkout的时间，默认值2000ms
+                    - poolTimeToWait, 等待获取可用连接的超时时间，若超时则创建一个新的连接，默认值2000ms
+                    - poolPingQuery, 发送到数据库的侦测查询，用于检查连接是否处于正常工作状态。默认值为NO PING QUERY SET
+                    - poolPingEnabled, 启用数据库的侦测查询，默认值为false。启用后要设置poolPingQuery为用于侦测用的SQL语句。
+                    - poolPingConnectionsNotUsedFor, 配置poolPingQuery的执行频率
                   JNDI, 使用EJB或应用服务器容器中配置的数据源(JndiDataSourceFactory)
-                  - initial_context, 调用initialContext.lookup(initial_context)寻找JNDI上下文，若忽略那么属性data_source将会直接从InitialContext中寻找。
-                  - data_source, 引用数据源实例位置的上下文路径
-                  自定义数据源，通过实现DataSourceFactory接口即可，然后type值指定自定义数据源的全限定类名
-                  - 如使用c3p0数据源
-                  <dataSource type="JNDI">
-                      <property name="initial_context" value="java:/comp/env"/>
-                      <property name="data_source" value="fkjavads"/>
-                  </dataSource>
+                    - initial_context, 调用initialContext.lookup(initial_context)寻找JNDI上下文，若忽略那么属性data_source将会直接从InitialContext中寻找。
+                    - data_source, 引用数据源实例位置的上下文路径
+                      <dataSource type="JNDI">
+                          <property name="initial_context" value="java:/comp/env"/>
+                          <property name="data_source" value="fkjavads"/>
+                      </dataSource>
+                  自定义数据源，通过实现org.apache.ibatis.datasource.DataSourceFactory接口即可，然后type值指定自定义数据源的全限定类名
+                    - 如使用DBCP数据源
+                      package com.john.datasource;
+                      public class DbcpDataSourceFactory extends BasicDataSource impelements DataSourceFactory {
+                        private Properties props = null;
+                        @Override
+                        public void setProperties(Properties props){
+                          this.props = props;
+                        }
+                        @Override
+                        public DataSource getDataSource(){
+                          DataSource ds = null;
+                          try{
+                            ds = BasicDataSourceFactory.createDataSource(props);
+                          }
+                          catch (Exception e){}
+                          return ds;
+                        }
+                      }
+                      <dataSource type="com.john.datasource.DbcpDataSourceFactory">
+                      </dataSource>
+                    - 如使用c3p0数据源
+                    ?????
                 -->
               <dataSource type="POOLED">
                   <property name="driver" value="${driver}"/>
@@ -394,10 +439,15 @@ p  - 常用方法
           </environment>
       </environments>
       
-      <!-- 为数据库厂商起别名 
-           然后在SQL映射文件中select/update/delete等节点使用datasourceId标识该语句是在哪个数据库厂商上才执行。
-           而datasourceId的值就是通过databaseIdProvider/property起的别名。
-           注意：命中datasourceId值的语句比没有datasourceId属性的语句优先级要高
+      <!-- 数据库厂商标识
+           在SQL映射文件中select/update/delete等节点可使用datasourceId标识该语句是在哪个数据库厂商上才执行，
+           然后会调用sqlSessionFactory.getConfiguration().getDatabaeId()获取当前正操作的数据库厂商标识，
+           然后从SQL映射文件中加载匹配datasourceId值的语句和没有设置datasourceId属性的语句，
+           datasourceId值和sqlSessionFactory.getConfiguration().getDatabaeId()相同的语句执行优先级没有datasourceId属性的语句要高。
+
+           DB_VENDOR为内部注册的策略器，当连接数据库后会通过getDatabaseProductName()获取数据库厂商标识，并用于与
+           <property name value/> 中的name属性值匹配，命中则将value属性值作为参数调用sqlSessionFactory.getConfiguration().setDatabaseId(String id)；
+           若没有命中，或没有配置则sqlSessionFactory.getConfiguration().getDatabaeId()恒返回null。
         -->
       <databaseIdProvider type="DB_VENDOR">
           <property name="SQL Server" value="sqlserver"/>
@@ -424,6 +474,139 @@ p  - 常用方法
       </mappers>
   </configuration>
   #+END_EXAMPLE
+
+** 自定义类型转换器
+#+BEGIN_EXAMPLE java
+package com.john.typeHandler;
+
+@MapperTypes({String.class}) // 设置拦截哪些Java类型
+@MapperJdbcTypes({JdbcType.VARCHAR}) // 设置拦截哪些Jdbc类型，必须为枚举类org.apache.ibatis.type.JdbcType所列的枚举类型
+public class MyStringTypeHandler implements TypeHandler<String> {
+  @Override
+  public void setParameter(PreparedStatement ps, int index, String value, JdbcType jt) throws SQLException {
+    ps.setString(index, value);
+  }
+  @Override
+  public String getResult(ResultSet rs, String colName) throws SQLException {
+    return rs.getString(ColName);
+  }
+  @Override
+  public String getResult(ResultSet rs, int index) throws SQLException {
+    return rs.getString(index);
+  }
+  @Override
+  public String getResult(CallableStatement cs, int index) throws SQLException {
+    return cs.getString(index);
+  }
+}
+#+END_EXAMPLE
+
+** 枚举类型typeHandler
+- ~org.apache.ibatis.type.EnumTypeHandler~ ，使用枚举字符串名称作为参数传递
+  - 示例:
+    数据库USER表的SEX字段0为male，1为female
+    #+BEGIN_EXAMPLE java
+    package com.john.enums;
+    public enum Sex {
+      MALE, FEMALE;
+    }
+    #+END_EXAMPLE
+    #+BEGIN_EXAMPLE xml
+    <!-- mybatis-config.xml -->
+    <typeHandlers>
+      <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.john.enums.Sex"/>
+    </typeHandlers>
+
+    <!-- mapper.xml -->
+    <resultMap id="a" type="com.john.domain.User">
+      <result column="sex" property="sex" typeHandler="org.apache.ibatis.type.EnumOrdinalTypeHandler"/>
+    </resultMap>
+    <select resultMap="a">
+      select * from user where sex = #{sex, typeHandler=org.apache.ibatis.type.EnumOrdinalTypeHandler}
+    </select>
+    #+END_EXAMPLE
+- ~org.apache.ibatis.type.EnumOrdinalTypeHandler~ ，使用整数下标作为参数传递
+  - 示例:
+    数据库USER表的SEX字段MALE和FEMALE
+    #+BEGIN_EXAMPLE xml
+    <!-- mybatis-config.xml -->
+    <typeHandlers>
+      <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler" javaType="com.john.enums.Sex"/>
+    </typeHandlers>
+
+    <!-- mapper.xml -->
+    <resultMap id="a" type="com.john.domain.User">
+      <result column="sex" property="sex" typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+    </resultMap>
+    <select resultMap="a">
+      select * from user where sex = #{sex, typeHandler=org.apache.ibatis.type.EnumTypeHandler}
+    </select>
+    #+END_EXAMPLE
+
+*** 自定义枚举类型转换器
+#+BEGIN_EXAMPLE java
+package com.john.enums;
+public enum Sex {
+  MALE(1), FEMALE(2);
+
+  private int id;
+  
+  public int getId(){
+    return this.id;
+  }
+
+  private Sex(int id){
+    this.id = id;
+  }
+
+  public static Sex getSex(int id){
+    if (id == 1){
+      return MALE;
+    }
+    else if (id == 2){
+      return FEMALE;
+    }
+
+    return null;
+  }
+}
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE java
+package com.john.typeHandler;
+@MappedTypes({Sex.class})
+@MappedJdbcTypes({Jdbc.NUMERIC})
+public class SexEnumTypeHandler implements TypeHandler<Sex>{
+  @Override
+  public Sex getResult(ResultSet rs, String name) throws SQLException {
+    int id = rs.getInt(name);
+    return Sex.getSex(id);
+  }
+
+  @Override
+  public Sex getResult(ResultSet rs, int index) throws SQLException {
+    int id = rs.getInt(index);
+    return Sex.getSex(id);
+  }
+
+  @Override
+  public Sex getResult(CallableStatement cs, int index) throws SQLException {
+    int id = cs.getInt(index);
+    retunr Sex.getSex(id);
+  }
+
+  public void setParameter(PreparedStatement ps, int index, Sex sex, JdbcType jdbcType) throws SQLException{
+    int id = sex.getId();
+    ps.setInt(index, id);
+  }
+}
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE xml
+<!-- mybatis-config.xml -->
+<typeHandlers>
+  <typeHandler handler="com.john.typeHandler.SexEnumTypeHandler" javaType="com.john.enums.Sex"/>
+</typeHandlers>
+#+END_EXAMPLE
+
 * SQL映射文件配置
   *注意：* 与select/update/delete语句对应的Mapper接口方法，其返回值默认可设置为 ~void,int,long,boolean,Integer,Long,Boolean~ 来获取操作所影响的记录数目。
 
@@ -1549,3 +1732,16 @@ public interface Transaction {
              #+END_EXAMPLE
   2) Mapper接口如何跟xml文件中的sql建立关联
      MyBatis通过动态代理的形式根据接口生成代理对象
+  3) 拋出 ~Unsupported major.minor version 52.0~
+     其实就是项目运行环境为JDK1.8，但现在提供的运行环境低于JDK1.8。
+     | JDK版本 | Standord Parser |
+     |---------+-----------------|
+     |       8 |              52 |
+     |       7 |              51 |
+     |       6 |              50 |
+     |       5 |              49 |
+     |     1.4 |              48 |
+     |     1.3 |              47 |
+     |     1.2 |              46 |
+     |     1.1 | 45              |
+     - Eclipse下修复：将Build Path下的JDK修改为JDK8即可。

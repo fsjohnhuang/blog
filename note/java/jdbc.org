@@ -29,11 +29,11 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
   3) 子名称: 依赖子协议而变化，用于定位数据库服务位置
   
   示例：
-  1) Oracle: ~jdbc:oracle:thin@localhost:1521:sid~
+  1) Oracle: ~jdbc:oracle:thin:@localhost:1521:sid~
      - Oracle的JDBC URL存在3种形式
        1) thin using an SID
-          - 格式: ~jdbc:oracle:thin@host:port:SID~
-          - 示例: ~jdbc:oracle:thin@127.0.0.1:1521:orcl~
+          - 格式: ~jdbc:oracle:thin:@host:port:SID~
+          - 示例: ~jdbc:oracle:thin:@127.0.0.1:1521:orcl~
           - 通过如下语句获取SID
             #+BEGIN_EXAMPLE sql
             -- 以sysdba身份登入
@@ -41,16 +41,16 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
             #+END_EXAMPLE
        2) thin using a ServiceName
           对于集群而言各数据库的SID均不相同，但采用相同的ServiceName。
-          - 格式: ~jdbc:oracle:thin@host:port/service_name~
-          - 示例: ~jdbc:oracle:thin@127.0.0.1:1521/orcl.city.com~
+          - 格式: ~jdbc:oracle:thin:@host:port/service_name~
+          - 示例: ~jdbc:oracle:thin:@127.0.0.1:1521/orcl.city.com~
           - 通过如下语句获取ServiceName
             #+BEGIN_EXAMPLE sql
             -- 以sysdba身份登入
             select value from v$parameter where name='service_name';
             #+END_EXAMPLE
        3) thin using a TNS Name
-          - 格式: ~jdbc:oracle:thin@TNSName~
-          - 示例: ~jdbc:oracle:thin@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=orcl.city.com)))~
+          - 格式: ~jdbc:oracle:thin:@TNSName~
+          - 示例: ~jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=orcl.city.com)))~
      - 驱动程序
        - JDK1.5 —— ojdbc5.jar
        - JDK1.6/1.7/1.8 —— ojdbc6.jar
@@ -603,7 +603,6 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
       </c3p0-config>
       #+END_EXAMPLE
    
-
 
 
 * Apache DBUtils
