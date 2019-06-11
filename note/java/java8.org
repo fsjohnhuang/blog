@@ -517,6 +517,10 @@ public class FreshJuiceTest {
     }
     #+END_EXAMPLE
 
+*** 类型限定符
+    1) ~extends~ 用于限制为某类或接口的派生类
+       对于继承多个类或接口则通过 ~&~ 表示，如 ~<T extends Comparable & Serializable>~
+    2) ~super~ 用于限制为某类及父类、基类类型，如Object类型
 *** 类型通配符
     1) ~?~ 用于对不关心应类型参数具体值的场景
        #+BEGIN_EXAMPLE java
@@ -524,7 +528,8 @@ public class FreshJuiceTest {
          System.out.println(data.get(0));
        }
        #+END_EXAMPLE
-    2) 带 ~extends~ 或 ~implements~ 的有界泛型通配符，用于对不关心应类型参数具体值但需要限制为某类或接口的派生类
+    2) 带 ~extends~ 的有界泛型通配符，用于对不关心应类型参数具体值但需要限制为某类或接口的派生类
+       注意：实现某接口也是用 ~extends~
        #+BEGIN_EXAMPLE java
        void printNumber(List<? extends Number> data){
          System.out.println(data.get(0) + 1);       
@@ -537,9 +542,181 @@ public class FreshJuiceTest {
        }
        #+END_EXAMPLE
    
-*** TODO 底层原理
-    类型擦写(type erasure)：编译器在编译时会将所有类型信息擦除掉，在运行时不存在任何类型相关的信息。如 ~List<String>~ 在运行时只剩下 ~List~ ，这样就能兼容Java5之前版本的二进制类库。
-    https://www.cnblogs.com/xh0102/p/5729528.html
+*** 底层原理
+    类型擦写(type erasure)：编译器在编译时会将所有类型参数信息擦除掉，在运行时不存在任何类型参数相关的信息。如 ~List<String>~ 在运行时只剩下 ~List~ ，这样就能兼容Java5之前版本的二进制类库，因此称Java的泛型为伪泛型。
+    由于类型参数信息对JVM来说是不可见的，因此无法避免在运行时出现的类型转换异常的情况，但也不会出现真泛型中的类型膨胀问题。
+
+    问题示例1——运行时Class类实例相相等
+    #+BEGIN_EXAMPLE java
+    ArrayList<String> list1 = new ArrayList<String>();
+    list1.add("abc");
+    ArrayList<Integer> list2 = new ArrayList<Integer>();
+    list2.add(123);
+
+    // 返回true
+    System.out.println(list1.getClass() == list2.getClass());
+    #+END_EXAMPLE
+    
+    问题示例2——运行时反射方法调用
+    #+BEGIN_EXAMPLE java
+    ArrayList<String> list1 = new ArrayList<String>();
+    list1.add("abc");
+    // list1.add(123); 编译失败
+    Method m = list1.getClass().getMethod("add", Object.class);
+    m.invoke(list1, 123); // 运行正常
+    #+END_EXAMPLE
+    
+**** 显式和隐式声明类型变量    
+     #+BEGIN_EXAMPLE java
+     public class App{
+       public static <T> T add(T x, T y){
+         return y;
+       }
+
+       public static void main(String[] args){
+         Integer i = App.add(1, 2); // 隐式声明类型变量为Integer
+         Float d = App.add(1, 2.1); // 隐式声明类型变量为Float
+         
+         Integer i = App.<Integer>add(1, 2); // 显式声明类型变量为Integer
+         Float d = App.<Float>add(1, 2.1); // 显式声明类型变量为Float
+         
+         // Integer i = App.<Integer>add(1, 2.1); // 编译报错
+         Number n = App.<Number>add(1, 2.1);
+       }
+     }
+     #+END_EXAMPLE
+
+**** 类型擦写原理
+     编译时将所有类型参数(parameterized type)中指定的类型转换为原始类型(raw type)，然后自动在取值位置添加类型转换代码。
+     1) 原始类型，即最后在字节码中类型变量真正的数据类型；
+     2) 转换原始类型的规则
+        1) 没有类型限定符时，统一转换为Object；
+        2) 附带 ~extends~ 类型限定符，统一转换为第一个基类或接口；
+           #+BEGIN_EXAMPLE java
+           public <T extends Comparable & Serializable> T get(){ return null; }
+           // 转换为public Comparable get() { return null; }
+           #+END_EXAMPLE
+           *建议：将标记接口放在限制列表的最后*
+        3) 附带 ~super~ 类型限定符，统一转换为Object。
+     3) 自动添加类型转换代码
+        #+BEGIN_EXAMPLE java
+        public <T> T get(T a){ return a; }
+        Integer a = <Integer>get(1);
+        
+        // 编译后的代码逻辑如下
+        public Object get(Object a){ return a; }
+        Object oA = get(1);
+        Integer a = (Integer)oA;
+        #+END_EXAMPLE
+
+**** 限制分析
+     1) 类型变量不能为8种基础类型和void
+        因为类型擦写后的原始类型为Object，基础类型强转Object无效，因此必须使用它们的封装类才行。
+     2) 编译期仅根据引用类型变量的类型参数作检查，而不管实际引用的对象的类型参数
+        #+BEGIN_EXAMPLE java
+        ArrayList list1 = new ArrayList<String>();
+        list1.add("abc");
+        list1.add(123);
+
+        ArrayList<String> list2 = new ArrayList();
+        list2.add("abc");
+        list2.add(123); // 编译失败
+        #+END_EXAMPLE
+     3) 静态方法和属性不能引用类的类型参数
+        由于类的类型参数是在类实例化时才能确定，若静态方法和属性引用类的类型参数，则无法确认类型参数的实际类型
+        #+BEGIN_EXAMPLE java
+        public class Basket<E>{
+          public static void add(E e); // 编译失败
+        }
+        #+END_EXAMPLE
+     4) 不支持类型参数的直接实例化，但可以通过反射实现
+        #+BEGIN_EXAMPLE java
+        public <T extends Comparable> T[] test(T[] a){
+          // T m = new T(); 编译失败
+          // T[] ms = new T[2]; 编译失败
+
+          T[] ms = (T[])Array.newInstance(a.getClass().getComponentType(), 2);
+          return ms;
+        }
+        #+END_EXAMPLE
+     5) 重写含类型参数的方法
+        #+BEGIN_EXAMPLE java
+        class P<T>{
+          private T val;
+          public void set(T val){
+            this.val = val;
+          }
+          public T get(){
+            return this.val;
+          }
+        }
+
+        class C extends P<Date>{
+          @Override
+          public void set(Date val){
+            super.set(val);
+          }
+          @Override
+          public Date get(){
+            return super.get();
+          }
+        }
+
+        /**
+        * 编译后
+        */
+        class P{
+          private Object val;
+          public void set(Object val){
+            this.val = val;
+          }
+          public Object get(){
+            return this.val;
+          }
+        }
+
+        class C extends P{
+          public void set(Date val){
+            super.set(val);
+          }
+
+          public Date get(){
+            return super.get();
+          }
+
+          // 编译器自动生成桥接方法
+          @Override
+          public void set(Object val){
+            this.set((Date)val);
+          }
+
+          // 编译器自动生成桥接方法
+          // Object get() 和 Date get()仅返回值不同，而参数列表相同。在编译时被认为是相同的方法，会报重复定义。
+          // 但JVM将返回值+参数列表作为方法签名，因此在运行时被认为是不同的方法。
+          @Override
+          public Object get(){
+            return this.get();
+          }
+        }
+        #+END_EXAMPLE
+     6) 类型参数不能出现在 ~catch~ 中
+        #+BEGIN_EXAMPLE java
+        try{}
+        catch(T e){}
+        #+END_EXAMPLE
+     7) 泛型类不能出现在 ~catch~ 中
+        #+BEGIN_EXAMPLE java
+        try{}
+        catch(Problem<T> e){}
+        #+END_EXAMPLE
+     8) 泛型类不支持 ~instanceof~ ，除非用通配符
+        #+BEGIN_EXAMPLE java
+        ArrayList<String> sList = new ArrayList<String>();
+        // if (sList instanceof ArrayList<String>) 编译失败
+        if (sList instanceof ArrayList<?>) {
+          // do something
+        }
+        #+END_EXAMPLE
 
 *** 泛型的型变(type variance)——协变(convariance)和逆变(contravariance)
     型变(type variance)
@@ -1121,7 +1298,7 @@ public Class{
   }
   // 获取数组元素数据类型
   Class<?> componentClazz = array.getClass().getComponentType();
-  // 实例化
+  // 实例化，数组长度为10
   Object newArray = Array.newInstance(componentClazz, 10);
   Integer len = Array.getLength(newArray);
   System.arraycopy(array, 0, newArray, 0, len);
