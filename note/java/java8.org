@@ -1269,7 +1269,7 @@ public Class{
     @Override
     public String say(String suffix){
       return "Student: " + suffix;
-    }
+n    }
   }
   #+END_EXAMPLE
 - 反射操作  
@@ -1300,7 +1300,7 @@ public Class{
   Method[] fs = cObj1.getDeclaredMethods(); 
   // 获取当前类及从父类继承而来的所有公共方法
   Method[] fs1 = cObj1.getMethods();
-  for (Method f : fs){
+  for (Method f : fs1){
     // 获取方法名称
     String functionName = f.getName();
     // 获取方法修饰符
@@ -1310,6 +1310,8 @@ public Class{
     Class<?>[] parameterTypes = f.getParameterTypes();
     // 获取方法声明抛出的异常
     Class<?>[] exceptionTypes = f.getExceptionTypes();
+    // 获取方法定义所在的类型
+    Class<?> declaringClass = f.getDeclaringClass();
   }
 
   // 获取当前类(不含父类和接口)所有属性(包含public、protected、default、private)

@@ -523,6 +523,9 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
   ~javax.sql.DataSource implements CommonDataSource~ 接口定义连接池规范，通常由服务器(Weblogic,WebSphere,Tomcat等)提供实现，也有一些开源组织提供的实现：
   1) DBCP
   2) C3P0
+  3) HikariCP
+     运用字节码作优化
+  4) AlibabaDruid
 
   DataSource通常被称为数据源，包含连接池和连接池管理器两部分。
 
@@ -603,8 +606,6 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
       </c3p0-config>
       #+END_EXAMPLE
    
-
-
 * Apache DBUtils
 对JDBC的简单封装，极大地简化JDBC编码的工作量。
 API:

@@ -1278,88 +1278,77 @@
     - Introduction(引入), 为现有类型声明额外的方法和属性。
   
 *** 动态代理
-    1) JDK动态代理
-       通过调用 ~java.lang.reflect.Proxy~ 的方法 ~newProxyInstance~ 来创建代理对象实现的。
-       - 限制：
-         1) Target Object 必须实现业务接口才能使用JDK动态代理。
-       - 示例
-         #+BEGIN_EXAMPLE java
-         // 定义代理类
-         import java.lang.reflect.Proxy;
-         import java.lang.reflect.Method;
-         import java.lang.reflect.InvocationHandler;
-
-         public class JdkProxy implements InvocationHandler{
-             // 目标对象
-             private UserDao userDao;
-
-             // 创建代理类
-             public UserDao createProxy(UserDao userDao){
-                 this.userDao = userDao;
-                 // 1. 获取类加载器
-                 ClassLoader classLoader = JdkProxy.class.getClassLoader();
-                 // 2. 获取目标对象实现的所有接口
-                 Class<?> interfaces = userDao.getClass().getInterfaces();
-                 // 3. 生成代理
-                 Object proxy = Proxy.newProxyInstance(classLoader, interfaces, this);
-
-                 return (UserDao) proxy;
-             }
-
-             /* 调用代理类的任何方法时实质上都是调用该方法，然后我们在该方法中通过反射调用目标对象的方法
-              * @param Object proxy - 代理对象
-              * @param Method method - 调用的方法信息
-              * @param Object[] args - 入参
-              * @returns Object
-              */
-             @Override
-             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                 // 前置增强
-                 System.out.println("");
-
-                 // 调用目标对象的方法
-                 Object ret = method.invoke(this.userDao, args);
-
-                 // 后置增强
-                 System.out.println("");
-
-                 return ret;
-             }
+1) JDK动态代理
+   通过调用 ~java.lang.reflect.Proxy~ 的方法 ~newProxyInstance~ 来创建代理对象实现的。
+   - 限制：
+     1) Target Object 必须实现业务接口才能使用JDK动态代理。
+   - 示例
+     #+BEGIN_EXAMPLE java
+     // 定义代理类
+     import java.lang.reflect.Proxy;
+     import java.lang.reflect.Method;
+     import java.lang.reflect.InvocationHandler;
+     public class JdkProxy implements InvocationHandler{
+         // 目标对象
+         private UserDao userDao;
+          // 创建代理类
+         public UserDao createProxy(UserDao userDao){
+             this.userDao = userDao;
+             // 1. 获取类加载器
+             ClassLoader classLoader = JdkProxy.class.getClassLoader();
+             // 2. 获取目标对象实现的所有接口
+             Class<?> interfaces = userDao.getClass().getInterfaces();
+             // 3. 生成代理
+             Object proxy = Proxy.newProxyInstance(classLoader, interfaces, this);
+             return (UserDao) proxy;
          }
-         #+END_EXAMPLE
-    2) CGLIB动态代理
-       CGLIB(Code Generation Library)是一个采用底层字节码技术的代码生成包，对指定的目标类生成一个子类，从而对子类实现增强。
-       - 示例
-         #+BEGIN_EXAMPLE java
-         public class CglibProxy implements MethodInterceptor {
-             public Object createProxy(UserDao userDao){
-                 // 创建动态类对象
-                 Enhancer enhancer = new Enhancer();
-                 enhancer.setSuperClass(userDao.getClass());
-                 enhanser.setCallback(this);
-                 return enhanser.create();
-             }
-
-             /*
-              * @param Object proxy - 动态类对象
-              * @param Method method - 所调用的方法信息
-              * @param Object[] args - 入参
-              * @param MethodProxy methodProxy - 动态类对象的方法对象，用于执行父类的方法
-              */
-             public Object intercept(Object proxy, Method method, Object[] args, MethodProxy methodProxy) throws Throwable {
-                 // 前置增强
-                 System.out.println("");
-
-                 // 调用目标对象的方法
-                 Object ret = methodProxy.invokeSuper(proxy, args);
-
-                 // 后置增强
-                 System.out.println("");
-
-                 return ret;
-             }
+          /* 调用代理类的任何方法时实质上都是调用该方法，然后我们在该方法中通过反射调用目标对象的方法
+          * @param Object proxy - 代理对象
+          * @param Method method - 调用的方法信息
+          * @param Object[] args - 入参
+          * @returns Object
+          */
+         @Override
+         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+             // 前置增强
+             System.out.println("");
+              // 调用目标对象的方法
+             Object ret = method.invoke(this.userDao, args);
+              // 后置增强
+             System.out.println("");
+             return ret;
          }
-         #+END_EXAMPLE
+     }
+     #+END_EXAMPLE
+2) CGLIB动态代理
+   CGLIB(Code Generation Library)是一个采用底层字节码技术的代码生成包，对指定的目标类生成一个子类，从而对子类实现增强。
+   - 示例
+     #+BEGIN_EXAMPLE java
+     public class CglibProxy implements MethodInterceptor {
+         public Object createProxy(UserDao userDao){
+             // 创建动态类对象
+             Enhancer enhancer = new Enhancer();
+             enhancer.setSuperClass(userDao.getClass());
+             enhanser.setCallback(this);
+             return enhanser.create();
+         }
+          /*
+          * @param Object proxy - 动态类对象
+          * @param Method method - 所调用的方法信息
+          * @param Object[] args - 入参
+          * @param MethodProxy methodProxy - 动态类对象的方法对象，用于执行父类的方法
+          */
+         public Object intercept(Object proxy, Method method, Object[] args, MethodProxy methodProxy) throws Throwable {
+             // 前置增强
+             System.out.println("");
+             // 调用目标对象的方法
+             Object ret = methodProxy.invokeSuper(proxy, args);
+             // 后置增强
+             System.out.println("");
+             return ret;
+         }
+     }
+     #+END_EXAMPLE
 
 *** Advise类型
     1) org.aopalliance.intercept.MethodInterceptor - 环绕通知

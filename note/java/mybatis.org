@@ -16,7 +16,6 @@ JavaBeans
 3) 公有getter和setter
 4) 无参构造方法
 
-
 * 资源
   官方GitHub主页：https://github.com/mybatis
 
@@ -255,9 +254,13 @@ p  - 常用方法
       <settings>
           <!--开启映射器的缓存-->
           <setting name="cacheEnabled" value="true"/>
-          <!--开启关联对象延迟加载，在特定关联关系中可通过设置fetchType属性来覆盖该属性值，默认值为false-->
+          <!--开启关联对象延迟加载，在特定关联关系中可通过设置fetchType属性来覆盖该属性值，默认值为false。
+              立即加载的好处是多条SQL一次性发送，性能更高。
+              延迟加载的实现原理是通过动态代理
+            -->
           <setting name="lazyLoadingEnabled" value="true"/>
-          <!--为true时会使带有延迟加载属性的对象立即被完整加载，默认值为true。因此要启用延迟加载，那么lazyLoadingEnabled需要设置为true，并且aggressiveLazyLoading为false-->
+          <!--为true时会使带有延迟加载属性的对象立即被完整加载，即加载对象及与其直接关联的对象，而不立即加载间接的对象。默认值为true。
+              因此要启用延迟加载，那么lazyLoadingEnabled需要设置为true，并且aggressiveLazyLoading为false-->
           <setting name="aggressiveLazyLoading" value="false"/>
           <!--允许单一语句返回多结果集-->
           <setting name="multipleResultSetsEnabled" value="true"/>
@@ -313,8 +316,8 @@ p  - 常用方法
             -->
           <setting name="logImpl" value="LOG4J2"/>
           <!--指定创建具有延迟加载能力的对象所用到的代理工具
-              CGLIB
-              JAVASSIT(默认值)
+              CGLIB(3.3以前的默认值)
+              JAVASSIT(3.3以后的默认值)
             -->
           <setting name="proxyFactory" value="CGLIB"/>
           <!--指定当结果集中值为null时是否调用映射对象的setter方法。对于primitive type(int,boolean等)是不能设置为null的-->
@@ -607,6 +610,10 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
 </typeHandlers>
 #+END_EXAMPLE
 
+** BLOB类型typeHandler
+   内置BlobTypeHandler和BlobByteObjectArrayTypeHandler，而后者是为了兼容性一般很少用。
+   只需数据库表字段为Blob，而Domain entity的属性类型为byte[]，那么就会自动使用BlobTypeHandler作数据类型处理。
+
 * SQL映射文件配置
   *注意：* 与select/update/delete语句对应的Mapper接口方法，其返回值默认可设置为 ~void,int,long,boolean,Integer,Long,Boolean~ 来获取操作所影响的记录数目。
 
@@ -623,13 +630,16 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
           - flushCache, 为true时只要语句被调用，都会导致本地缓存和二级缓存都被清空，默认值为false
           - useCache, 为true时语句执行结果被二级缓存，为false时禁用二级缓存。select语句中默认值为true
           - timeout, 返回请求结果超时时间
-          - fetchSize, 每次返回的结果的最大行数
+          - fetchSize, 每次返回的结果的最大行数，默认值由数据库厂商提供的JDBC驱动所设置的
           - statementType, STATEMENT/PREPARED/CALLABLE对应JDBC的Statement/PreparedStatement/CallableStatement。默认值为PREPARED。
-          - resultSetType, 结果集类型，FORWARD_ONLY/SCROLL_SENSITIVE/SCROLL_INSENSITIVE。默认值为unset
+          - resultSetType, 结果集类型，默认值由数据库厂商提供的JDBC驱动所设置的。取值范围
+              FORWARD_ONLY：允许游标向前访问
+              SCROLL_SENSITIVE：允许游标前后访问，若数据在被访问后被修改或删除则会通知游标更新
+              SCROLL_INSENSITIVE：允许游标前后访问，若数据在被访问后被修改或删除则不会通知游标更新
           - databaseId, 若在mybatis-config.xml中设置databaseIdProvider，则该属性值可设置为databaseIdProvider中设置的数据库厂商别名，否则要设置为数据库厂商全名如“Oracle”,"SQL Server","MySQL","DB2"。
                         MyBaits会从Connection实例中获取当前操作的数据库信息，然后加载所有不带databaseId或匹配当期那databaseId的语句。
                         元素内部也可通过 <if test="_databaseId = 'oracle'"></if> 来书写针对特定数据库的SQL语句
-          - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。
+          - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。默认值为false
           - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
      -->
    <!-- 接口方法为 public Map<String, Object> selectUser(int id) -->    
@@ -755,7 +765,7 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
    </select>
    #+END_EXAMPLE
 
-** 一对一/多对一关系
+** 一对一/多对一关系(~association~)
    #+BEGIN_EXAMPLE java
    package org.john.domain;
 
@@ -832,7 +842,7 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
    </resultMap>
    #+END_EXAMPLE
 
-** 一对多关系
+** 一对多关系(~collection~)
    #+BEGIN_EXAMPLE java
    package org.john.domain;
 
@@ -886,11 +896,11 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
    #+END_EXAMPLE
 
 ** 向association和collection子查询传递多个参数
-   由于MyBatis会将参数封装到Map实例中，因此传递多个时直接传递Map字面量即可
-   #+BEGIN_EXAMPLE xml
-   <!-- column="{key1=column1, key2=column2}" -->
-   column="{id=class_id, name=class_name}"
-   #+END_EXAMPLE
+由于MyBatis会将参数封装到Map实例中，因此传递多个时直接传递Map字面量即可
+#+BEGIN_EXAMPLE xml
+<!-- column="{key1=column1, key2=column2}" -->
+column="{id=class_id, name=class_name}"
+#+END_EXAMPLE
 
 * SQL映射文件中的参数
   #+BEGIN_EXAMPLE java
@@ -928,6 +938,25 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
   #+END_EXAMPLE
   param1~paramN为MyBatis额外添加到Map实例中的键，无论是命令参数还是无名参数一样会生成。
   而0~N为无名参数的键，若该参数设置为命名参数则对应的索引号将被具体设置的名称所替代。
+
+** 参数配置
+#+BEGIN_EXAMPLE xml
+<!-- 设置Java类型和Jdbc类型来匹配类型转换器 -->
+#{age, javaType=double, jdbcType=NUMERIC}
+
+<!-- 指定类型转换器 -->
+#{age, typeHandler=MyTypeHandler}
+
+<!-- 设置保存的精度 -->
+#{age, javaType=double, jdbcType=NUMERIC, numericScale=2}
+#+END_EXAMPLE
+
+** 存储过程/函数的参数配置
+#+BEGIN_EXAMPLE xml
+<!-- mode: 设置参数类型，IN/OUT/INOUT
+  -->
+#{role, mode=OUT, jdbcType=CURSOR, javaType=ResultSet, resultMap=roleResultMap}
+#+END_EXAMPLE
 
 * 动态SQL
   MyBatis使用基于OGNL的表达式实现动态SQL，就是在条件判断、表达式计算中采用OGNL表达式。
@@ -1129,28 +1158,28 @@ public interface Transaction {
 #+END_EXAMPLE
 
 ** 创建事务实例的过程
-   1) 根据mybatis-config.xml中 ~<transactionManager>~ 的属性type值创建JdbcTransactionFactory或ManagedTransactionFactory实例
-      #+BEGIN_EXAMPLE java
-      // <transactionManager>节点解析方法
-      private TransactionFactory transactionManagedElement(XNode context) throws Exception {
-        /* 前面已经通过下面语句注册别名JDBC和MANAGED对应的工厂类
-           typeAliasRegistry.registerAlias("JDBC", JdbcTransactionFactory.class);
-           typeAliasRegistry.registerAlias("MANAGED", ManagedTransactionFactory.class);
-         */
-        if (context != null){
-          String type = context.getStringAttribute("type");
-          Properties props = context.getChildrenAsProperties();
-          TransactionFactory factory = (TransactionFactory) resolveClass(type).newInstance();
-          factory.setProperties(props);
-          return factory;
-        }
-        throw new BuilderException("Enviroment declaration requries a TransactionFactory.");
-      }
-      #+END_EXAMPLE
-   2) 然后通过TransactionFactory实例，以Connection实例或DataSource实例、隔离级别、自动提交作为入参创建Transaction实例。
-   3) JdbcTransaction和ManagedTransaction的区别
-      1) JdbcTranscation实际使用的是java.sql.Connection提供的事务操作，依赖数据库本身的支持。
-      2) ManagedTransaction则将事务管理交由应用容器(Weblogic等)管理，自身不提供commit和rollback操作，而是由容器统一管理。
+1) 根据mybatis-config.xml中 ~<transactionManager>~ 的属性type值创建JdbcTransactionFactory或ManagedTransactionFactory实例
+   #+BEGIN_EXAMPLE java
+   // <transactionManager>节点解析方法
+   private TransactionFactory transactionManagedElement(XNode context) throws Exception {
+     /* 前面已经通过下面语句注册别名JDBC和MANAGED对应的工厂类
+        typeAliasRegistry.registerAlias("JDBC", JdbcTransactionFactory.class);
+        typeAliasRegistry.registerAlias("MANAGED", ManagedTransactionFactory.class);
+      */
+     if (context != null){
+       String type = context.getStringAttribute("type");
+       Properties props = context.getChildrenAsProperties();
+       TransactionFactory factory = (TransactionFactory) resolveClass(type).newInstance();
+       factory.setProperties(props);
+       return factory;
+     }
+     throw new BuilderException("Enviroment declaration requries a TransactionFactory.");
+   }
+   #+END_EXAMPLE
+2) 然后通过TransactionFactory实例，以Connection实例或DataSource实例、隔离级别、自动提交作为入参创建Transaction实例。
+3) JdbcTransaction和ManagedTransaction的区别
+   1) JdbcTranscation实际使用的是java.sql.Connection提供的事务操作，依赖数据库本身的支持。
+   2) ManagedTransaction则将事务管理交由应用容器(Weblogic等)管理，自身不提供commit和rollback操作，而是由容器统一管理。
 
 * 数据缓存机制
   分为一级和二级缓存：
@@ -1205,8 +1234,38 @@ public interface Transaction {
      2) 由于符合eviction条件被清理
 
 ** 集成第三方缓存作为二级缓存
-   通过实现org.apache.ibatis.cache.Cache接口，我们可以将各种成熟的缓存中间件集成到MyBatis中。
-   而MyBatis已经提供ehcache(hibernate默认的缓存中间件),redis等的集成适配器包。
+通过实现org.apache.ibatis.cache.Cache接口，我们可以将各种成熟的缓存中间件集成到MyBatis中。
+而MyBatis已经提供ehcache(hibernate默认的缓存中间件),redis等的集成适配器包。
+
+*** 自定义缓存实现
+#+BEGIN_EXAMPLE java
+// 实现 org.apache.ibatis.cache.Cache
+// 获取缓存编号
+String getId();
+// 保存key值缓存对象
+void putObject(Object key, Object value);
+// 获取key值缓存对象
+void getObject(Object key);
+// 移除key值缓存对象
+void removeObject(Object key);
+// 清空缓存
+void clear();
+// 获取缓存大小
+int getSize();
+// 获取缓存读写锁
+ReadWriteLock getReadWriteLock();
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE xml
+<cache type="com.john.cache.MyCache">
+  <!-- 在自定义缓存类中新增host属性和setter方法就会自动注入 -->
+  <property name="host" value="123"/>
+</cache>
+#+END_EXAMPLE
+
+
+
+
+
 
 ** 引用其它namespace的二级缓存策略
    #+BEGIN_EXAMPLE xml
@@ -1576,21 +1635,6 @@ public interface Transaction {
     </bean>
     #+END_EXAMPLE
 
-* 增强工具
-
-** [[http://www.mybatis.org/generator/][MyBatisGenerator]]
-   MyBatis代码生成器，可根据数据库表生成相关代码
-   - POJO
-   - Mapper接口
-   - SQL Mapper XML
-
-   QBC风格的条件查询
-
-
-** [[https://pagehelper.github.io][MyBatisPageHelper]]
-   - 支持多种数据库
-   - 支持多种分支方式
-  
 * 运行原理
   | 参数映射  -->    | SQL解析 -->     | SQL执行 -->    | 结果处理和映射   |
   |------------------+-----------------+----------------+------------------|
@@ -1681,21 +1725,753 @@ public interface Transaction {
          - 然后调用SqlSession.selectOne等方法执行数据库操作，以selectOne为例子
            - 调用selectList取多行记录，然后返回第一行记录
              - MappedStatement ms = configuration.getMappedStatement(statement) 获取经过预处理的SQL语句信息
+               - class MappedStatement 保存映射文件节点信息
+                 id           : String
+                 sqlSource    : SqlSource
+                 parameterMap : ParameterMap
+                 configuration: Configuration
+                 datasourceId : String
+                 .....................
+                 getBoundSql(): BoundSql
+               - class SqlSource 作为接口主要是根据参数和其他的规则组装SQL(包括动态SQL)
+                 getBoundSql(): BoundSql
+               - class BoundSql 存放SQL和参数以及参数规则，插件一般要获取它来拿到当前运行的SQL和参数及参数规则信息
+                 sql                  : String SQL语句
+                 parameterMappings    : List<ParameterMapping> ParameterMapping存储参数属性、名称、表达式、javaType和jdbcType、typeHandler等信息
+                 parameterObject      : Object 参数本身如简单对象、POJO、Map或@Param注解的参数
+                                               int/float等基本类型的入参会包装为Integer/Float等再保存到parameterObject
+                                               POJO/Map会直接保存到parameterObject
+                                               多个参数/@Param/List/Collection/Array会经处理后封装为Map再保存到parameterObject
+                 additionalParameter  : Map<String, Object>
+                 metaParameters       : MetaObject
+                 getSql()             : String
+                 getParameterObject() : Object
              - executor::CachingExecutor.query(ms, wrapCollection(parameter)， rowBounds)
                wrapCollection 将collection,array封装到Map实例中
                - BoundSql boundSql = ms.getBoundSql(parameterObject) 取出预处理后的SQL和入参映射及入参值等信息
                - CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql) 生成一级和二级缓存用的键名
                - 
-
- 
    */
   #+END_EXAMPLE
 
-* 源码分析
-  1) Configuration
-  2) SqlSessionFactory
-  3) SqlSession
-  4) SqlSessionManager
+** 4大核心对象
+Mapper执行过程就是通过4大核心对象来完成数据库操作和结果返回：
+1) Executor(update,query,flushStatements,commit,rollback,getTransaction,close,isClosed)
+   由它来调度StatementHandler,ParameterHandler和ResultSetHandler等来执行对应的SQL。
+2) StatementHandler(prepare,parameterize,batch,update,query)
+   用通过它使用数据库的Statement(PreparedStatement)执行操作，是4大核心对象的核心。
+3) ParameterHandler(getParameterObject,setParameters)
+   用于SQL对参数的处理。
+4) ResultSetHandler(handleResultSets,handleOutputParameters)
+   用于进行最后数据集(ResultSet)的封装返回处理
+
+*** Executor
+内置3种执行器
+1) SIMPLE, 简易执行器，默认的执行器
+2) REUSE, 重用预处理语句的执行器
+3) BATCH, 重用预处理和批量处理的执行器
+
+#+BEGIN_EXAMPLE java
+public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
+  executorType = executorType == null ? defaultExecutorType : executorType;
+  executorType = executorType == null ? ExecutorType.SIMPLE : executortype;
+  Executor executor;
+  if (ExecutorType.BATCH == executorType){
+    executor = new BatchExecutor(this, transaction);
+  }
+  else if (ExecutorType.REUSE == executorType){
+    executor = new ReuseExecutor(this, transaction);
+  }
+  else {
+    executor = new SimpleExecutor(this, transaction);
+  }
+
+  // 启动二级缓存时
+  if (cacheEnabled){
+    executor = new CachingExecutor(executor);
+  }
+  // 插件链，为执行器生成一层层动态代理对象，来附加上插件逻辑。
+  executor = (Executor) interceptorChain.pluginAll(executor);
+  return executor;
+}
+#+END_EXAMPLE
+
+SimpleExecutor的源码
+#+BEGIN_EXAMPLE java
+public class SimpleExecutor extends BaseExecutor {
+  // ........
+  @Override
+  public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql)
+  throws SQLException{
+    Statement stmt = null;
+    try {
+      Configuration configuration = ms.getConfiguration();
+      StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
+      stmt = preparedStatement(handler, ms.getStatementLog());
+      return handler.<E>query(stmt, resultHandler);
+    }
+    finally {
+      closeStatement(stmt);
+    }
+  }
+
+  private Statement preparedStatement(StatementHandler handler, Log statementLog) throws SQLException{
+    Statement stmt;
+    Connection connection = getConnection(statementLog);
+    stmt = handler.prepare(connection);
+    handler.parameterize(stmt);
+    return stmt;
+  }
+}
+#+END_EXAMPLE
+
+*** StatementHandler
+内置3种数据库会话器
+1) SimpleStatementHandler
+2) PreparedStatementHandler
+3) CallableStatementHandler
+
+创建StatementHandler的源码
+#+BEGIN_EXAMPLE java
+public StatementHandler newStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+  // RoutingStatementHandler是通过适配模式找到对应的StatementHandler来执行
+  StatementHandler statementHandler = new RoutingStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
+  statementHandler = (StatementHandler) interceptorChain.pluginAll(statementHandler);
+  return statementHandler;
+}
+#+END_EXAMPLE
+
+RoutingStatementHandler的源码
+#+BEGIN_EXAMPLE java
+public class RoutingStatementHandler implements StatementHandler{
+  // 采用适配器模式
+  private final StatementHandler delegate;
+  
+  public RoutingStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql){
+    switch (mappedStatement.getStatementType()){
+      case STATEMENT:
+        delegate = new SimpleStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
+        break;
+      case PREPARED:
+        delegate = new PreparedStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
+        break;
+      case CALLABLE:
+        delegate = new CallableStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
+        break;
+      default:
+        throw new ExecutorException("Unknown statement type: " + mappedStatement.getStatementType());
+    }
+    // .......
+  }
+}
+#+END_EXAMPLE
+
+PreparedStatementHandler的源码
+#+BEGIN_EXAMPLE java
+public abstract class BaseStatementHandler implements StatementHandler{
+  @Override
+  public Statement prepare(Connection connection) throws SQLException {
+    ErrorContext.instance().sql(boundSql.getSql());
+    Statement stmt = null;
+    try{
+      // instantiateStatement会通过boundSql.getSql()获取SQL语句然后进行预编译
+      stmt = instantiateStatement(connection);
+      setStatementTimeout(statement);
+      setFetchSize(statement);
+      return stmt;
+    }
+    catch (SQLException e){
+      closeStatement(stmt);
+      throw e;
+    }
+    catch (Exception e){
+      closeStatement(stmt);
+      throw new ExecutorException("Error preparing statement. Cause: " + e, e);
+    }
+  }
+
+  @Override
+  public void parameterize(Statement statement) throws SQLException {
+    parameterHandler.setParameters((PreparedStatement) statement);
+  }
+
+  @Override
+  public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+    PreparedStatement ps = (PreparedStatement) statement;
+    ps.execute();
+    return resultSetHandler.<E>handlerResultSets(ps);
+  }
+}
+#+END_EXAMPLE
+
+*** ParameterHandler
+DefaultParameterHandler的源码
+#+BEGIN_EXAMPLE java
+public void setParameters(PreparedStatement ps){
+  ErrorContext.instance().activity("setting parameters").object(mappedStatement.getParameterMap().getId());
+  List<ParameterMapping> parameterMappings = boundSql.getParameterMappings();
+  if (parameterMappings != null){
+    for (int i = 0; i < parameterMappings.size(); i++){
+      ParameterMapping parameterMapping = parameterMappings.get(0);
+      if (parameterMapping.getMode() != ParameterMode.OUT) {
+        Object value;
+        String propertyName = paramenterMapping.getProperty();
+        if (boundSql.hasAdditionalParameter(propertyName)){
+          value = boundSql.getAdditionalParameter(propertyName);
+        }
+        else if (parameterObject == null){
+          value = null;
+        }     
+        else if (typeHandlerRegistry.hasTypeHandler(parameterObject.getClass())){
+          value = parameterObject;
+        }         
+        else {
+          MetaObject metaObject = configuration.newMetaObject(parameterObject);
+          value = metaObject.getValue(propertyName);
+        }             
+        TypeHandler typeHandler = parameterMapping.getTypeHandler();
+        JdbcType jdbcType = parameterMapping.getJdbcType();
+        if (value == null && jdbcType == null){
+          jdbcType = configuration.getJdbcTypeForNull();
+        }
+        try{
+          // 全部通过typeHandler设置入参
+          typeHandler.setParameter(ps, i+1, value, jdbcType);
+        }     
+        catch (TypeException e){
+          throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);
+        }
+        catch (SQLException e){
+          throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);          
+        }             
+      }     
+    }
+  }
+}
+#+END_EXAMPLE
+
+*** ResultSetHandler
+在handleResultSets方法中通过typeHandler和ObjectFactory对结果集进行组装后再返回。
+
+* 插件 
+  Configuration对象在创建4大核心对象时，采用责任链模式将插件逻辑附加到4大核心对象中。
+  注意：
+  1) 能不用插件尽量不要用插件，因为它修改了MyBatis的底层设计
+  2) 由于插件采用层层代理对象的责任链模式，通过反射进行操作，因此性能不高。
+
+** 插件接口
+自定义插件必须实现以下接口
+#+BEGIN_EXAMPLE java
+public interface Interceptor {
+  // 插件的核心方法，它将直接覆盖所拦截对象的原有方法。通过入参invocation对象来调用原有方法。
+  Object intercept(Invocation invocation) throws Throwable;
+  // 给被拦截对象生成一个代理对象，并返回它。target为被拦截对象。
+  // 一般内部采用org.apache.ibatis.plugin.Plugin中的wrap静态方法生成代理对象
+  Object plugin(Object target);
+  // 允许在mybatis-config.xml中plugin元素中配置参数，插件初始化时被调用一次。
+  void setProperties(Properties properties);
+}
+#+END_EXAMPLE
+这里采用模板模式(Template)，就是提供一个骨架并告知骨架中的方法用途，具体由开发者来完成它。
+
+** 插件初始化
+在XMLConfigBuilder中初始化
+#+BEGIN_EXAMPLE java
+private void pluginElement(XNode parent) throws Exception {
+  if (parent != null){
+    for (XNode child : parent.getChildren()){
+      String interceptor = child.getStringAttribute("interceptor");
+      Properties properties = child.getChildrenAsProperties();
+      Interceptor interceptorInstance = (Interceptor) resolveClass(interceptor).newInstance();
+      interceptorInstance.setProperties(properties);
+      configuration.addInterceptor(interceptorInstance);
+    }
+  }
+}
+#+END_EXAMPLE
+在Configuration中
+#+BEGIN_EXAMPLE java
+public void addInterceptor(Interceptor interceptor){
+  interceptorChain.addInterceptor(interceptor);
+}
+#+END_EXAMPLE
+在InterceptorChain中
+#+BEGIN_EXAMPLE java
+private final List<Interceptor> interceptors = new ArrayList<Interceptor>();
+
+public void addInterceptor(Interceptor interceptor){
+  interceptors.add(interceptor);
+}
+#+END_EXAMPLE
+
+** 插件责任链
+内就拿Configuration的newExecutor为例
+#+BEGIN_EXAMPLE java
+executor = (Executor) interceptorChain.pluginAll(executor);
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE java
+/// 通过动态代理来构建责任链
+public Object pluginAll(Object target){
+  for (Interceptor interceptor : interceptors){
+    target = interceptor.plugin(target); // 内部调用Plugin.wrap静态方法构建代理实例
+  }
+  return target;
+}
+#+END_EXAMPLE
+#+BEGIN_EXAMPLE java
+public class Plugin implements InvocationHandler {
+  public static Object wrap(Object target, Interceptor interceptor){
+    Map<Class<?>, Set<Method>> singatureMap = getSignatureMap(interceptor);
+    Class<?> type = target.getClass();
+    Class<?>[] interfaces = getAllInterfaces(type, singatureMap);
+    if (interfaces.length > 0){
+      return Proxy.newProxyInstance(
+        type.getClassLoader(),
+        interfaces,
+        new Plugin(target, interceptor, singatureMap)
+      );
+    }
+    
+    return target;
+  }
+
+  public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    try{
+      Set<Method> methods = singatureMap.get(method.getDeclaringClass());
+      if (methods != null && methods.contains(method)){
+        return interceptor.intercept(new Invocation(target, method, args));
+      }
+      return method.invoke(target, args);
+    }
+    catch (Exception e){
+      throw ExcetionUtil.unwrapThrowable(e);
+    }
+  }
+}
+#+END_EXAMPLE
+Invocation类提供proceed方法调用被拦截对象的原方法
+#+BEGIN_EXAMPLE java
+public Object proceed() throws InvocationTargetException, IllegalAccessException {
+  return method.invoke(target, args);
+}
+#+END_EXAMPLE
+
+** 工具类——MetaObject
+用于读取和修改一些重要对象的属性。主要方法：
+- ~MetaObject forObject(Object object, ObjectFactory objectFactory, ObjectWrapperFactory objectWrapperFactory)~
+  用于获取包装对象
+- ~Object getValue(String name)~
+  用于获取对象属性，支持OGNL
+- ~void setValue(String name, Object value)~
+  用于设置对象属性，支持OGNL
+
+示例-拦截StatementHandler修改SQL
+#+BEGIN_EXAMPLE java
+StatementHandler statementHandler = (StatementHandler) invocation.getTarget();
+MetaObject metaStatementHandler = SystemMetaObject.forObject(statementHandler);
+
+// 通过递归获取真正的StatementHandler而不是代理类实例
+while (metaStatementHandler.hasGetter("h")){
+  Object object = metaStatementHandler.getValue("h");
+  metaStatementHandler = SystemMetaObject.forObject(object);  
+}
+
+String sql = (String)metaStatementHandler.getValue("delegate.boundSql.sql");
+if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
+  sql = String.format("select * from (%s) $_$limit_$table_ limit 1000", sql);
+  metaStatementHandler.setValue("delegate.boundSql.sql", sql);
+}
+#+END_EXAMPLE
+
+** 实现自定义插件
+   1) 确定拦截的对象和方法
+      - Executor是执行SQL的全过程，包括组装参数、结果集返回和执行嗯SQL过程都可以拦截，因为范围广泛因此用得不多
+      - StatementHandler是执行SQL的过程，可以重写执行SQL的过程
+        可拦截的方法
+        - ~Statement prepare(Connection connection) throws SQLException~
+        - ~void parameterize(Statement statement) throws SQLException~
+        - ~void batch(Statement statement) throws SQLException~
+        - ~void update(Statement statement) throws SQLException~
+        - ~<E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException~
+        - ~BoundSql getBoundSql()~
+        - ~ParameterHandler getParameterHandler()~
+      - ParameterHandler主要用于拦截执行SQL的参数组装，可以重写组装参数规则
+      - ResultSetHandler用于拦截结果集的组装，可以重写组装结果规则
+   2) 通过注解指定拦截的对象和方法
+      #+BEGIN_EXAMPLE java
+      package com.john.plugin;
+
+      @Interceptors(
+        @Signature(
+        type = StatementHandler.class,
+        method = "prepare",
+        args = {Connection.class}
+        )
+      )
+      public class MyPlugin implements Interceptor{
+        Properties props = null;
+        @Override
+        public Object intercept(Invocation invocation) throws Throwable {
+          return invocation.proceed();
+        }
+         
+        @Override
+        public Object plugin(Object target){
+          return Plugin.wrap(target, this);
+        }
+
+        public void setProperties(Properties props){
+          this.props = props;
+        }
+      }
+      #+END_EXAMPLE
+   3) 在mybatis-config.xml配置
+      #+BEGIN_EXAMPLE xml
+      <plugins>
+        <plugin interceptor="com.john.plugin.MyPlugin">
+          <property name="dbType" value="mysql"/>
+        </plugin>
+      </plugins>
+      #+END_EXAMPLE
+
+* 批处理
+  1) 配置
+     1) 全局配置(mybatis-config.xml)
+        #+BEGIN_EXAMPLE xml
+        <settings>
+          <setting name="defaultExecutorType" value="BATCH"/>
+        </settings>
+        #+END_EXAMPLE
+     2) Session配置
+        #+BEGIN_EXAMPLE java
+        SqlSession session = sqlSessionFactory.openSession(ExecutorType.BATCH);
+        #+END_EXAMPLE
+     3) Spring配置
+        #+BEGIN_EXAMPLE xml
+        <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+          <constructor-arg index="0" ref="sqlSessionFactory"/>
+          <constructor-arg index="1" ref="BATCH"/>
+        </bean>
+        #+END_EXAMPLE
+  2) 注意事项
+     1) 对数据库的操作在执行commit时才会发送到数据库
+     2) 通过调用 ~session.flushStatement()~ 在事务未提交的前提下，将对数据库的操作发送给数据库执行。
+  3) 示例
+     #+BEGIN_EXAMPLE java
+     // 采用全局配置
+     try{
+       RoleMapper roleMapper = session.getMapper(RoleMapper.class);
+       Role role = new Role();
+       role.setName("xxx");
+       roleMapper.save(role);
+       session.flushStatement(); // 若不执行这句，那么数据库并没有name为xxx的role记录
+       Role role = roleMapper.select("xxx");
+       System.out.println(role.getName());
+       session.commit();
+     }
+     catch (Exception e){
+       session.rollback();
+     }
+     #+END_EXAMPLE
+* 存储过程和函数
+** 返回基本类型
+   #+BEGIN_EXAMPLE xml
+   <select id="count" statementType="CALLABLE">
+   {call count_role (
+     #{roleName, mode=IN, jdbcType=VARCHAR},
+     #{result, mode=INOUT, jdbcType=INTEGER},
+     #{execDate, mode=OUT, jdbcType=DATE}
+   )}
+   </select>
+   #+END_EXAMPLE
+   #+BEGIN_EXAMPLE java
+   ProcedureMapper mapper = session.getMapper(ProcedureMapper.class);
+   Pojo o = new Pojo();
+   o.setRoleName("test");
+   o.setResult("cc");
+   o.count(o);
+   System.out.println(o.getResult();
+   SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+   System.out.println(sdf.format(o.getExecDate()));
+   #+END_EXAMPLE
+
+** 返回游标
+   #+BEGIN_EXAMPLE xml
+   <resultMap id="roleMap" type="ResultPojo">
+     <id property="roleName" column="role_name"/>
+   </resultMap>
+   <select id="getRole" statementType="CALLABLE" resultType="TestPojo">
+   {call get_role (
+     #{roleName, mode=IN, jdbcType=VARCHAR},
+     #{start, mode=IN, jdbcType=INTEGER},
+     #{end, mode=IN, jdbcType=INTEGER},     
+     #{count, mode=OUT, jdbcType=INTEGER},     
+     #{result, mode=OUT, jdbcType=CURSOR, javaType=ResultSet, resultMap=roleMap}
+   )}
+   </select>
+   #+END_EXAMPLE   
+   #+BEGIN_EXAMPLE java
+   @Data
+   pulic class ResultPojo {
+     private String roleName;
+   }
+   @Data
+   public class TestPojo {
+     private String roleName;
+     private int start;
+     private int end;
+     private int count;
+     private List<ResultPojo> result;
+   }
+
+   Pmapper mapper = session.getMapper(Pmapper.class);
+   TestPojo p = new TestPojo();
+   p.setRoleName("xxx");
+   p.setStart(0);
+   p.setEnd(10);
+   p.setCount(0);
+   p.setResult(new ArrayList<ResultPojo>());
+   mapper.getRole(p);
+   System.out.println(p.getCount());
+   for (ResultPojo item : p.getResult()){
+     System.out.println(item.getRoleName());
+   }
+   #+END_EXAMPLE
+
+* 分页
+
+** 通过内置的RowBounds分页
+   问题：会先将所有记录查询到应用服务器，然后再根据分页信息抽取数据，因此势必有出现内存溢出的问题。
+   RowBounds源码
+   #+BEGIN_EXAMPLE java
+   public class RowBounds {
+     public static final int NO_ROW_OFFSET = 0;
+     public static final int NO_ROW_LIMIT = Integer.MAX_VALUE;
+     public static final RowBounds DEFAULT = new RowBounds();
+     
+     @Getter
+     private int offset; // 从第几行开始读取，从0开始
+     @Getter
+     private int limit;  // 最多读取多少行
+     
+     public RowBounds(){
+       this.offset = NO_ROW_OFFSET;
+       this.limit = NO_ROW_LIMIT;
+     }
+
+     public RowBounds(int offset, int limit){
+       this.offset = offset;
+       this.limit = limit;
+     }
+   }
+   #+END_EXAMPLE
+   使用示例
+   #+BEGIN_EXAMPLE xml
+   <select id="getRole" parameterType="string" resultType="Role">
+     <bind name="pattern" value="'%' + _parameter + '%'" >
+     select * from role where name like #{pattern}
+   </select>
+   #+END_EXAMPLE
+   #+BEGIN_EXAMPLE java
+   public interface RoleMapper{
+     List<Role> getRole(String name, RowBounds rowBounds);
+   }
+
+   RoleMapper mapper = .....
+   List<Role> roles = mapper.getRole("xxx", new RowBounds(0,10));
+   #+END_EXAMPLE
+
+** 通过[[https://pagehelper.github.io][MyBatisPageHelper]]分页
+   1) mybatis-config.xml配置
+      #+BEGIN_EXAMPLE xml
+      <plugins>
+        <plugin interceptor="com.github.pagehelper.PageHelper">
+          <property name="dialect" value="mysql"/>
+          <property name="offsetAsPageNum" value="false"/>
+          <property name="rowBoundsWithCount" value="false"/>
+          <property name="pageSizeZero" value="true"/>
+          <property name="reasonable" value="false"/>
+          <property name="supportMethodsArguments" value="false"/>
+          <property name="returnPageInfo" value="none"/>
+        </plugin>
+      </plugins>
+      #+END_EXAMPLE
+   2) SQL映射文件
+      #+BEGIN_EXAMPLE xml
+      <select id="getRole">
+      select * from role
+      </select>
+      #+END_EXAMPLE
+   3) 分页
+      #+BEGIN_EXAMPLE java
+      int pageNum = 1; // 第几页，从1开始
+      int pageSize = 10; // 每页记录数目
+      Page page = PageHelper.startPage(pageName, pageSize, true);
+      List<Role> roles = mapper.getRole();
+      int total = page.getTotal();
+      #+END_EXAMPLE
+
+*** API说明
+    #+BEGIN_EXAMPLE java
+    // 统计总数
+    PageHelper.startPage(pageName, pageSize, true);
+    // 不统计总数
+    PageHelper.startPage(pageName, pageSize, false);
+    // 查询所有，获取不掉用PageHelper即不执行分页操作
+    PageHelper.startPage(1, 0);
+    // 获取order by语句
+    String orderBy = PageHelper.getOrderBy();
+    Page<?> page = PageHelper.startPage(pageNum, pageSize, orderBy);
+    //isReasonable分页合理化,null时用默认配置
+    Page<?> page = PageHelper.startPage(pageNum, pageSize, isCount, isReasonable);
+    //isPageSizeZero是否支持PageSize为0，true且pageSize=0时返回全部结果，false(默认值)时分页,null时用默认配置
+    Page<?> page = PageHelper.startPage(pageNum, pageSize, isCount, isReasonable, isPageSizeZero);
+    #+END_EXAMPLE
+
+*** 线程安全问题
+    原因：由于分页信息保存在静态的ThreadLocal参数中
+    问题：当分页信息在当前线程运行的方法中没有被消费掉，那么有可能在其它方法中被意外使用，导致不该分页的地方出现分页操作。
+    1) 不安全的用法
+       #+BEGIN_EXAMPLE java
+       PageHelper.startPage(1,10);
+       Object o = null;
+       if (o != null){
+         mapper.query();
+       }
+       #+END_EXAMPLE
+    2) 安全的用法
+       #+BEGIN_EXAMPLE java
+       public void f1(){
+         Object o = null;
+         if (o != null){
+           PageHelper.startPage(1,10);
+           mapper.query();
+         }
+       }
+
+       public void f2(){
+         try{
+           Object o = null;
+           PageHelper.startPage(1,10);
+           if (o != null){
+  
+             mapper.query();
+           }
+         }
+         finally {
+           PageHelper.clearPage(); // 显式清理ThreadLocal参数
+         }
+       }
+       #+END_EXAMPLE
+
+
+    
+
+
+
+* 代码生成器——[[http://www.mybatis.org/generator/][MyBatisGenerator]]
+  遵循Data First原则，可根据数据库表生成相关代码
+   - POJO
+   - Mapper接口
+   - SQL Mapper XML
+
+   QBC风格的条件查询
+
+** POM配置
+   #+BEGIN_EXAMPLE xml
+   <dependencies>
+     <dependency>
+       <groupId>org.mybatis.generator</groupId>
+       <artifactId>mybatis-generator-maven-plugin</artifactId>
+       <version>1.3.7</version>
+       <type>maven-plugin</type>
+     </dependency>
+   </dependencies>
+   <plugin>
+    <groupId>org.mybatis.generator</groupId>
+    <artifactId>mybatis-generator-maven-plugin</artifactId>
+    <version>1.3.7</version>
+    <configuration>
+        <configurationFile>src/main/resources/mybatis-generator/generatorConfig.xml</configurationFile>
+        <verbose>true</verbose>
+        <overwrite>true</overwrite>
+    </configuration>
+    <executions>
+        <execution>
+            <id>Generate MyBatis Artifacts</id>
+            <goals>
+                <goal>generate</goal>
+            </goals>
+        </execution>
+    </executions>
+    <dependencies>
+        <dependency>
+            <groupId>org.mybatis.generator</groupId>
+            <artifactId>mybatis-generator-core</artifactId>
+            <version>1.3.7</version>
+        </dependency>
+    </dependencies>
+   </plugin>
+   #+END_EXAMPLE
+
+** generatorConfig.xml
+   #+BEGIN_EXAMPLE xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE generatorConfiguration
+        PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+        "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+
+   <generatorConfiguration>
+    <!-- 指定JDBC驱动位置 -->
+    <classPathEntry
+            location="C:/Oracle/Middleware/wlserver_10.3/server/lib/ojdbc6.jar"/>
+    <context id="my" targetRuntime="MyBatis3">
+        <commentGenerator>
+            <property name="suppressDate" value="false"/>
+            <property name="suppressAllComments" value="true"/>
+        </commentGenerator>
+
+        <!-- 数据库链接信息 -->
+        <jdbcConnection driverClass="oracle.jdbc.driver.OracleDriver"
+                        connectionURL="jdbc:oracle:thin:@172.20.16.***:1521:CARGO" userId="***"
+                        password="***"/>
+
+        <!-- domain路径 -->
+        <javaModelGenerator targetPackage="ctas.test.entity"
+                            targetProject="D:/yangjm/Code/CTAS/JAVAEE/CTAS2CCSP/src/main/java">
+            <property name="enableSubPackages" value="true"/>
+            <property name="trimStrings" value="true"/>
+        </javaModelGenerator>
+
+        <!-- SQL映射文件路径 -->
+        <sqlMapGenerator targetPackage="ctas.test.entity.xml"
+                         targetProject="D:/yangjm/Code/CTAS/JAVAEE/CTAS2CCSP/src/main/java">
+            <property name="enableSubPackages" value="true"/>
+        </sqlMapGenerator>
+        
+        <!-- Mapper接口路径 -->
+        <javaClientGenerator targetPackage="ctas.test.mapper"
+                             targetProject="D:/yangjm/Code/CTAS/JAVAEE/CTAS2CCSP/src/main/java" type="XMLMAPPER">
+            <property name="enableSubPackages" value="true"/>
+        </javaClientGenerator>
+
+        <!-- 生成表 -->
+        <!--<table tableName="T_FEE_AGTBILL" domainObjectName="FeeAgentBill"
+               enableCountByExample="false" enableUpdateByExample="false"
+               enableDeleteByExample="false" enableSelectByExample="false"
+               selectByExampleQueryId="false"/>-->
+
+        <table tableName="CTAS_FEE_BASE" domainObjectName="FeeBase"
+               enableCountByExample="false" enableUpdateByExample="false"
+               enableDeleteByExample="false" enableSelectByExample="false"
+               selectByExampleQueryId="false">
+            <!--<columnRenamingRule searchString="^D_"
+                                replaceString=""/>-->
+        </table>
+    </context>
+   </generatorConfiguration>
+   #+END_EXAMPLE
+
 * QA
   1) 参数传递方式 ~${}~ 和 ~#{}~ 的差别
      - 差别
@@ -1745,3 +2521,4 @@ public interface Transaction {
      |     1.2 |              46 |
      |     1.1 | 45              |
      - Eclipse下修复：将Build Path下的JDK修改为JDK8即可。
+
