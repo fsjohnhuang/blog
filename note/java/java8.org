@@ -334,62 +334,116 @@
 6) transient 修饰变量不参与类的序列化
 
 * 枚举
-1) 可单独声明或在类和接口中声明
-   #+BEGIN_EXAMPLE java
-   class FreshJuice {
-     enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
-     FreshJuiceSize size;
-   }
-   
-   public class FreshJuiceTest {
-     public static void main(String []args) {
-       FreshJuice juice = new FreshJuice();
-       juice.size = FreshJuice.FreshJuiceSize.LARGE;
+  1) 可单独声明或在类和接口中声明
+     #+BEGIN_EXAMPLE java
+     class FreshJuice {
+       enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
+       FreshJuiceSize size;
      }
-   }
-   #+END_EXAMPLE
-2) 枚举中可定义方法、变量和构造函数
-   #+BEGIN_EXAMPLE java
-   // 枚举类Sex
-   public enum Sex {
-     MALE(1, "男性"), FEMALE(2, "女性"); // 枚举值MALE和FEMALE
-
-     private int id;
-     private String name;
      
-     private Sex(int id, String name){
-       this.id = id;
-       this.name = name;
-     }
-
-     public int getId(){
-       return this.id;
-     }
-
-     public void setId(int id){
-       this.id = id;
-     }
-
-     public String getName(){
-       return this.name;
-     }
-
-     public void setName(String name){
-       this.name = name;
-     }
-
-     public static Sex getSex(int id){
-       if (id == 1){
-         return MALE;
+     public class FreshJuiceTest {
+       public static void main(String []args) {
+         FreshJuice juice = new FreshJuice();
+         juice.size = FreshJuice.FreshJuiceSize.LARGE;
        }
-       else if (id == 2){
-         return FEMALE;
-       }
-
-       return null;
      }
-   }
-   #+END_EXAMPLE
+     #+END_EXAMPLE
+  2) 枚举中可定义方法、变量和构造函数
+     #+BEGIN_EXAMPLE java
+     // 枚举类Sex
+     public enum Sex {
+       MALE(1, "男性"), FEMALE(2, "女性"); // 枚举值MALE和FEMALE
+  
+       private int id;
+       private String name;
+       
+       // 枚举的构造方法始终为private，因此可以省略访问控制符
+       private Sex(int id, String name){
+         this.id = id;
+         this.name = name;
+       }
+  
+       public int getId(){
+         return this.id;
+       }
+  
+       public void setId(int id){
+         this.id = id;
+       }
+  
+       public String getName(){
+         return this.name;
+       }
+  
+       public void setName(String name){
+         this.name = name;
+       }
+  
+       public static Sex getSex(int id){
+         if (id == 1){
+           return MALE;
+         }
+         else if (id == 2){
+           return FEMALE;
+         }
+  
+         return null;
+       }
+     }
+     #+END_EXAMPLE
+  3) 枚举实例可覆盖枚举类中定义的方法
+     #+BEGIN_EXAMPLE java
+     public enum Sex{
+       MALE(1) {
+         public int getId(){
+           return this.id + 1;
+         }
+       },
+       FEMALE(2) {
+         public int getId(){
+           return this.id + 2;
+         }
+       };
+       
+
+       protected int id;
+
+       Sex(int id){
+         this.id = id;
+       }
+       
+       public abstract int getId();
+     }
+     #+END_EXAMPLE
+  4) 枚举类可以拥有静态成员
+     注意：枚举常量在静态成员之前构建，因此不能在构造方法中引用静态成员。若要初始化时修改静态成员值，可通过静态代码块处理。
+     #+BEGIN_EXAMPLE java
+     public enum Sex {
+       MALE, FEMALE;
+       public static int count = 1;
+       private int c;
+       
+       // 在枚举常量构建后执行静态代码块
+       static {
+         for(Sex sex : Sex.values()){
+           sex.c = count;
+           count += 1;
+         }
+       }
+     }
+     #+END_EXAMPLE
+  5) 枚举内置方法
+     | 方法                                         | 描述                               |
+     |----------------------------------------------+------------------------------------|
+     | toString()                                   | 返回枚举常量的名称                 |
+     | toName()                                     | 返回枚举常量的名称                 |
+     | int ordinal()                                | 返回枚举常量的的序列位置，从0开始  |
+     | int compareTo(Enum<E> other)                 | 通过序列位置比较两个枚举常量       |
+     | static T valueOf(class<T> type, String name) | 根据名称获取枚举常量               |
+     | Enum<E>[] values()                           | 返回枚举常量数组                   |
+     | Class<E> getDeclaringClass()                 | 返回枚举常量的实现类               |
+     | int hashCode()/protected void finanlize()    |                                    |
+     | protected Object clone()                     | 抛出cloneNotSupportedException异常 |
 
 * 源文件声明规则
 1) 一个源文件中只能有一个public类
@@ -464,6 +518,7 @@
       2) 一个类可实现多个接口，但只能继承一个抽象类
       3) 接口的方法不能有方法体，而抽象类中的非抽象方法将包含方法体
       4) 接口的成员变量修饰符只能为 ~public static final~ ，抽象类的成员变量修饰符和普通实现类一样
+      5) 接口的成员方法修饰符只能为 ~public~
    2) 接口定义
       #+BEGIN_EXAMPLE java
       [public|private] interface <接口名称> [extends <其它接口名称>...]{}
@@ -477,6 +532,37 @@
       #+END_EXAMPLE
    4) 标记接口
       不包含任何属性和方法，仅用于表明它的实现类属于一个特定的类型拥有某个或某些权利。
+   5) 接口可以拥有静态方法，一般作为工厂方法
+   6) 接口可以拥有默认方法(Java8+)
+      #+BEGIN_EXAMPLE java
+      public interface Test{
+        // 实现类可选择性地重写或沿用默认方法
+        default void print(){
+          System.out.println("test");
+        }
+      }
+      #+END_EXAMPLE
+      - 多接口方法冲突：若继承的多个接口定义了相同方法签名的方法
+        - 若没有提供默认方法，那么派生类只需定义方法体，或定义为抽象类即可
+        - 若存在默认方法，则派生类必须重写该方法
+          #+BEGIN_EXAMPLE java
+          interface A {
+            default void print(){
+              System.out.println("A");
+            }
+          }
+          interface B {
+            void print();
+          }
+          class C implements A, B {
+            @Override
+            public void print(){
+              A.super.print(); // 调用接口的默认方法
+            }
+          }
+          #+END_EXAMPLE
+
+** Lambda表达式
 
 ** 重写(Override)和重载(Overload)
    - 重写(Override)
@@ -1000,6 +1086,9 @@
        }
        #+END_EXAMPLE
 
+** TODO Object终极父类
+   所有类型都集成自Object，数组也是类因此继承自Object。
+
 * 异常处理
   1) 异常类型
      - ~java.lang.Throwable~ 所有异常的顶层父类
@@ -1209,8 +1298,73 @@
    }
    #+END_EXAMPLE
   
-* TODO 比较器
-  Comparator 和 Comparable
+* 比较器
+
+** Comparable接口
+   #+BEGIN_EXAMPLE java
+   public interface Comparable<T>{
+     /**
+     * 1. 当前对象大于入参时返回 正数
+     * 2. 当前对象等于入参时返回 0
+     * 3. 当前对象小于入参时返回 负数
+     */
+     int compareTo(T other);
+   }
+   #+END_EXAMPLE
+   
+*** 示例
+    1) 整数属性比较
+       #+BEGIN_EXAMPLE java
+       @Data
+       public class Role implements Comparable<Role>{
+         private int id;
+         private String name;
+
+         public int compareTo(Role role){
+           // 能正确处理负数
+           return Integer.compare(this.getId(), role.getId());
+         }
+       }
+       #+END_EXAMPLE
+    2) 浮点数属性比较
+       #+BEGIN_EXAMPLE java
+       @Data
+       public class Role implements Comparable<Role>{
+         private double id;
+         private String name;
+
+         public int compareTo(Role role){
+           // 能正确处理浮点数比较，包括NaN和无限大/无限小
+           return Double.compare(this.getId(), role.getId());
+         }
+       }
+       #+END_EXAMPLE
+    3) ~Arrays.sort~ 可对Comparable派生类的数组排序
+       #+BEGIN_EXAMPLE java
+       String[] sorted = Arrays.sort(new String[]{"abc", "ccd"});
+       #+END_EXAMPLE
+
+
+
+
+** Comparator接口
+   配合 ~Arrays.sort(Comparable<?>[] arrays, Comparator<T> comparator)~ 让排序使用comparator.compare而不是用comparable.compareTo方法比较对象的大小。
+   - 接口定义
+     #+BEGIN_EXAMPLE java
+     public interface Comparator<T>{
+       int compare(T a, T b);
+     }
+     #+END_EXAMPLE
+   - 示例
+     #+BEGIN_EXAMPLE java
+     public class LenComparator implements Comparator<String>{
+       public int compare(String a, String b){
+         return Integer.compare(a.length(), b.length());
+       }
+     }
+     Comparator<String> lenComparator = new LenComparator();
+     String[] sorted = Arrays.sort(new String[]{"123", "321"}, lenComparator);
+     #+END_EXAMPLE
 
 * TODO 注解
 * TODO 打包发布
@@ -1436,25 +1590,27 @@ n    }
 * TODO JNI
 
 * 文档注释
-  | 标签          | 说明                                               |
-  |---------------+----------------------------------------------------|
-  | @author       | 作者                                               |
-  | @deprecated   | 指定类或成员已过期                                 |
-  | {@docRoot}    | 指定当前文档的根目录                               |
-  | @exception    | 指定抛出的异常                                     |
-  | {@inheritDoc} | 从直接父类即成的注释                               |
-  | {@link}       | 插入一个引用另一个主题的链接                       |
-  | {@linkplain}  | 插入一个引用另一个主题的链接，但以纯文本形式显示   |
-  | @param        | 方法参数                                           |
-  | @return       | 方法返回值                                         |
-  | @see          | 指定一个到另一个主题的链接                         |
-  | @serial       | 说明一个序列化属性                                 |
-  | @serialData   | 说明通过writeObject()和writeExternal()方法写的数据 |
-  | @serialField  | 说明一个ObjectStreamField组件                      |
-  | @since        | 标记什么时候引入一个特定的变化                     |
-  | @throws       | 和@exception一样                                   |
-  | {@value}      | 说明常量的值，该常量必须是static属性               |
-  | @version      | 版本号                                             |
+  | 标签          | 说明                                               | 示例                                                                       |
+  |---------------+----------------------------------------------------+----------------------------------------------------------------------------|
+  | @author       | 作者                                               |                                                                            |
+  | @deprecated   | 指定类或成员已过期                                 |                                                                            |
+  | {@docRoot}    | 指定当前文档的根目录                               |                                                                            |
+  | @exception    | 指定抛出的异常                                     |                                                                            |
+  | {@inheritDoc} | 从直接父类即成的注释                               |                                                                            |
+  | {@link}       | 插入一个引用另一个主题的链接                       | 规则和@see一致                                                             |
+  | {@linkplain}  | 插入一个引用另一个主题的链接，但以纯文本形式显示   |                                                                            |
+  | @param        | 方法参数                                           |                                                                            |
+  | @return       | 方法返回值                                         |                                                                            |
+  | @see          | 指定一个到另一个主题的链接                         | @see com.john.Test#print() 当省去包和类时就会在当前类中查找，方法前必须为# |
+  |               |                                                    | @see <a href=""></a>                                                       |
+  |               |                                                    | @see "link" 内容将显示在see also中                                         |
+  | @serial       | 说明一个序列化属性                                 |                                                                            |
+  | @serialData   | 说明通过writeObject()和writeExternal()方法写的数据 |                                                                            |
+  | @serialField  | 说明一个ObjectStreamField组件                      |                                                                            |
+  | @since        | 标记什么时候引入一个特定的变化                     |                                                                            |
+  | @throws       | 和@exception一样                                   |                                                                            |
+  | {@value}      | 说明常量的值，该常量必须是static属性               |                                                                            |
+  | @version      | 版本号                                             |                                                                            |
 
   然后通过命令 ~javadoc~ 生成文档。
 ** 示例
@@ -1680,12 +1836,125 @@ n    }
 * Java8新特性
   
 ** Lambda表达式
+   由编译器提供支持。
+   lambda表示函数参数，而带有参数变量的表达式被称为lambda表达式。
+   而Lambda表达式在Java中为实现特定 *接口或抽象类* 的 *抽象方法* 的便捷语法。
 
-** 方法引用
+   #+BEGIN_EXAMPLE java
+   Comparator<String> comparator = (String a, String b) -> Integer.compare(a.length(), b.length());
+   // 对于函数式接口，方法类型可被推导，因此参数列表可以省略入参类型
+   Comparator<String> comparator = (a, b) -> Integer.compare(a.length(), b.length());
+   Comparator<String> comparator = (a, b) -> {
+     int aLen = a.length();
+     int bLen = b.length();
+
+     return Integer.compare(aLen + 1, bLen);
+   }
+   
+   // 参数列表为空时
+   Runnable task = () -> {
+     for (int i = 0; i < 1000; i++){
+       // do something
+     }
+   };
+
+   // 仅有一个参数时，可以省略括号
+   Predicate<String> predicate = x -> Objects.isNull(x);
+   #+END_EXAMPLE
+
+*** 作用域
+    Lambda表达式的方法体和所在代码块有着相同的作用域。
+    1) Lambda表达式中不能有与局部变量同名的参数或局部变量
+    2) this指向所在代码块所属的实例
+    3) 只能访问声明为final的自由变量
+       - 什么是自由变量：不是从入参传递过来的参数
+         #+BEGIN_EXAMPLE java
+         final int a = 1;
+         Runnable task = () -> System.out.println(a); // a就是自由变量
+         #+END_EXAMPLE
+       - 什么是闭包(closure)：含自由变量的代码块
+       - 增强for循环的变量自动实现final
+         #+BEGIN_EXAMPLE java
+         for (String arg : args){
+           new Thread(() -> System.out.println(arg)).start();
+         }
+         #+END_EXAMPLE
 
 ** 函数式接口
+   仅含一个抽象方法定义的接口，被称为函数式接口。(可包含其他默认方法)
+   内置的函数式接口
+   | 接口                 | 参数类型 | 返回类型 | 抽象方法 | 默认方法                 |
+   |----------------------+----------+----------+----------+--------------------------|
+   | Runnable             |          | void     | run      |                          |
+   | Supplier<T>          |          | T        | get      |                          |
+   | Comsumer<T>          | T        | void     | accept   | andThen                  |
+   | BiComsumer<T, U>     | T,U      | void     | accept   | andThen                  |
+   | Function<T,R>        | T        | R        | apply    | compose,andThen,identity |
+   | BiFunction<T, U, R>  | T, U     | R        | apply    | compose                  |
+   | UnaryOperator<T>     | T        | T        | apply    | compose,andThen,identity |
+   | BinaryOperator<T>    | T,T      | T        | apply    | andThen,minBy,maxBy      |
+   | Predicate<T>         | T        | boolean  | test     | and,or,negate,isEqual    |
+   | BiPredicate<T, U>    | T, U     | boolean  | test     | and,or,negate            |
+   另外 ~java.util.function~ 中还为基本类型int,long和double提供函数式接口，减少装箱拆箱的损耗。
 
-** 默认方法
+*** 自定义函数式接口
+    #+BEGIN_EXAMPLE java
+    /**
+    * 通过注解@FunctionalInterface标识函数式接口，有如下作用
+    * 1. 编译器会识别该类仅含一个抽象方法
+    * 2. javadoc会标识给接口为函数式接口
+    */
+    @FunctionalInterface
+    public interface PixelFunction{
+      Color apply(int x, int y);
+    }
+    #+END_EXAMPLE
+
+** 方法引用和构造方法引用
+   由编译器提供支持。
+   1) 方法引用
+      直接引用 *其他类已经实现的成员方法/静态方法* 或 *其他实例的成员方法*
+      - 语法
+        1) ~类::成员方法~
+        2) ~类::静态方法~
+        3) ~实例::成员方法~
+      - 对于重载方法
+        编译器会根据调用上下文自动编译为合适的重载方法
+      - 示例
+        #+BEGIN_EXAMPLE java
+        // 编译为Arrays.sort(new String[]{"abc", "Abc"}, (a, b) -> a.compareToIgnoreCase(b));
+        Arrays.sort(new String[]{"abc", "Abc"}, String::compareToIgnoreCase);
+
+        // 编译为 Comparator<String> comparator = (String a, String b) -> Integer.compare(a.length(), b.length());
+        Comparator<String> comparator = Integer::compare;
+
+        // 编译为 list.forEach((String x) -> System.out.println(x));
+        list.forEach(System.out::println);
+
+        // 内部类调用外部类实例的成员方法引用
+        Outer.this::method
+
+        // 调用父类实例的成员方法引用
+        super::method
+        #+END_EXAMPLE
+   2) 构造方法引用
+      1) 对象
+         - 语法： ~类::new~
+         - 示例
+           #+BEGIN_EXAMPLE java
+           List<Role> roles = names.stream().map(Role::new);
+           #+END_EXAMPLE
+      2) 数组
+         - 语法： ~类[]::new~
+         - 示例
+           #+BEGIN_EXAMPLE java
+           // Role[]::new 编译为 n -> new Role[n]
+           Role[] roles = stream.toArray(Role[]::new);
+           #+END_EXAMPLE
+
+
+      
+
 
 ** 新工具
 
