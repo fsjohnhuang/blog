@@ -292,7 +292,7 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
    ; pipelining，多个task间共享SSH连接，可提升Ansible的执行效率
    ; control_path，保存ControlPath socket的路径
    ; retry_files_enabled=False，当playbook失败得情况下，一个重试文件将会创建，默认为开启此功能
-   ; retry_files_save_path = ~/.ansible-retry，重试文件的路径，默认为当前目录下.ansible-retry
+   ; retry_files_save_path=~/.ansible-retry，重试文件的路径，默认为当前目录下.ansible-retry
    #+END_EXAMPLE
 
 ** 配置Linux主机SSH免密访问
@@ -1606,6 +1606,12 @@ ansible-doc -l <keyword>
    # module_set_locale = True
    module_lang = en_US.UTF-8
    module_set_locale = True
+   #+END_EXAMPLE
+2) SSH连接失败
+   原因：ansible底层采用sshpass进行ssh连接，默认情况只能连接已验证过host key的主机。（即必须已经通过SSH成功连接过）
+   解决方法：在Ansible配置文件的defaults section下修改为
+   #+BEGIN_EXAMPLE
+   host_key_checking=False
    #+END_EXAMPLE
    
 * 实例-IIS
