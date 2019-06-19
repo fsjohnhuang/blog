@@ -1,4 +1,5 @@
 JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程池、异步IO和轻量级任务框架，还提供多线程上下文的Collection实现等。
+*临界区* 允许某时刻仅有一个线程可进入，并且不可中断地执行的代码块。
 
 * valatile 关键字
   用于保证 *内存可见性*, 相对 synchronzied 关键字为一种轻量级的线程缓存和主存间的同步策略。但不具备如下特性
@@ -216,71 +217,109 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
         }
       }
       #+END_EXAMPLE
-* ConcurrentHashMap
-  HashMap 和 Hashtable 间的差别在 HashMap 非线性安全，而 Hashtable 为线性安全。
-  而 ConcurrentHashMap 内部采用 *锁分段* 机制替代 Hashtable 中的同步锁机制，因此比 Hashtable 有以下两方面的优势
-  1) 性能更好
-     - JDK1.5~1.7的版本
-       - 参数
-       - concurrentLevel 设置分段数目，初始化确定后后期不能修改。
-       - 数据结构(假设 concurrentLevel 为2)
-         | 分段     | HashEntry数组 | 链表    |
-         |----------+---------------+---------|
-         | Segment1 | HashEntry11   | item111 |
-         |          |               | item112 |
-         |          | HashEntry12   | item121 |
-         | Segment2 | HashEntry21   | item211 |
-         |          | HashEntry22   | item221 |
-         |          |               | item222 |
-         然后并不像 Hashtable 那样对整个哈稀列表进行同步锁，而是对分段进行同步锁，那么多个线程若读取不同分段的数据，那么就可并行操作 ConcurrentHashMap 实例了。
-         #+BEGIN_EXAMPLE java
-         static class Segment<K,V> extends ReentrantLock implements Serializable{
-           // ....
-         }
+* 线性安全的数据结构
+** ConcurrentHashMap
+   HashMap 和 Hashtable 间的差别在 HashMap 非线性安全，而 Hashtable 为线性安全。
+   而 ConcurrentHashMap 内部采用 *锁分段* 机制替代 Hashtable 中的同步锁机制，因此比 Hashtable 有以下两方面的优势
+   1) 性能更好
+      - JDK1.5~1.7的版本
+        - 参数
+        - concurrentLevel 设置分段数目，初始化确定后后期不能修改。
+        - 数据结构(假设 concurrentLevel 为2)
+          | 分段     | HashEntry数组 | 链表    |
+          |----------+---------------+---------|
+          | Segment1 | HashEntry11   | item111 |
+          |          |               | item112 |
+          |          | HashEntry12   | item121 |
+          | Segment2 | HashEntry21   | item211 |
+          |          | HashEntry22   | item221 |
+          |          |               | item222 |
+          然后并不像 Hashtable 那样对整个哈稀列表进行同步锁，而是对分段进行同步锁，那么多个线程若读取不同分段的数据，那么就可并行操作 ConcurrentHashMap 实例了。
+          #+BEGIN_EXAMPLE java
+          static class Segment<K,V> extends ReentrantLock implements Serializable{
+            // ....
+          }
 
-         class ConcurrentHashMap{
-           public void put(K key, V value){
-             // 第一次计算哈稀值用于指定Segment的位置
-             // 第二词计算哈稀值用于指定HashEntry的位置
-             // 然后调用 Segment 实例的 tryLock 方法尝试获取锁， 若获取失败则当前线程会以自旋的方式继续调用 tryLock 方法尝试获取锁，直到超过尝试次数上限才挂起等待被唤醒继续执行
-           }
-         }
-         #+END_EXAMPLE
-     - JDK1.8的版本
-       - 数据结构
-         采用Node数组+链表+红黑树结构，丢弃Segment的概念，底层采用CAS实现而不是采用同步锁机制。
-  2) 能保证复合操作的原子性
-     #+BEGIN_EXAMPLE java
-     Hashtable ht = new Hashtable();
-     if (!ht.containsKey("a")){ // 步骤1
-       ht.put("a", System.currentTimeMills()) // 步骤2
-     }
-     #+END_EXAMPLE
-     步骤1和2都分别采用同步锁，但两步应该作为一个原子性操作被加锁同步才对。
-  
-  多线程环境中可使用 
-  - ConcurrentSkipListMap 替代 TreeMap
-  - ConcurrentHashMap 替代 HashMap
-  - CopyOnWriteArrayList 替代 ArrayList ，当读取操作比写入操作多得多时
-
-* 迭代非线性安全的集合
-  #+BEGIN_EXAMPLE java
-  import java.util.Collections;
-  import java.util.HashMap;
-  
-  public class App{
-    public static void main(String[] args){
-      HashMap<String, String> hashMap = Collections.synchronizedMap(new HashMap<String, String>());
-      Set ks = hashMap.keySet();
-      synchronized(hashMap){
-        Iterator i = ks.iterator();
-        while (i.hasNext()){
-          System.out.println(i.next());
-        }
+          class ConcurrentHashMap{
+            public void put(K key, V value){
+              // 第一次计算哈稀值用于指定Segment的位置
+              // 第二词计算哈稀值用于指定HashEntry的位置
+              // 然后调用 Segment 实例的 tryLock 方法尝试获取锁， 若获取失败则当前线程会以自旋的方式继续调用 tryLock 方法尝试获取锁，直到超过尝试次数上限才挂起等待被唤醒继续执行
+            }
+          }
+          #+END_EXAMPLE
+      - JDK1.8的版本
+        - 数据结构
+          采用Node数组+链表+红黑树结构，丢弃Segment的概念，底层采用CAS实现而不是采用同步锁机制。
+   2) 能保证复合操作的原子性
+      #+BEGIN_EXAMPLE java
+      Hashtable ht = new Hashtable();
+      if (!ht.containsKey("a")){ // 步骤1
+        ht.put("a", System.currentTimeMills()) // 步骤2
       }
-    }
-  }
-  #+END_EXAMPLE
+      #+END_EXAMPLE
+      步骤1和2都分别采用同步锁，但两步应该作为一个原子性操作被加锁同步才对。
+      #+BEGIN_EXAMPLE java
+      HashMap<String, Integer> hm = new HashMap<String, Integer>();
+      hm.put("abc", 1);
+
+      hm.compute("abc", (k, v) -> v == null ? 1 : v + 1); // 这样就能保证符合操作的原子性
+      #+END_EXAMPLE
+  
+   多线程环境中可使用 
+   - ConcurrentSkipListMap 替代 TreeMap
+   - ConcurrentHashMap 替代 HashMap
+   - CopyOnWriteArrayList 替代 ArrayList ，当读取操作比写入操作多得多时
+
+** 迭代非线性安全的集合
+   #+BEGIN_EXAMPLE java
+   import java.util.Collections;
+   import java.util.HashMap;
+  
+   public class App{
+     public static void main(String[] args){
+       HashMap<String, String> hashMap = Collections.synchronizedMap(new HashMap<String, String>());
+       Set ks = hashMap.keySet();
+       synchronized(hashMap){
+         Iterator i = ks.iterator();
+         while (i.hasNext()){
+           System.out.println(i.next());
+         }
+       }
+     }
+   }
+   #+END_EXAMPLE
+
+** 阻塞队列
+   当视图给一个已经满了的队列添加元素，或从一个已经空的队列中删除元素，操作会被阻塞。
+   | 方法    | 正常行为               | 错误行为                                                                             |
+   |---------+------------------------+--------------------------------------------------------------------------------------|
+   | put     | 在尾部添加元素         | 阻塞                                                                                 |
+   | take    | 删除并返回头部的元素   | 阻塞                                                                                 |
+   | add     | 在尾部添加元素         | 抛出IllegalStateException                                                            |
+   | remove  | 删除并返回头部的元素   | 抛出NoSuchElementException                                                           |
+   | element | 返回头元素但不删除     | 抛出NoSuchElementException                                                           |
+   | offer   | 添加一个元素并返回true | 若队列已满则返回false，另外带超时参数，若在规定时间内操作成功则返回true否则返回false |
+   | poll    | 删除并返回头元素       | 若队列为空则返回null，另外带超时参数，若在规定时间内操作失败再返回false              |
+   | peek    | 返回头元素但不删除     | 若队列为空则返回null                                                                 |
+
+   ~java.util.concurrent~ 下提供几种阻塞读列的变种
+   - ~LinkedBlockingQueue~ 基于链表
+     #+BEGIN_EXAMPLE java
+     LinkedBlockingQueue<String> q = new LinkedBlockingQueue<String>();
+     q.offer("test", 100, TimeUnit.MILLISECONDS);
+     String val = q.poll(100, TimeUnit.MILLISECONDS);
+     #+END_EXAMPLE
+   - ~ArrayBlockingQueue~ 使用圆环数组
+  
+** 其他
+   - ~java.concurrent.ConcurrentSkipListMap~ 基于比较键的并发映射
+   - ~java.concurrent.ConcurrentSkipListSet~ 基于比较键的并发集合
+   - ~java.concurrent.CopyOnWriteArrayList~ 
+     当修改集合值时，修改器都会复制一份底层的数组。
+     - 场景：构造一个迭代器，迭代器包含一个当前数组的引用。若此时要修改数组元素，那么会先复制一份底层数组，在在新的数组上进行修改操作。而迭代器引用的仍然是旧数组。
+   - ~java.concurrent.CopyOnWriteArraySet~
+   - ~Set<K> ConcurrentHashMap.newKeySet()~ 由于标准库没有提供ConcurrentHashSet，所以通过这个方法可以获取线性安全的集合。
 
 * CountDownLatch
   可用于等待其它一个或多个线程达到某个状态时，在执行当前线程的后续任务。
@@ -306,7 +345,13 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
   #+END_EXAMPLE
 
 * 创建执行线程的方式
-  1) 
+  1) 实现Runnable接口
+     用于描述将要运行的任务，任务和线程的关系可以为1对1或n对1。
+     #+BEGIN_EXAMPLE java
+     public interface Runnable{
+     void run();
+     }
+     #+END_EXAMPLE
   2) 
   3) 实现Callable接口
      相对与Runnable，实现Callable接口的执行线程可以返回执行结果和抛出异常。
@@ -314,8 +359,8 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
      public class App {
        public static void main(String[] args){
          ThreadDemo td = new ThreadDemo();
-         // 实现Future接口的TaskFuture用于接收Callable的call方法返回值和异常
-         TaskFuture<Integer> tf = new TaskFuture<Integer>(td);
+         // 实现Future接口的FutureTask用于接收Callable的call方法返回值和异常
+         FutureTask<Integer> tf = new FutureTask<Integer>(td);
          new Thread(tf).start();
 
          try {
@@ -341,49 +386,26 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
        }
      }
      #+END_EXAMPLE
+     1) Future接口
+        - 成员方法
+          - ~V get() throws InterruptedException, ExecutionException~ 为阻塞操作
+          - ~V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException~
+          - ~boolean cancel(boolean mayInterruptIfRunning)~ 若任务还没运行，则不会被列入运行计划，即可马上取消。否则要设置入参为true，让正在运行的线程被中断。需要任务定义中配合才有效
+            #+BEGIN_EXAMPLE java
+            Callable<V> task = () -> {
+              // 需要周期性检查线程状态
+              while (<conditions>){
+                if (Thread.currentThread().isInterrupted()) return null;
+                // real jobs
+              }
+
+              return result;
+            }
+            #+END_EXAMPLE
+          - ~boolean isCancelled()~
+          - ~boolean isDone()~
   4) 
 
-* 解决多线程安全问题的方法
-  1) 同步代码块 ~synchronized~
-  2) 同步方法 ~public synchronized <type> <method_name>(<arg>*)~
-     - 实例同步方法
-       实例同步方法是针对实例自身 ~this~ 加锁
-       #+BEGIN_EXAMPLE java
-       public class MyClass implements Runnable{
-         public synchronized void run(){}
-       }
-       #+END_EXAMPLE
-     - 类同步方法
-       类同步方法是针对类自身 ~MyClass.class~ 加锁
-       #+BEGIN_EXAMPLE java
-       public class MyClass{
-         public static synchronized void run(){}
-       }
-       #+END_EXAMPLE
-  3) 同步锁 ~lock~ 和 ~unlock~
-     JDK1.5引入的新特性
-     - 注意：将 ~unlock~ 放在 finally 语句块中保证解锁。
-     - 示例
-       #+BEGIN_EXAMPLE java
-       import java.util.concurrent.locks.Lock;
-       import java.util.concurrent.locks.ReentrantLock;
-
-       class ThreadDemo implements Runnable{
-         private int i = 0;
-         private Lock lock = ReentrantLock();
-         
-         public void decrement(){
-           lock.lock();
-           try{
-             i--;
-           }
-           finally{
-             lock.unlock();
-           }
-         }
-       }
-       #+END_EXAMPLE
-   
 * 等待唤醒和防止虚假唤醒
   1) 同步方法的方式
      #+BEGIN_EXAMPLE java
@@ -455,37 +477,224 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
        }
      }
      #+END_EXAMPLE
-* 读写锁(java.util.concurrent.locks.ReadWriteLock)
-  由一组锁组成——读锁(read lock) 和 写锁(write lock)
-  仅有读操作时，读锁允许并发执行读操作
-  若有写操作时，则只能串行执行写、读/写操作
-  #+BEGIN_EXAMPLE java
-  class ThreadDemo{
-    private int i = 0;
-    private ReadWriteLock rwl = new ReentrantReadWriteLock();
 
-    public void set(i){
-      rwl.writeLock().lock();
-      try{
-        this.i = i;
+* 锁
+
+锁的接口 ~java.util.concurrent.Lock~
+#+BEGIN_EXAMPLE java
+public interface Lock {
+  void lock();
+  void unlock();
+  boolean tryLock() throws InterruptedException;
+  boolean tryLock(long timeout, TimeUnit timeUnit) throws InterruptedException;
+  // 获取允许被中断的锁
+  void lockInterruptibly() throws InterruptedException;
+  Condition newCondition();
+}
+#+END_EXAMPLE
+
+** 可重入锁(java.util.concurrent.locks.ReentrantLock)  
+   JDK1.5引入的新特性，注意：将 ~unlock~ 放在 finally 语句块中保证解锁。
+   #+BEGIN_EXAMPLE java
+   import java.util.concurrent.locks.Lock;
+   import java.util.concurrent.locks.ReentrantLock;
+
+   public class Demo implements Runnable{
+     Lock lock = new ReentrantLock(); // 线程间共享的
+     int count;  // 线程间共享的
+
+     public void run(){
+       lock.lock();
+       try{
+         count += 1;
+       }
+       finally{
+         lock.unlock();
+       }
+     }
+   }
+   #+END_EXAMPLE
+
+** synchronzied关键字
+   在Java中所有对象都有固有锁(intrinsicLock)，通过synchronized关键字来对固有锁进行加锁和解锁。
+   1) 对代码块加锁和解锁
+      #+BEGIN_EXAMPLE java
+      synchronized(obj){
+       // 临界区
       }
-      finally{
-        rwl.writeLock().unlock();
+      #+END_EXAMPLE
+   2) 对成员方法加锁和解锁
+      针对实例自身 ~this~ 加锁
+      #+BEGIN_EXAMPLE java
+      public synchronized void method(){}
+      // 相当于
+      public void method(){
+        synchronized(this){
+          // 方法体
+        }
       }
-    }
+      #+END_EXAMPLE
+   3) 对静态方法加锁和解锁
+      针对类自身 ~MyClass.class~ 加锁
+      #+BEGIN_EXAMPLE java
+       public class MyClass{
+         public static synchronized void run(){}
+       }
+      #+END_EXAMPLE
+
+** 读写锁(java.util.concurrent.locks.ReadWriteLock)
+   由一组锁组成——读锁(read lock) 和 写锁(write lock)
+   仅有读操作时，读锁允许并发执行读操作
+   若有写操作时，则只能串行执行写、读/写操作
+   #+BEGIN_EXAMPLE java
+   class ThreadDemo{
+     private int i = 0;
+     private ReadWriteLock rwl = new ReentrantReadWriteLock();
+
+     public void set(i){
+       rwl.writeLock().lock();
+       try{
+         this.i = i;
+       }
+       finally{
+         rwl.writeLock().unlock();
+       }
+     }
 
     
-    public void get(){
-      rwl.readLock().lock();
-      try{
-        System.out.println(this.i);
-      }
-      finally{
-        rwl.readLock().unlock();
-      }
-    }
-  }
-  #+END_EXAMPLE
+     public void get(){
+       rwl.readLock().lock();
+       try{
+         System.out.println(this.i);
+       }
+       finally{
+         rwl.readLock().unlock();
+       }
+     }
+   }
+   #+END_EXAMPLE
+
+** TODO Condition
+
+* 线程
+  1) 创建启动线程
+     #+BEGIN_EXAMPLE java
+     new Thread(()-> {/* method body of `run` in Runnable*/}).start();
+     
+     // 让当前线程休眠多少毫秒
+     Thread.sleep(ms);
+     // 等待子线程执行完成或超时再执行当前线程
+     Thread.join(ms);
+     #+END_EXAMPLE
+  2) 线程中断
+     - 早期的stop、suspend、resume方法已被废弃。
+       1) stop会导致线程马上退出临界区从而释放锁，引发线程不安全问题。而发起中断信号量，线程会继续执行直到它认为安全时才停止运行。
+       2) suspend则不会让线程释放锁，但会一直占用锁，直至其他线程调用resume恢复该线程运行，因此容易埋下死锁的问题。
+     - 最新版本：Java中的线程中断采用合作式的
+       #+BEGIN_EXAMPLE java
+       Runnable task = () -> {
+         while(判断条件){
+           // 响应中断请求
+           if (Thread.currentThread().isInterrupted()) return;
+
+           // 其他逻辑
+         }
+       };
+       // 静态方法会返回当前线程的中断状态，然后清除状态并恢复旧状态
+       Thread.interrupted();
+       #+END_EXAMPLE
+       - 线程休眠或等待状态时的中断
+         若线程休眠或处于等待装体时出现中断，那么会抛出InterruptedException，并且由于线程的中断状态来不及被更新，因此 ~Thread.currentThread().isInterrupted()~ 返回 ~false~
+         #+BEGIN_EXAMPLE java
+         Runnable task = () -> {
+           try {
+             Thread.sleep(1000);
+           }
+           catch(InterruptedException e){
+             Thread.currentThread().interrupt();
+           }
+         };
+         #+END_EXAMPLE
+  3) 线程变量
+     ThreadLocal给每个线程一个独立的实例，避免共享变量。
+     #+BEGIN_EXAMPLE java
+     public class Demo implements Runnable {
+       public static final ThreadLocal<NumberFormat> currencyFormat = ThreadLocal.withInitial(() -> NumberFormat.getCurrencyInstance());
+       public void run(){
+         int total = 1000;
+         // 在当前线程第一次调用get时会调用Lambda表达式创建实例。
+         String text = currencyFormat.get().format(total);
+       }
+     }
+     #+END_EXAMPLE
+  4) 其他属性
+     - 线程优先级，依赖Java虚拟机所在平台，因此用处不大。
+     - 状态：新建、正在运行、阻塞在输入/输出、等待或终止。
+     - 后台线程(Daemon)：当只有后台线程时虚拟机可以退出，同时所有后台线程也会终止。若存在前台线程，那么虚拟机需要等所有前台线程退出后它才能退出。
+       #+BEGIN_EXAMPLE java
+       Thread.currentThread.setDaemon(true);
+       #+END_EXAMPLE
+
+* TODO Java中的Promise - ~CompletableFuture<T>~
+  
+* 进程
+  
+** 创建
+   #+BEGIN_EXAMPLE java
+   // 第一个为可执行命令，第二个参数为命名的参数
+   Process p = new ProcessBuilder("cmd.exe", "/C dir");
+   // 设置进程的工作目录
+   // 工作目录：用于解析相对路径名
+   // 默认为启用的java程序时所在目录一致
+   p = p.directory(path.toFile()); // ProcessBuilder的所有
+
+   // 进程流的缓存空间十分有限，因此要即时清理
+   // 进程标准输入流，为JVM的输出流
+   OutputStream processIn = p.getOutputStream();
+   // 进程标准输出流，为JVM的输入流
+   InputStream processOut = p.getInputStream();
+   // 进程错误输出流，为JVM的输入流
+   InputStream processErr = p.getErrorStream();
+
+   // 输入输出重定向
+   p.redirectError(ProcessBuilder.Redirect.INHERIT) // 使用默认值
+    .redirectInput(intputFile) // 覆盖文件
+    .redirectOutput(ProcessBuilder.Redirect.appendTo(outputFile)); // 追加文件
+
+   // 合并错误输出到标准输出
+   // 执行后就不能调用p.redirectError和p.getErrorStream方法了
+   p.redirectErrorStream(true);
+
+   // 设置进程的环境变量
+   // 默认会将当前进程的环境变量复制给其创建的子进程
+   Map<String, String> env = p.environment();
+   env.put("LANG", "fr_FR");
+   env.remove("JAVA_HOME");
+   #+END_EXAMPLE
+
+** 运行
+   #+BEGIN_EXAMPLE java
+   // 运行进程
+   p.start();
+   try (Scanner in = new Scanner(p.getInputStream())){
+     if (in.hasNextLine()){
+       System.out.println(in.nextLine());
+     }
+   }
+   
+   // 阻塞当前线程，等待进程完成
+   int result1 = p.waitFor();
+
+   // 阻塞当前线程，等待进程完成或超时
+   // 若在超时前完成则返回true，否则返回false
+   int result2 = p.waitFor(10, TimeUnit.SECONDS);
+
+   // 在Unix下向进程发送SIGTERN
+   p.destroy();
+   // 在Unix下向进程发送SIGKILL
+   p.destroyForcibly();
+   #+END_EXAMPLE
+
 * 线程池
   #+BEGIN_EXAMPLE yaml
   java.util.concurrent.Executor: 负责线程的使用和调度的接口
@@ -494,19 +703,47 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
       - java.util.concurrent.ScheduledExecutorService: 子接口，负责线程调度
         - java.util.concurrent.ScheduledThreadPoolExecutor: 继承ThreadPoolExecutor，实现ScheduledExecutorService
   工具类java.util.concurrent.Executors
-  - Executors.newFixedThreadPool(): 创建固定大小的线程池
+  - Executors.newFixedThreadPool(): 创建固定大小的线程池，默认为根据CPU数目创建数量相同的线程。
   - Executors.newCachedThreadPool(): 创建大小不固定的线程池
   - Executors.newSingleThreadExecutor(): 创建仅含单个线程的线程池
   - Executors.newScheduledThreadPool(): 创建大小固定可设置延迟或定时执行的线程池
   #+END_EXAMPLE
 
+** 阻塞当前线程等待所有子线程完成
+通过ExecutorService接口的invokeAll
+#+BEGIN_EXAMPLE java
+ExecutorService fixedPool = Executors.newFixedThreadPool();
+List<Callable<Integer>> tasks = new LinkedList<Callable<Integer>>();
+for (int i = 0; i < 10; ++i){
+  int final ii = i;
+  tasks.add(()-> ii);
+}
+List<Future<Integer>> results = fixedPool.invokeAll(tasks);
+#+END_EXAMPLE
+
+** 非阻塞当前线程等待所有子线程完成
+通过ExecutorCompletionService封装
+#+BEGIN_EXAMPLE java
+ExecutorService fixedPool = Executors.newFixedThreadPool();
+ExecutorCompletionService service = new ExecutorCompletionService(fixedPool);
+for (int i = 0; i < 10; ++i){
+  int final ii = i;
+  service.submit(()->ii);
+}
+// service.take().get() 获取结果
+#+END_EXAMPLE
+
+** 阻塞当前线程等待某一子线程完成
+当一个线程的任务执行完成则取消其他线程，并返回结果。
+通过ExecutorService接口的invokeAny即可。
+
 ** 示例
    #+BEGIN_EXAMPLE java
-   // 创建固定大小的线程池
-   ExecutorService fixedPool = Executors.newFixedThreadPool(2);
+   // 创建固定大小的线程池，和CPU核数相同
+   ExecutorService fixedPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
    // 分配任务
-   fixedPool.submit(new Runnable(){
+   fixedPool.execute(new Runnable(){
      public void run(){}
    });
    FutureTask<String> future = fixedPool.submit(new Callable<String>(){
@@ -583,3 +820,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
      }
    }
    #+END_EXAMPLE
+* 线程安全
+1) 可见性
+   RAM芯片比CPU慢很多，因此CPU采用缓存机制将数据从内存中存储到寄存器或内存缓存中来提高性能。其中有一些用来同步缓存拷贝的操作，但它们只有在请求时才会被执行。
+   另外，编译器、虚拟机和CPU都允许改变指令的执行顺序来加速操作。

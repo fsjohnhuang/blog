@@ -85,6 +85,8 @@
   StringBuffer为线性安全，而StringBuilder在Java5引入且为非线性安全。
   由于StringBuilder为非线程安全，因此性能上优于StringBuffer。
 
+* TODO CharSequence和String的区别
+
 * 数组
   #+BEGIN_EXAMPLE java
   // 2种声明方式
@@ -118,6 +120,9 @@
    - ~boolean Arrays.equals(T[] a, T[] b)~ 当两个数组中所有相应元素对都是相等，那么认为这两个数组是相等的。
    - ~void Arrays.fill(T[] a, T b)~ 用元素b填满数组a。
    - ~void sort(T[] a)~ 根据自然顺序进行升序排列。
+   - ~boolean deepEquals(T[] a, U[] b)~ 比较数组的每个元素是否相同
+   - ~String deepToString(T[] a)~ 数组序列化
+   - ~T[] copyOf(T[] source, int length)~ 新增数组并将数组source的元素复制过去，用于扩展数组
 
 * 日期时间
 
@@ -229,6 +234,9 @@
     // Date转Calendar
     cale.setTime(date);
     #+END_EXAMPLE
+
+* TODO 货币处理 
+NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 
 * IO
 
@@ -432,7 +440,7 @@
        }
      }
      #+END_EXAMPLE
-  5) 枚举内置方法
+  5) 枚举Enum父类内置方法
      | 方法                                         | 描述                               |
      |----------------------------------------------+------------------------------------|
      | toString()                                   | 返回枚举常量的名称                 |
@@ -444,6 +452,7 @@
      | Class<E> getDeclaringClass()                 | 返回枚举常量的实现类               |
      | int hashCode()/protected void finanlize()    |                                    |
      | protected Object clone()                     | 抛出cloneNotSupportedException异常 |
+  6) 枚举类不能通过继承父类，因为默认继承Enum类了，但可以实现接口。
 
 * 源文件声明规则
 1) 一个源文件中只能有一个public类
@@ -1151,6 +1160,52 @@
        }
      }
      #+END_EXAMPLE
+  5) 子类重写父类方法时不能抛出比父类声明中更多和范围更广的checked exception
+  6) try-with-resources语句
+     #+BEGIN_EXAMPLE java
+     try (ResourceType1 res1 = init1; ResourceType2 res2 = init2){
+       statements
+       // 正常完成或抛出异常时均会先调用res2.close(),然后调用res1.close()
+     }
+     [catch(Exception e){}] // 可选部分
+     #+END_EXAMPLE
+     - 资源必须实现AutoCloseable或Closeable接口
+       #+BEGIN_EXAMPLE java
+       public interface AutoCloseable{
+         void close() throws Exception;
+       }
+
+       public interface Closeable extends AutoCloseable{
+         void close() throws IOException;
+       }
+       #+END_EXAMPLE
+     - 若资源的close方法抛出异常
+       则原先的异常会被重新抛出，而close方法中抛出的异常会通过 ~e.addSuppressed~ 方法附加到原来的异常中，然后通过catch子句处理。
+       #+BEGIN_EXAMPLE java
+       try (InputStream in1 = new FileInputStream(""); InputStream in2 = new FileInputStream("")){
+         in1.read();
+         in2.read();
+         // 资源清理顺序
+         // in2.close(); 释放资源时抛出异常
+         // in1.close(); 资源还没释放
+       }
+       catch(IOException e){
+         Throwable[] es = e.getSuppressed(); // in2.close() 抛出的异常
+         in1.close(); // 手动释放资源
+       }
+       #+END_EXAMPLE
+  7) 堆栈踪迹(stack trace)
+     堆栈踪迹信息默认被送到错误消息的流System.err，但可以修改
+     #+BEGIN_EXAMPLE java
+     Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
+       // 输出逻辑
+     });
+     #+END_EXAMPLE
+     - Exception的操作Stack Trace的方法
+       - ~printStackTrace([OutputStream output])~
+       - ~StackTraceElement[] getStackTrace()~
+
+* TODO 文件系统操作
 
 * TODO 集合类型
 
@@ -1207,9 +1262,12 @@
          继承Collection接口，标识一组遵循FIFO操作的元素。
       5) Map
          标识一系列键值对。
+         1) ~Set<K> keySet([V defaultValue])~ 返回可变的键集合，若删除键集合的元素则会自动删除映射对应的条目，若向键集合添加元素，那么需要传入defaultValue作为值的默认值。
       6) SortedMap
          继承Map接口，标识一系列将key按升序排列的键值对。
-      7) Map$Entry
+      7) NavigableMap
+         继承SortedMap接口。
+      8) Map$Entry
          在Map接口内部定义的，标识一组键值对。
    2) 抽象类/实现类
       1) AbstractCollection
@@ -1272,7 +1330,21 @@
          - ~Arrays.asList(T... a)~ 将数组转换为大小固定的List实例，若向该List实例添加元素则会抛异常UnsupportedOperationException
       2) ~java.util.Collections~
 
-** ConcurrentHashMap
+** WeakHashMap
+   当键的唯一引用来自哈希表条目时，就删除键/值对。哈希表内部是通过WeakReference对象引用哈希表的键，若一个对象仅能通过弱引用方式访问，垃圾回收器将会回收该对象，并将弱引用放在一个与WeakReference对象相关的队列中，若在弱引用上调用某个方法，WeakHashMap会检查弱引用队列并且删除相关的条目。
+
+** 视图(view)
+   view为实现了集合接口的轻量级对象，但不存储元素。
+   如：
+   1) ~Map.keySet()~
+   2) ~Map.values()~
+   3) ~Arrays.asList()~
+
+   只读视图
+   #+BEGIN_EXAMPLE java
+   ArrayList<Person> friends;
+   Collections.unmodifiableList(friends); // 返回只读视图
+   #+END_EXAMPLE
 
 * TODO 迭代器
   实现Iterator或ListIteractor(继承Iterator，允许双向遍历列表和修改元素)接口
@@ -1365,12 +1437,79 @@
      Comparator<String> lenComparator = new LenComparator();
      String[] sorted = Arrays.sort(new String[]{"123", "321"}, lenComparator);
      #+END_EXAMPLE
+   - 成员方法
+     - ~Comparator reverse()~ 对操作取反
+   - 静态方法
+     - ~<T, U extends <Comparable<? super U>>> Comparator<T> Comparator.comparing(Function<T, U> keyExtractor)~ 生成Comparator实例，会自动提取入参的属性进行后续比较。
 
-* TODO 注解
+* 注解
+  
+** 注解元素
+   即传递给注解的键值对，如JUnit4中的 ~@Test(timeout=1000)~ 。
+
+*** 元素规则
+    1) 注解元素的值必须为编译时常量
+       1) 基本类型值
+       2) 字符串
+       3) Class对象
+       4) 枚举实例
+       5) 注解
+       6) 元素类型为上述5种类型的数组
+    2) 元素值不能为null
+    3) 元素可以哈含有默认值
+    4) 若唯一指定的元素名为value，则可以省略元素名直接赋值
+       #+BEGIN_EXAMPLE java
+       @SuppressWarnings("unchecked")
+       // 等价于 @SuppressWarnings(value="unchecked")
+       #+END_EXAMPLE
+    5) 元素值为数组时，采用花括号将数组元素封闭起来
+       #+BEGIN_EXAMPLE java
+       @BugReport(reportedBy={"Harry", "Fred"})
+       #+END_EXAMPLE
+
+** 注解声明
+   注解一般分为 *声明* 和 *类型用途* 两类
+   
+*** 声明注解
+    注解可以出现的地方
+    1) 类(包括enum)和接口(宝库注解接口)
+    2) 方法
+    3) 构造方法
+    4) 实例变量(包括enum常量)
+    5) 局部变量(包括在for和try-with-resources语句中声明的局部变量)
+    6) 参数变量和catch子句参数
+    7) 类型参数
+    8) 包
+
+    *注意：编译时局部变量和包的注解会被丢弃，因此只能在源码级处理它们。*
+
+    示例
+    #+BEGIN_EXAMPLE java
+    // 引入注解的import语句必须紧跟在包声明之后
+    @GPL(version="3.0")
+    package com.john.test;
+    import org.gnu.GPL;
+
+    @Entity
+    public class User{}
+
+    @SuppressWarnings("unchecked")
+    List<User> users = new ArrayList<User>();
+
+    public User getUser(@Param("id") String userId);
+
+    public class Cache<@Immutable V> {}
+    #+END_EXAMPLE
+
+*** 注解类型用途
+    注解可以出现的地方    
+    1) 
+
 * TODO 打包发布
   jar、ear和war的差别
 * 反射
-Class类(类型类)，即所有Java类型的均为Class类的实例。连8种基本数据类型和void类型，都是Class类的实例。
+Class类(类型类)，即所有Java类型(包括数组)的均为Class类的实例。
+接口、8种基本数据类型和void类型，都不是Class类的实例。
 #+BEGIN_EXAMPLE java
 public Class{
   private Class(ClassLoader classLoader);
@@ -1380,6 +1519,23 @@ public Class{
 1) ~类名.class~
 2) ~实例.getClass()~
 3) ~Class.forName("全限定类名")~ ， 通过Bootstrap ClassLoader加载获取，前提是相关的class文件在classpath下。
+   1) ~Class.forName("全限定类名", true)~ ，确保类的静态代码块在加载之后执行
+   2) ~Class.forName("全限定类名", true, classLoader)~ ，指定用某个ClassLoader实例来加载类
+      #+BEGIN_EXAMPLE java
+      // 通过URLClassLoader从指定的文件系统路径加载类
+      URL[] urls = {
+        new URL("file:///path/to/directory/"),
+        new URL("file:///path/to/jarfile.jar")
+      };
+      String className = "com.john.plugins.Entry";
+      try(URLClassLoader loader = new URLClassLoader(urls)){
+        Class<?> clazz = Class.forName(className, true, loader);
+      }
+      catch(ClassNotFoundExcetpion e){
+        e.printStackTrace();
+      }
+      #+END_EXAMPLE
+   3) ~Class.loadClass("全限定类名")~ ，同样能加载类，但不会执行静态代码块
 4) ~this.getClass().getClassLoader().loadClass("全限定类名")~ ，使用指定的ClassLoader加载获取。
 
 ** 示例
@@ -1423,16 +1579,24 @@ public Class{
     @Override
     public String say(String suffix){
       return "Student: " + suffix;
-n    }
+    }
   }
   #+END_EXAMPLE
 - 反射操作  
   #+BEGIN_EXAMPLE java
+  // 数组类型类实例的getName()返回的是早期虚拟机使用的全限定类名形式
+  // 通过Class.forName()获取数组类型时，需要使用这个早期的全限定类名形式
+  System.out.println(String[].class.getName()); // 显示 [Ljava.lang.String;
+  System.out.println(int[].class.getName());    // 显示 [I
+  // 返回现代形式的全限定类名
+  System.out.println(String[].class.getCanonicalName()); // 显示 java.lang.String[]
+  System.out.println(int[].class.getCanonicalName());    // 显示 int[]
+
   // 获取全限定类名
   Student student = new Student();
   student.getClass().getName(); // 返回com.john.Student
   
-  // 3种获取Class类实例的方法
+  // 3种获取类型类实例的方法
   Class<?> cObj1 = Student.class;
   Class<?> cObj2 = student.getClass();
   Class<?> cObj3 = Class.forName("com.john.Student");
@@ -1483,9 +1647,24 @@ n    }
   
   // 访问privat字段
   Field field = cObj1.getDeclaredField("name");
-  field.setAccessible(true); // 私有成员字段必须暴力反射后才能读写
+
+  /**
+  * 私有成员字段(Field)和成员方法(Method)必须暴力反射后才能读写
+  * 默认JVM没有安全管理器，可以通过这种方式解锁访问private和protected成员
+  * 若有安全管理器，则不能这样处理了
+  */
+  field.setAccessible(true); 
   field.set(student, "set by reflect");
   String name = (String)field.get(student);
+
+  // 拥有setter/getter方法的字段称为属性，获取属性
+  PropertyDescriptor[] props = cObj1.getPropertyDescriptors();
+  for (PropertyDescriptor prop : props){
+    prop.getName();         // 获取属性名称
+    prop.getPropertyType(); // 获取属性类型
+    prop.getReadMethod();   // 获取getter
+    prop.getWriteMethod();  // 获取setter
+  }
 
   // 操作数组
   Integer[] array = [1,2,3];
@@ -1493,6 +1672,9 @@ n    }
   if (clazz.isArray()){
     System.out.println("is array");
   }
+  Array.get(array, 0); // 获取第一个元素
+  Array.set(array, 0, 1); // 设置第一个元素
+
   // 获取数组元素数据类型
   Class<?> componentClazz = array.getClass().getComponentType();
   // 实例化，数组长度为10
@@ -1500,6 +1682,31 @@ n    }
   Integer len = Array.getLength(newArray);
   System.arraycopy(array, 0, newArray, 0, len);
   #+END_EXAMPLE
+
+** TODO 反射操作泛型类型信息
+   类型擦写仅影响到被实例化的类型参数，而泛型类和泛型方法声明的信息是完整的，可以在运行时获取。
+   #+BEGIN_EXAMPLE java
+   // Collections的sort方法声明
+   static <T extends Comparable<? super T>> void sort(List<T> list)
+
+   Method m = Collections.class.getMethod("sort", List.class);
+   TypeVariable<Method>[] vars = m.getTypeParameters(); // 类型变量（如 T extends Comparable<? super T>）
+   vars[0].getName(); // 返回T
+   Type[] bounds = vars[0].getBounds(); // 获取限定符（如 Comparable<? super T>）
+   if (bounds[0] instanceof ParameterizedType){ // 泛型类或接口类型
+     ParameterizedType p = (ParameterizedType) bounds[0];
+     Type[] typeArguments = p.getActualTypeArguments(); // 获取类型参数的类型
+     if (typeArguments[0] instanceof WildcardType){ // 类型参数为通配符
+       WildcardType t = (WildcardType) typeArguments[0];
+       Type[] upper = t.getUpperBounds(); // ? extends ... & ...
+       Type[] lower = t.getLowerBounds(); // ? super ... & ...
+       if (lower.length > 0){
+         lower[0].getTypeName(); // 返回T
+       }       
+     }
+   }
+   #+END_EXAMPLE
+
 
 ** ~public static native java.lang.Class sun.reflect.Reflection.getCallerClass(int depth)~
    用于获取调用该方法的类/父类/祖先类信息
@@ -1571,12 +1778,17 @@ n    }
     2) 编码: ~ISO-8859-1~, 该编码不支持中文，中文需转换为Unicode编码才行。
        
 * ClassLoader(类加载器)
+  类文件可以存放在文件系统、JAR文件里、远程某个位置或者在内存中动态构建。而类加载器就是负责加载字节流，并且在虚拟机中将它们转化为一个类或接口。
+
   1) Bootstrap ClassLoader
-     C++实现，作为Ext ClassLoader的父类加载器，负责jdk_home/lib目录下的核心API或-Xbootclasspath指定的jar包装入工作。
-  2) System ClassLoader
+     C++实现属于虚拟机的一部分，作为Ext ClassLoader的父类加载器，负责jdk_home/lib目录下的核心API(如jre/lib/rt.jar)或-Xbootclasspath指定的jar包装入工作。
+     - 代码中无法获取Bootstrap ClassLoader实例 ~String.class.getClassLoader() == null~
+  2) System ClassLoader(系统类加载器)
      负责 ~java -classpath/-Djava.class.path~ 所指目录下的类和jar包装入工作。
-  3) Ext ClassLoader
-     作为App ClassLoader的父类加载器，负责jdk_home/lib/ext目录下的jar包或-Djava.ext.dirs指定目录下的jar包装入工作。
+     - 在Oracle Java中, ~this.getClass().getClassLoader() instanceof URLClassLoader~
+  3) Ext ClassLoader(扩展类加载器)
+     作为App ClassLoader的父类加载器，负责jdk_home/lib/ext目录下的jar包或-Djava.ext.dirs指定目录下的jar包等"标准库扩展"装入工作。
+     - 在Oracle Java中, ~this.getClass().getClassLoader() instanceof URLClassLoader~
   4) App ClassLoader
      负责加载用户类。
   5) Customer ClassLoader
@@ -1584,8 +1796,66 @@ n    }
 
 ** 获取ClassLoader的方法
    1) ~this.getClass().getClassLoader()~
-   2) ~Thread.currentThread().getContextClassLoader()~ 获取当前线程的ClassLoader
+   2) ~Thread.currentThread().getContextClassLoader()~ 获取当前线程的上下文类加载器(Context ClassLoader)
+      主线程的上下文类加载器为系统类加载器，而创建线程时新线程的上下文类加载器默认和创建它的线程一致。但也可以自行设置：
+      #+BEGIN_EXAMPLE java
+      Thread.currentThread().setContextClassLoader(loader);
+      #+END_EXAMPLE
    3) ~ClassLoader.getSystemClassLoader()~ 获取系统入口点使用的ClassLoader
+
+** 获取类路径和加载的类/JAR包
+   #+BEGIN_EXAMPLE java
+   List<URL> urls = Lists.newArrayList(((URLClassLoader)this.getClass().getClassLoader()).getUrls());
+   urls.stream().forEach(System.out::println);
+   #+END_EXAMPLE
+
+** 类加载器反转(classloader inversion)
+   实现动态加载类的方法所用的类加载器，与加载其自身的类加载器不同，称为类加载器反转。
+   - 问题示例
+     #+BEGIN_EXAMPLE java
+     package com.john;
+  
+     class T {
+       public void load(String name){
+         Class.forName(name);
+       }
+     }
+  
+     class Main {
+       public void plugin(){
+         URL[] urls = {
+           new URL("file:///path/to/directory")
+         };
+         URLClassLoader loader = new URLClassLoader(urls);
+         Class<?> tClass = Class.forName("com.john.T", true, loader);
+         tClass.getMethod("load").invoke(tClass.newInstance(), "com.john.TT");
+       }
+     }
+     #+END_EXAMPLE
+   - 解决办法——上下文类加载器
+     #+BEGIN_EXAMPLE java
+     package com.john;
+  
+     class T {
+       public void load(String name){
+         Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+       }
+     }
+  
+     class Main {
+       public void plugin(){
+         URL[] urls = {
+           new URL("file:///path/to/directory")
+         };
+         URLClassLoader loader = new URLClassLoader(urls);
+         ClassLoader cl = Thread.currentThread().getContextClassLoader();
+         Thread.currentThread().setContextClassLoader(loader);
+         Class<?> tClass = Class.forName("com.john.T", true, loader);
+         tClass.getMethod("load").invoke(tClass.newInstance(), "com.john.TT");
+         Thread.currentThread().setContextClassLoader(cl);
+       }
+     }
+     #+END_EXAMPLE
 
 * TODO JNI
 
@@ -1608,7 +1878,7 @@ n    }
   | @serialData   | 说明通过writeObject()和writeExternal()方法写的数据 |                                                                            |
   | @serialField  | 说明一个ObjectStreamField组件                      |                                                                            |
   | @since        | 标记什么时候引入一个特定的变化                     |                                                                            |
-  | @throws       | 和@exception一样                                   |                                                                            |
+  | @throws       | 和@exception一样                                   | @throws NullPointerExcetion if filename is null                            |
   | {@value}      | 说明常量的值，该常量必须是static属性               |                                                                            |
   | @version      | 版本号                                             |                                                                            |
 
@@ -1880,6 +2150,16 @@ n    }
          }
          #+END_EXAMPLE
 
+*** 抛出异常
+    若Lambda表达式内执行可能抛出checked exception的操作，那么函数式接口中的抽象方法必须声明该异常，否则编译失败。
+    #+BEGIN_EXAMPLE
+    public interface Consumer<T>{
+      void accept(T t);
+    }
+    // write可能抛出IOException等异常，但accept方法没有声明异常，因此编译失败
+    list.forEach(obj -> write(obj, "output.dat"));
+    #+END_EXAMPLE
+
 ** 函数式接口
    仅含一个抽象方法定义的接口，被称为函数式接口。(可包含其他默认方法)
    内置的函数式接口
@@ -1952,21 +2232,390 @@ n    }
            Role[] roles = stream.toArray(Role[]::new);
            #+END_EXAMPLE
 
-
-      
-
-
 ** 新工具
 
 ** Stream API
+   简单示例
+   #+BEGIN_EXAMPLE java
+   // 获取文本中长度大于12的单词数
+
+   String content = new String(Files.readAllBytes(Paths.get("alice.txt")), StandardCharsets.UTF_8);
+   // 非字母作为分隔符，拆分单词
+   List<String> words = Arrays.asList(content.split("\PL+"));
+   
+   long count = words
+       .stream()                            // 创建初始流
+       .filter(word -> word.length() > 12)  // 将初始流转换为其他流程的中间操作
+       .count();                            // 执行终止操作产生结果，该操作会触发懒惰操作执行，此后前面的流将不能再使用
+   #+END_EXAMPLE
+
+*** 创建流
+    1) 集合及其派生类型(Set,List,Queue,Stack)转换为Stream实例： 通过接口 ~Collection~ 提供的stream方法
+    2) 数组转换为Stream实例：
+       1) ~Stream<T> Stream.of(T[])~
+       2) ~Stream<T> Stream.of(T...)~
+       3) ~Stream<T> Arrays.stream(T[] array, int from, int end)~
+    3) 不包含元素的流： ~Stream<String> silence = Stream.empty()~
+    4) 无限流
+       1) ~Stream<T> Stream.generate(Supplier<T> supplier)~
+          #+BEGIN_EXAMPLE java
+          Stream<Double> randoms = Stream.generate(Math::random);
+          #+END_EXAMPLE
+       2) ~Stream<T> Stream.iterate(T init, UnaryOperator<T> unaryOperator)~
+          #+BEGIN_EXAMPLE java
+          Stream<BigInteger> integers = Stream.iterate(BigInteger.ZERO, i -> i.add(BigInteger.ONE));
+          #+END_EXAMPLE
+    5) 其它帮助方法
+       1) ~Stream<String> Pattern.compile("\\PL+").splitAsStream(String content)~
+       2) ~Stream<String> Files.lines(String path)~ 返回所有行的流
+
+*** 流转换
+    1) ~Stream<T> filter(Predicate<T> pred)~ 过滤元素构造新的流
+    2) ~Stream<R> map(Function<T, R> function)~ 加工元素构造新的流
+    3) ~Stream<R> flatMap(Function<T, Stream<R>> function)~ 每个元素生成新的流，然后将素有流合并成为新的流
+ 
+*** 提取子流和组合流
+    1) ~Stream<?> limit(int n)~ 返回包含n个元素的流
+    2) ~Stream<?> skip(int n)~ 返回丢弃前n个元素的流
+    3) ~Stream<T> Stream.concat(Stream<T> a, Stream<T> b)~ 合并两个流。注意：第一个流不能为无限流，否则无法合并。
+
+*** 其他转换
+    1) ~Stream<?> distinct()~ 返回一个元素顺序相同当消除重复元素的流
+    2) ~Stream<?> sorted()~ 
+
+*** 归约(reduction)
+    归约作为终止操作，可以将流归为一个可以在程序中使用的非流值。
+    1) ~int count()~ 返回流中的元素个数
+    2) ~Optional<?> max(Comparable<?> comparable)~ 返回最大值
+    3) ~Optional<?> min(Comparable<?> comparable)~ 返回最小值
+    4) ~Optional<?> findFirst()~ 返回第一个元素
+    5) ~Optional<?> findAny()~ 返回任意一个元素，在并行计算中十分有用
+    6) ~boolean anyMatch(Predicate<?> predicate)~ 检查流中是否含有某个匹配的元素
+    7) ~boolean allMatch(Predicate<?> predicate)~ 检查流中是否所有元素都匹配
+
+*** 收集器
+    1) ~Iterator<T> iterate()~ 将Stream转换为Iterator实例
+    2) ~void forEach(Consumer<T> consumer)~
+    3) ~T[] toArray(T[] array)~ 将Stream转换为数组
+       #+BEGIN_EXAMPLE java
+       String[] elements = stream.toArray(String[]::new);
+       #+END_EXAMPLE
+    4) ~List<T> collect(Collections.toList())~
+    5) ~Set<T> collect(Collections.toSet())~
+    6) ~TreeSet<T> collect(Collections.toCollection(TreeSet::new))~
+    7) ~String collect(Collections.joining())~ 将流中所有字符拼接为字符串
+    8) ~String collect(Collections.joining(","))~ 将流中所有字符拼接为字符串，并指定字符间的分隔符
+    9) ~Int/Long/DoubleSummaryStatistics Collections.summarizingInt/Long/Double(Function<T, R> function)~ 返回归约为总数、平均值、最大值和最小值
+       #+BEGIN_EXAMPLE java
+       IntSummaryStatistics summary = stream.collect(
+       Collections.summarizingInt(String::length
+       ));
+       summary.getAverage();
+       summary.getMax();
+       summary.getMin();
+       #+END_EXAMPLE
+    10) ~Collections.toMap~ 将Stream转换为Map实例
+        #+BEGIN_EXAMPLE java
+        // 从Stream元素中提取名字和年龄作为键值对，当出现重复键值时抛出IllegalStateException
+        Map<String, Integer> idToAge = stream.collect(
+          Collections.toMap(Person::getName, Person::getAge));
+        
+        // 从Stream元素中提取名字和元素自身作为键值对，当出现重复键值时抛出IllegalStateException
+        Map<String, Integer> idToEntity = stream.collect(
+          Collections.toMap(Person::getName, Function.identity()));
+
+        // 第三个参数在出现重复键值时被调用，用于决定如何处理
+        Stream<Locale> locales = Stream.of(Locale.getAvailableLocales());
+        Map<String> languageNames = locales.collect(
+          Collections.toMap(Locale::getDisplayName, Locale::getDisplayName, (existingValue, newValue) -> existingValue));
+        
+        // 汇总重复键的值
+        Map<String> languageNames = locales.collect(
+          Collections.toMap(Locale::getDisplayCountry
+                            , x -> Collection.singleton(x.getDisplayName())
+                            , (existingValue, newValue) -> {
+                              Set<String> union = new HashSet<String>(existingValue);
+                              union.addAll(newValue);
+                              return union;
+                            }));
+                  
+        // 指定Map构造方法
+        Map<String> languageNames = locales.collect(
+          Collections.toMap(Locale::getDisplayName
+                            , Locale::getDisplayName
+                            , (existingValue, newValue) -> existingValue
+                            , TreeMap::new));
+        #+END_EXAMPLE
+    11) ~Collection.toConcurrentMap~ 和 ~Collection.toMap~ 用于一致但会生成并发Map
+    
+*** 分组和分片
+    1) 分组 ~Collections.groupingBy(Function<T, R> function)~ 或 ~Collections.groupingByConcurrent(Function<T, R> function)~
+       根据某个条件将流分为多个组
+       #+BEGIN_EXAMPLE java
+       Map<String, List<Locale>> countryToLocales = locales.collect(
+         Collections.groupingBy(Locale::getCountry));
+       #+END_EXAMPLE
+       - 下游收集器(Downstream)
+         上文的收集器均可以用作下游收集器，即对分组内容进行运算得到新值
+         1) ~Collections.toSet()~ 将List转换为Set
+         2) ~Collections.counting()~ 统计个数
+         3) ~Collections.summingInt|Long|Double~ 求和
+         4) ~Collections.maxBy(Comparator)~ 求最大值
+         5) ~Collections.minBy(Comparator)~ 求最小值
+         6) ~Collections.mapping(Function<T, R> function, 下游收集器)~ 对分组中元素调用function进入运算，然后再通过子下游收集器处理
+    2) 分片 ~Collections.partitioningBy(Predicate<T> pred)~ 或 ~Collections.partitioningByConcurrent(Function<T, R> function)~
+       根据某个条件将流分为两个组
+       #+BEGIN_EXAMPLE java
+       Map<Boolean, List<Locale>> enAndOtherLocales = locales.collect(
+         Collections.partitioningBy(l -> l.getLanguage().equals("en"));       
+       Lis<Locale> englsh = enAndOtherLocales.get(true);
+       #+END_EXAMPLE
+
+*** 归约操作(reduce)
+    #+BEGIN_EXAMPLE java
+    // 流中第一个元素作为累计初始值 reducing(T accu, T item)
+    stream.reduce(BinaryOperator<T> reducing)
+
+    // 指定一个值作为累计初始值 reducing(T accu, T item)
+    stream.reduce(T init, BinaryOperator<T> reducing)
+
+    // 并行流中通过最后一个方法将多个归约合并
+    stream.reduce(T init, BinaryOperator<T> reducing, BinaryOperator<T> sum)
+    #+END_EXAMPLE
+
+*** 基本数据的流
+    提供IntStream、LongStream、DoubleStream和OptionalInt等针对基本数据类型的流，减少装箱拆箱的性能损耗。
+
+*** 并行流
+    在执行终止操作前都可以将串行流修改为并行流。
+    注意：在执行终止操作后，不能修改流的底层数据结构的元素
+
+**** 创建
+     #+BEGIN_EXAMPLE java
+     List<String> words = new ArrayList<String>();
+     String[] wordArray = words.toArray(String[]:new);
+     Stream<String> pWords1 = words.parallelStream();
+     Stream<String> pWords2 = Stream.of(wordArray).parallel();
+     #+END_EXAMPLE
+
+**** 必须保持操作无状态
+     #+BEGIN_EXAMPLE java
+     Map<Integer, Long> shortWordCounts = pWords1
+       .filter(s -> s.length() < 10)
+       .collect(groupingBy(String::length, counting()));
+     #+END_EXAMPLE
+
+**** 无序操作效率更高
+     默认情况下并行Stream会根据流中元素的顺序，按序输出结果序列。但如distinct、counting和limit等操作在无序下效率更高。而groupingBy在有序情况下效率远低于无序。
+     #+BEGIN_EXAMPLE java
+     Stream<String> sample =pWords1.unordered().limit(3);
+
+     // 返回值为无序
+     Map<Integer, Long> sample2 = pWords1.collect(groupingByConcurrent(String::length));
+     #+END_EXAMPLE
 
 ** Date Time API
 
 ** Optional类
+   在非完全测试的程序中返回null，会导致空指针异常，因此Optional类是一种更好的表明缺少返回值的方式。
+   
+*** 使用
+    #+BEGIN_EXAMPLE java
+    Optinal<String> os = Stream.of(new String[]{"123"}).filter(x -> x == "321").findFirst();
+    
+    // 若没有值则返回默认值
+    os.orElse("default value");
+    // 若没有值则返回默认值
+    os.orElseGet(() -> System.getProperty("user.value"));
+    // 若没有值则抛出异常
+    os.orElseThrow(IllegalStateException::new);
+    // 若存在值则执行方法
+    os.ifPresent(Comsumer<?> comsumer);
+    // 若存在值则执行方法
+    Optional<R> result = os.map(Function<T, R> predicate);
+    // 如存在值则返回，否则抛出NoSuchElementException
+    os.get();
+    // 若存在值则返回true，否则返回false
+    os.isPresent();
+    #+END_EXAMPLE
+
+*** 创建
+    #+BEGIN_EXAMPLE java
+    Optional.of(T value)
+    Optional.empty()
+    Optional.ofNullable(T value) // 若value为null则调用Optinal.empty()否则返回Optional.of(value)
+    #+END_EXAMPLE
+
+*** fmap方法——flatMap
+    #+BEGIN_EXAMPLE java
+    class Demo{
+      public static Optional<Double> squareRoot(Double x){
+        return x < 0 ? Optional.empty() : Optional.of(Math.squrt(x));
+      }
+      public static Optional<Double> inverse(Double x){
+        return -x;
+      }
+    }
+
+    Optional<Double> result = Optional.of(0.4).flatMap(Demo::inverse).flatMap(Demo::squareRoot);
+    #+END_EXAMPLE
 
 ** Nashorn JavaScript引擎
 
 ** Base64
+
+* [[https://www.projectlombok.org/features/all][Lombok]]
+  通过注解在编译时自动附加代码，从而简化Java代码和加速开发效率。
+
+** 使用  
+   1) ~@Data~
+      - 可用于：类
+      - 作用：为类的所有属性生成setter/getter(若属性为final则不生成setter)、equals、canEqual、hashCode、toString方法
+      - 示例
+        #+BEGIN_EXAMPLE java
+        import lombok.Data;
+
+        @Data
+        public class Test{
+          private final String a;
+          private String b;
+        }
+        // 编译输出
+        public class Test {
+          private final String a;
+          private String b;
+         
+          public String getA(){ return a;}
+          public String getB(){ return b;}
+          public void setB(String b){ return this.b = b;}
+         
+          @Override
+          public boolean equals(Object o){
+            if (o == this) rerturn true;
+            if (!(o instanceof Test)) return false;
+            Test other = (Test)o;
+            if (!other.canEqual(this)) return false;
+            if (this.getA() == null ? other.getA() != null : !this.getA().equals(other.getA())) return false;
+            if (this.getB() == null ? other.getB() != null : !this.getB().equals(other.getB())) return false;
+            return true;
+          }
+         
+          @Override
+          public int hashCode(){
+            final int PRIME = 59;
+            int result = 1;
+            final long temp1 = Double.doubleToLongBits(this.getScore());
+            result = (result*PRIME) + (this.getName() == null ? 43 : this.getName().hashCode());
+            result = (result*PRIME) + this.getAge();
+            result = (result*PRIME) + (int)(temp1 ^ (temp1 >>> 32));
+            result = (result*PRIME) + Arrays.deepHashCode(this.getTags());
+            return result;
+          }
+
+          @Override 
+          public String toString() {
+            return "Test(" + this.getA() + ", " + this.getB() + ")";
+          }
+
+          protected boolean canEqual(Object other) {
+            return other instanceof Test;
+          }
+        }
+        #+END_EXAMPLE
+   2) ~@Getter/@Setter~
+      - 可用于：类/字段
+      - 作用：自动生成setter/getter，还可以控制setter/getter的访问控制符
+      - 示例：
+        #+BEGIN_EXAMPLE java
+        public class Test{
+          @Getter
+          @Setter
+          private int age = 10;
+         
+          @Setter(AccessLevel.PROTECTED)
+          private String name;
+        }
+        #+END_EXAMPLE
+   3) ~@NonNull~
+      - 可用于：方法参数
+      - 作用：生成非空声明，用于校验参数，避免空指针
+      - 示例
+        #+BEGIN_EXAMPLE java
+        public class Test {
+          public Test(@NonNull String a){
+            super();
+            System.out.println(a);
+          }
+        }
+        // 编译后
+        public class Test {
+          public Test(String a){
+            super();
+            if (a == null){
+              throw new NullPointerException("a is marked @NonNull but is null");
+            }
+            System.out.println(a);
+          }
+        }
+        #+END_EXAMPLE
+   4) ~@ToString~
+      - 可用于：类
+      - 作用：生成toString方法，默认会输出类名、所有字段，以逗号分隔。
+      - 参数：
+        - callSuper::boolean 是否调用super.toString()
+        - includeFieldNames::boolean 是否包含字段名
+      - 示例：
+        #+BEGIN_EXAMPLE java
+        @ToString(callSuper=true, includeFieldNames=true)
+        public class Test{
+          private String a;
+          @ToString.Exclude
+          private int b;
+        }
+        #+END_EXAMPLE
+   5) ~@Slf4j~
+      - 可用于：类
+      - 作用：自动在类中生成static final变量log，默认以 ~类.class~ 作为日志名称，日志名称可通过topic参数修改。
+      - 示例
+        #+BEGIN_EXAMPLE java
+        @Slf4j
+        public class Test{
+          public void test(){
+            log.error("something");
+          }
+        }
+        #+END_EXAMPLE
+   6) ~@Builder~
+      - 可用于：类
+
+** 工作原理分析
+   JDK5后注解提供两种解析方式：
+   1) 运行时解析
+      ~@Retention(RUNTIME)~ 标记注解为运行时解析，通过反射获取注解信息(~java.lang.reflect.AnnotatedElement~ 接口)
+   2) 编译时解析
+      - 两种机制
+        1) Annotation Processing Tool
+           JDK5引入但JDK7废弃，JDK8直接被删除。被替换的原因：1. API都在com.sum.mirror非标准包中；2. 没有集成到javac中，需要额外运行。
+        2) Pluggable Annotation Processing API([[https://jcp.org/en/jsr/detail?id=269][JSR 269]])
+           JDK6引入用于替代Annotation Processing Tool.
+           - 工作流程
+             1) javac对源码进行分析，生活了一棵抽象语法树(AST)
+             2) 运行中调用实现了JSR 269 API的Lombok程序
+             3) Lombok程序对AST进行处理，根据注解生成树节点
+             4) javac根据AST生成字节码文件
+
+** 配置Eclipse
+   由于Lombok会在编译时自动生成代码，因此在编码时需要配合IDE插件才能使用这些代码。
+   1) 下载[[https://projectlombok.org/download][lombok.jar]]
+   2) 将lombok.jar放在eclipse.ini所在目录下
+   3) 在eclipse.ini下追加
+      #+BEGIN_EXAMPLE
+      -javaagent:lombok.jar
+      #+END_EXAMPLE
+   4) 重启eclipse即可
+
+* 反编译工具
+  Java Decompiler - http://java-decompiler.github.io/
 
 * QA
 1) CopyOnWrite

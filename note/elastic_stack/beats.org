@@ -1,0 +1,128 @@
+Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻量级数据采集器。
+相对Logstash这种运行在JVM的数据采集器而言，性能影响低，但相应功能也单一很多。
+
+* Filebeat
+
+** 介绍
+   为Beats平台下用于采集文档类日志的组件，Filebeat会监控日志目录或指定的日志文件，追踪读取这些日文件（追踪文件的变化，不停地读），并且转发这些信息到Logstash或直接发送给ElasticSearch或者发送到Kafka或Redis等。
+   特性：
+   1) 读取日志文件但不作数据的解析处理
+   2) 保证数据至少被读取一次，即数据不会丢失但有可能出现重复
+   3) 支持处理多行数据、解析JSON格式数据和简单的过滤功能
+
+** 处理流程
+   1) 定义数据采集 - 配置inputs
+   2) 建立数据模型 - Index Template
+      结构化数据：信息包含哪些字段，字段属于哪些数据类型。
+   3) 建立数据模型处理数据 - Logstash/Ingest Pipeline
+   4) 存储并分析数据 - ES/Kibana Dashboard
+
+** 配置
+   配置文件: filebeat.yml
+   #+BEGIN_EXAMPLE yaml
+   filebeat.inputs:
+   - type: log # 取值范围：log|stdin|redis|udp|tcp|docker|syslog|netflow 
+     enabled: true # 启用该配置项，默认为false
+     paths: 
+       - /var/log/*.log # 日志文件glob路径，但不支持递归所有子目录，因此只支持/var/log/*/*.log扫描/var/log的子目录下的日志。
+     encoding: utf-8 # 日志编码
+     # 通过tags和fields自定义标签和字段，用于区分多个Filebeat所属服务器
+     tags:
+       - json
+     fields:
+       level: debug
+       review: 1
+
+     # 先执行include_lines再执行exclude_lines
+     #include_lines: ["^ERR", "^WARN"] 只采集匹配数组中任一正则表达式的行记录，默认为空则表示匹配所有
+     #exclude_lines: [] 不采集匹配数组中任一正则表达式的行记录，默认为空则表示采集所有
+ 
+   # 配置数据直接发送到ElasticSearch端点
+   # 6.x以后output只能有一个处于启动状态，之前可以多个处于启动状态但会引发性能问题
+   output.elasticsearch:
+     enabled: true
+     hosts: ["localhost:9200"]
+     # 若ElasticSearch配置了安全策略，则需要配置用户密码
+     #username: "filebeat_internal"
+     #password: "{pwd}"
+ 
+   # 向Kibana导入Dashboard
+   # 6.x以后需要设置，以前是可以通过ES向Kibana导入Dashboard的
+   setup.kibana:
+     host: "localhost:5601"
+     # 若Kibana配置了安全策略，则需要配置用户密码
+     #username: "filebeat_internal"
+     #password: "{pwd}"
+   #+END_EXAMPLE
+
+** 索引模板(index template)
+   索引模板用于定义索引文档的数据结构，从而把采集的非结构化数据进行结构化。
+   推荐的索引模板(fields.yml)已经打包到Filebeat的安装包中，默认情况下Filebeat若连接ElasticSearch会自动使用推荐的索引模板，但我们也可以自定义索引模板。
+   
+** Kibana Dashboard
+   用于提供数据可视化、数据探索功能。 ~$FILEBEAT_HOME/kibana~ 下包含Filebeat提供给Kibana Dashboard的默认模板。
+
+*** 配置    
+    在使用Kibana Dashboard之前，需要
+    1) 在Kibana上创建名为filebeat-*的index pattern
+       进入Kibana的Discover页面，在index pattern中选择filebeat-*即可看到以时间和日志数量作为入参制作柱状图，和具体的字段信息。
+    2) 导入Dashboards到Kibana
+    
+    配置方式：
+    1) 自动配置
+       #+BEGIN_EXAMPLE bash
+       # Kibana服务已经运行，并且Filebeat已经正确配置setup.kibana
+       $FILEBEAT_HOME/filebeat setup --dashboards
+       #+END_EXAMPLE
+    2) 手动配置
+       https://www.elastic.co/guide/en/beats/filebeat/current/configuration-dashboards.html
+
+*** 使用
+    进入Kibana的Dashboard页面从模板中选择并新建Dashboard，每个模板的Dashboard都要配置index pattern中的某些字段才能正常显示。
+
+** 运行
+   1) 通过deb和rpm安装时
+      #+BEGIN_EXAMPLE bash
+      sudo service filebeat start
+      #+END_EXAMPLE
+   2) 二进制包
+      #+BEGIN_EXAMPLE bash
+      sudo chown root filebeat.yml
+      sudo ./filebeat -e -c filebeat.yml
+      #+END_EXAMPLE
+   3) 在Windows下
+      #+BEGIN_EXAMPLE bat
+      Start-Service filebeat
+      #+END_EXAMPLE
+
+** Filebeat Modules
+   简化日常日志格式的收集、解析和可视化。如：对于Nginx日志则包含access和error类日志，那么一个模块就可以自动配置对这些日志的收集、解析和可视化。
+
+   软件要求：ElasticSearch5.2以上
+   
+   module的配置位于 ~$FILEBEAT_HOME/module.d/~ 下。
+   
+*** 命令 
+    #+BEGIN_EXAMPLE bash
+    # 查看目前支持的modules
+    filebeat modules list
+    
+    # 启用module
+    filebeat modules enable apache
+    #+END_EXAMPLE
+
+*** 实例-Nginx Module
+    1) 软件环境
+       - JDK1.8
+       - ElasticSearch插件
+         - ~$ES_HOME/elasticsearch-plugin install ingest-geoip~ 获取服务器所在的地理位置
+         - ~$ES_HOME/elasticsearch-plugin install ingest-user-agent~ 用户将请求头字段Agent的内容拆分出来
+
+
+** QA  
+   1) 运行filebeat时报
+      #+BEGIN_QUOTE
+      Failed to connect to backoff(elasticsearch(http://xxx.xxx.xxx.xxx:9200)): Connection marked as failed because the onConnect callback failed: invalid license found, requires a basic or a valid trial license and received Open source
+      #+END_QUOTE
+      - 原因：由于直接发送数据到ElasticSearch，而ElasticSearch启动有误导致。
+
