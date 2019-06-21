@@ -4,9 +4,10 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
 * Filebeat
 
 ** 介绍
-   为Beats平台下用于采集文档类日志的组件，Filebeat会监控日志目录或指定的日志文件，追踪读取这些日文件（追踪文件的变化，不停地读），并且转发这些信息到Logstash或直接发送给ElasticSearch或者发送到Kafka或Redis等。
+   为Beats平台下用于采集文档类日志的组件(a log data shiper for local files)，Filebeat会监控日志目录或指定的日志文件，追踪读取这些日文件（追踪文件的变化，不停地读），并且转发这些信息到Logstash或直接发送给ElasticSearch或者发送到Kafka或Redis等。
    特性：
    1) 读取日志文件但不作数据的解析处理
+      因此若日志格式为 ~日期|日志等级|日志信息~ ，那么filebeat是无法提取个中属性。
    2) 保证数据至少被读取一次，即数据不会丢失但有可能出现重复
    3) 支持处理多行数据、解析JSON格式数据和简单的过滤功能
 
@@ -16,6 +17,15 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
       结构化数据：信息包含哪些字段，字段属于哪些数据类型。
    3) 建立数据模型处理数据 - Logstash/Ingest Pipeline
    4) 存储并分析数据 - ES/Kibana Dashboard
+
+** 组件
+   1) Prospector
+      配置文件中filebeat.inputs下一个path对应一个prospector，负责管理harvester和找到所要读取的文件来源。每个prospector都运行在各自的Go协程中。
+   2) Harvester
+      一个日志文件对应一个harvester，负责读取日志数据发送到libbeat(将聚合的数据发送到输出)。在harvester运行期间，文件描述符将保持打开状态，直到达到close_inactive状态，那么即使移动或删除文件磁盘空间依然被保留。
+   3) Registrar
+      负责保存每个harvester读取文件的位置偏移量，以便下次增量采集和保证发送所有日志行。这些位置偏移量信息保存在 ~$FILEBEAT_HOME/data~ 下。
+      而且，prospector识别文件的方式不仅仅是通过文件名和路径名，而是会为每个文件生成w
 
 ** 配置
    配置文件: filebeat.yml
@@ -36,6 +46,11 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
      # 先执行include_lines再执行exclude_lines
      #include_lines: ["^ERR", "^WARN"] 只采集匹配数组中任一正则表达式的行记录，默认为空则表示匹配所有
      #exclude_lines: [] 不采集匹配数组中任一正则表达式的行记录，默认为空则表示采集所有
+     #exclude_files: [] 正则排除匹配的文件 
+     #ignore_older: 0 限制harvester仅收集最近一个段时间内的日志，默认值0表示不限制，5h表示近5小时，5m表示近5分钟。
+     #              若设置 ignore_older 则其值必须大于 close_inactive 的值。
+     #multiline: 
+     
  
    # 配置数据直接发送到ElasticSearch端点
    # 6.x以后output只能有一个处于启动状态，之前可以多个处于启动状态但会引发性能问题
@@ -53,6 +68,11 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
      # 若Kibana配置了安全策略，则需要配置用户密码
      #username: "filebeat_internal"
      #password: "{pwd}"
+
+   # 配置Filebeat在关闭前等待多少秒？？
+   shutdown_timeout   
+   # 配置Harvester关闭逻辑？？
+   close_*
    #+END_EXAMPLE
 
 ** 索引模板(index template)
@@ -117,7 +137,10 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
        - ElasticSearch插件
          - ~$ES_HOME/elasticsearch-plugin install ingest-geoip~ 获取服务器所在的地理位置
          - ~$ES_HOME/elasticsearch-plugin install ingest-user-agent~ 用户将请求头字段Agent的内容拆分出来
-
+    2) 运行
+       #+BEGIN_EXAMPLE bash
+       filebeat -e --modules=nginx -M "nginx.access.var.paths=/path/to/nginx_log"
+       #+END_EXAMPLE
 
 ** QA  
    1) 运行filebeat时报
@@ -125,4 +148,9 @@ Beats为数据采集器平台，旗下有各式各样的采用golang开发的轻
       Failed to connect to backoff(elasticsearch(http://xxx.xxx.xxx.xxx:9200)): Connection marked as failed because the onConnect callback failed: invalid license found, requires a basic or a valid trial license and received Open source
       #+END_QUOTE
       - 原因：由于直接发送数据到ElasticSearch，而ElasticSearch启动有误导致。
+   2) 丢失日志行的情况
+      1) 当日志存储策略采用轮换，且日志写入速度远高于Filebeat读取速度，则有可能丢失日志行
+      2) inode重用？？
+   3) 出现重复日志行的情况
+      1) Filebeat向Logstash等发送日志数据后，要等待确认事件才认为日志读取成功并更新Registra的记录。若Filebeat实例关闭时存在没有获取确认事件的发送操作，那么在重新启动Filebeat时则会重新读取日志行。
 

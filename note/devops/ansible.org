@@ -252,14 +252,13 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
             parser.print_help()
     #+END_EXAMPLE
 
-* 配置
+* 配置(内容采用ini格式)
   配置读取顺序为：
   1) 环境变量ANSIBLE_CONFIG
   2) 当前工作目录下的ansible.cfg
+     注意：若ansible.cfg所在目录的读写权限为world-writable(777)，那么Ansible则不会加载其中的内容。需要通过 ~chmod~, ~chown~ 或 ~chgrp~ 修改ansible.cfg所在目录的所有者和所属组为700或770才会被读取生效。
   3) ~/.ansible.cfg
   4) /etc/ansible/ansible.cfg
-
-  内容采用ini格式
 
 ** 常用配置
    #+BEGIN_EXAMPLE ansible.cfg
@@ -1278,7 +1277,8 @@ ansible-doc -l <keyword>
    # role_b/meta/main.yml
    dependencies:
        - role: common
-         name: "NameInDb"
+         vars:
+           name: "NameInDb"
    #+END_EXAMPLE
    那么在顶层Playbook中
    #+BEGIN_EXAMPLE yaml

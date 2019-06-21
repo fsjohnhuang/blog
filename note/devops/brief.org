@@ -64,6 +64,22 @@ Xen支持半虚拟化(paravirtualization)
 
 Vagrant使用的基础镜像称为box，作为VM模板然后根据模板文件(Vagrantfile)中指定设置修改预安装操作系统实例配置。
 
+*** 安装
+    #+BEGIN_EXAMPLE bash
+    sudo apt install vagrant vagrant-libvirt
+    #+END_EXAMPLE
+
+*** 资源
+1) 官方: https://app.vagrantup.com/boxes/search
+   从官网通过浏览器或其它第三方工具下载box
+   1) 获取box地址: ~{box具体版本的主页地址}/providers/{虚拟机厂商}.box~
+      如 ~https://app.vagrantup.com/centos/boxes/7/versions/1902.01/providers/virtualbox.box~
+   2) 通过浏览器或其它第三方工具下载box
+2) 国内资源：https://mirrors.tuna.tsinghua.edu.cn/
+   #+BEGIN_EXAMPLE bash
+   vagrant add box <box_name> <box_url>
+   #+END_EXAMPLE
+
 *** 命令
 #+BEGIN_EXAMPLE bash
 # 创建工作目录
@@ -129,6 +145,10 @@ vagrant box update <box-name> # 更新本地box
 vagrant box repackage <box-name> # 重新打包本地box
 
 vagrant package --output <package-name># 将当前虚拟机打包为box
+
+# VirtualBox Guest Additions为VirutalBox设置共享目录时必须的内核模块
+# Vagrant会自动安装，但当VirtualBox内核升级后该内核模块会失效。因此需要需要安装vagrant-vbguest插件处理。
+vagrant plugin install vagrant-vbguest
 #+END_EXAMPLE
 
 *** Vagrantfile
@@ -145,11 +165,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_udpate = false
 
   # NAT端口转发，访问宿主机的8889端口将转发到虚拟机的80端口
-  # 不能使用宿主机小于1024的端口
+  # 优点：外网可以访问虚拟机
+  # 缺点：1. 配置麻烦
+  #       2. 不能使用宿主机小于1024的端口，如不能SSL的443端口进行HTTPS连接
   # 官网：https://www.vagrantup.com/docs/networking/forwarded_ports.html
-  config.vm.network :forwarded_port, guest: 80, host:8889
+  config.vm.network :forwarded_port, guest: 80, host: 8889
+  # 默认只转发TCP包，若要转发UDP则需如下设置
+  config.vm.network :forwarded_port, guest: 80, host: 8889, protocol: "udp"
     
-  # host-only模式，仅宿主机和同一网段的其它虚拟机能访问，虚拟机能访问外网
+  # host-only模式，仅宿主机和同一网段的其它虚拟机能访问虚拟机，虚拟机能访问外网
+  # 优点：只有子集能访问
+  # 缺点：不能和团队成员共享合作
   # 官网：https://www.vagrantup.com/docs/networking/private_network.html
   # 添加auto_config: true 那么在打包后网络IP有冲突就会自行解决
   config.vm.network :private_network, ip: "192.1.1.2", auto_config: true
@@ -194,8 +220,86 @@ if ! [ -L /var/www ]; then
 fi
 #+END_EXAMPLE
 
-*** 共享目录
-虚拟机中的/vagrant作为与宿主机间的共享目录
+*** TODO 共享目录(Synced Folders)
+    虚拟机中的/vagrant作为与宿主机间的共享目录，默认/vagrant映射到Vagrantfile所在目录。
+        
+*** TODO 制作Windows Server 2012 base box
+工具：Packer
+组成：
+1) Builder(构建器)，用于为某个平台生成镜像，如VirtualBox、Alicloud ECS等。
+2) Provisioner(派生器)，在Builder创建和运行的机器中安装和配置软件。
+3) Post-Processor(后处理器)
+
+*** 搭建Ansible开发环境
+#+BEGIN_EXAMPLE ruby
+VAGRANTFILE_API_VERSION = 2
+
+Vagrant.config(VAGRANTFILE_API_VERSION) do |config|
+    # Common config
+    config.vm.box = "centos/7"
+    config.vm.provider "virtualbox" do |vb|
+        vb.gui = false
+        vb.memory = 512
+    end
+
+    # Create mgmt role
+    config.vm.define "mgmt" do |mgmt_config|
+        mgmt_config.vm.hostname = "mgmt"
+        mgmt_config.vm.network "private_network", ip: "192.168.33.11"
+        mgmt_config.vm.provision "shell", inline: <<-SHELL
+        # install ansible
+        sudo yum install ansible.noarh -y
+        
+        # install dependencies for winrm
+        sudo easy_install pip
+        sudo pip install pywinrm
+        sudo pip install requests
+        
+        # configure hosts file
+        cat >> /etc/hosts <<EOL
+        #vagrant env node
+        192.168.33.11 mgmt
+        192.168.33.21 web1
+        192.168.33.22 web2
+        EOL
+        SHELL
+    end
+    
+    # Create some web server roles
+    (1..2).each do |i|
+        config.vm.define "web#{i}" do |web_config|
+            web_config.vm.hostname = "web#{i}"
+            web_config.vm.network "private_network", ip: "192.168.33.2#{i}"
+            web_config.vm.network "forwarded_port", guest: 80, host: "808#{i}"
+        end
+    end
+end
+#+END_EXAMPLE
+
+**** QA
+     1) 执行 ~vagrant up~ 报如下异常
+        #+BEGIN_QUOTE
+        The private key to connect to this box via SSH has invalid permissions
+        set on it. The permissions of the private key should be set to 0600, otherwise SSH will
+        ignore the key. Vagrant tried to do this automatically for you but failed. Please set the
+        permissions on the following file to 0600 and then try running this command again:
+        /media/john/4AB763333CCAA8BE/shared/project/devops/ansible_playbook/.vagrant/machines/mgmt/virtualbox/private_key
+        Note that this error occurs after Vagrant automatically tries to
+        do this for you. The likely cause of this error is a lack of filesystem
+        permissions or even filesystem functionality. For example, if your
+        Vagrant data is on a USB stick, a common case is that chmod is
+        not supported. The key will need to be moved to a filesystem that
+        supports chmod.
+        #+END_QUOTE
+        - 原因分析：Vagrant SSH默认采用公钥密钥方式登录，而现在因某些原因无法获取密钥。
+          1) private_key权限不是0600
+          2) private_key所在路径无效，如private_key在U盘或在NFTS文件系统下。
+        - 解决方法：
+          1) 将private_key移动到有效路径，并设置权限为0600 ~chmod 0600 private_key~
+          2) 在VagrantFile中添加设置
+             #+BEGIN_EXAMPLE ruby
+             config.ssh.private_key_path = "/path/to/private_key"
+             #+END_EXAMPLE
 
 *** 注意点  
 1) VirtualBox中Nginx必须在nginx.conf中设置 ~sendfile off~ ，否则静态文件会缓存起来。
@@ -219,61 +323,6 @@ fi
    2) 通过 ~VBoxManage list hdds~ 获取磁盘UUID
    3) 执行扩容 ~VBoxManage modifyhd 你的uuid --resize 40960~
    4) 重新添加到到对应虚拟机的SATA Contorller下即可
-
-*** TODO 制作Windows Server 2012 base box
-工具：Packer
-组成：
-1) Builder(构建器)，用于为某个平台生成镜像，如VirtualBox、Alicloud ECS等。
-2) Provisioner(派生器)，在Builder创建和运行的机器中安装和配置软件。
-3) Post-Processor(后处理器)
-
-*** 搭建Ansible实验室
-#+BEGIN_EXAMPLE ruby
-Vagrant.config(2) do |config|
-    #common config
-    config.vm.box = "ubuntu/trusty64"
-    config.vm.provider "virtualbox" do |vb|
-        vb.memory = 256
-        vb.cpus = 1
-        # 设置宿主机和虚拟机间的共享目录
-        vb.synced_folder "~/host/share", "/guest/vagrant/share"
-    end
-    
-    # create some web server
-    (1..2).each do |i|
-        config.vm.define "web#{i}" do |web_config|
-            web_config.vm.hostname = "web#{i}"
-            web_config.vm.network "private_network", ip: "192.168.33.2#{i}"
-            web_config.vm.network "forwarded_port", guest: 80, host: "808#{i}"
-        end
-    end
-    
-    # create mgmt node
-    config.vm.define "mgmt" do |mgmt_config|
-        mgmt_config.vm.hostname = "mgmt"
-        mgmt_config.vm.network "private_network", ip: "192.168.33.11"
-        mgmt_config.vm.provision "shell", path: "bootstrap-mgmt.sh"
-    end
-end
-#+END_EXAMPLE
-
-#+BEGIN_EXAMPLE
-#!/usr/bin/env bash
-
-#install ansible
-sudo apt-get install software-properties-common
-sudo apt-add-repository ppa:ansible/ansible
-sudo apt-get update
-sudo apt-get install -y ansible
-
-#configure hosts file
-cat >> /etc/hosts <<EOL
-#vagrant env node
-192.168.33.11 mgmt
-192.168.33.21 web1
-192.168.33.22 web2
-EOL>
-#+END_EXAMPLE
 
 ** 容器
 应用隐藏的复杂性：外部依赖项（第三方软件包、语言运行时库、系统库和数据库）、配置项，和同一个服务器上其他应用程序的依赖性和配置冲突。

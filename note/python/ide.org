@@ -108,8 +108,14 @@ pipenv --py
 
 *** Pipfile和Pipfile.lock的区别
     Pipfile和Pipfile.lock对标Ruby中的Gemfile和Gemfile.lock。
-    Pipfile列出依赖源、生产和开发依赖包名称、虚拟环境Python版本信息。
-    Pipfile.lock列出当前虚拟环境中的依赖源、生产和开发依赖包名称和具体版本、虚拟环境Python版本信息，不同的操作系统生成的Pipfile.lock会有所不同。
+    Pipfile包含
+    1) 依赖源
+    2) 生产和开发依赖包名称
+    3) 虚拟环境Python版本信息
+    
+    Pipfile.lock除了包含Pipfile中包含的信息外，还包含
+    1) 当前使用的生产和开发依赖包的具体版本号
+    2) 依赖包自身依赖的所有依赖包以及它们的版本号
 
     只需要将Pipfile纳入版本控制即可。
 

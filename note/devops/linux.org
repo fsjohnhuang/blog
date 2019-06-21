@@ -70,7 +70,116 @@ tail -f <filepath>
 
 ** at
 
+* 用户管理
+  
+** sudo详解
+   作用为将当前用户切换到root或指定用户下，然后以他们的身份去执行命令，最后直接回退到当前用户的身份。
 
+*** 好处
+    1) 限制用户只能在某些主机上运行某些命令
+    2) 提供详细记录用户行为历史的日志，并能将日志发送到中心主机或日志服务器
+    3) 成功执行sudo命令后用户将获取一张存活期为5分钟(编译内核时可修改)的凭证，在凭证存活期内再次执行sudo不再要求输入密码确认
+
+*** sudo命令的执行流程
+    1) 系统查找/etc/sudoers文件，判断该用户是否拥有执行sudo的权限
+    2) 若具体权限则要求用户输入自己的密码
+       - 无需输入密码的情况
+         1) root执行sudo时无需输入密码(/etc/sudoers中配置 ~root ALL=(ALL) ALL~ )
+         2) 配置允许该用户不用输入密码(/etc/sudoers中配置 ~%wheel ALL=(ALL) NOPASSWOD: ALL~)
+    3) 密码验证正确则切换身份并执行sudo后的命令
+
+*** /etc/sudoers文件解析
+    #+BEGIN_EXAMPLE
+    ## Next comes the main part: which users can run what software on
+    ## which machines(the sudoers file can shared between multiple systems).
+    ## Syntax:
+    ##   Need password:
+    ##     USER_FLAG HOST_FLAG=(RUNAS_FLAG) COMMAND_FLAG
+    ##   
+    ##   Don't need password
+    ##     USER_FLAG HOST_FLAG=(RUNAS_FLAG) NOPASSWORD: COMMAND_FLAG
+    ##
+    ## The COMMANDS section may have other options added to it.
+    #+END_EXAMPLE
+    *配置优先级：后面的配置会覆盖前面的配置*
+
+    sudoers中可定义4种别名:
+    1) Host_Alias 用于定义主机列表
+       #+BEGIN_EXAMPLE
+       Host_Alias FILESERVERS = fs1, hostname2
+       #+END_EXAMPLE
+    2) Cmnd_Alias 用于定义允许和禁止执行的命令列表(以 ~!~ 开头表示禁止执行该命令)
+       #+BEGIN_EXAMPLE
+       Cmnd_Alias SERVICES = /sbin/service, /usr/bin/systemctl disable
+       #+END_EXAMPLE
+    3) User_Alias 用于定义有sudo权限的用户列表
+       #+BEGIN_EXAMPLE
+       User_Alias ADMINS = jsmith, mikem
+       #+END_EXAMPLE
+    4) Runas_Alias 用于定义用户以什么身份执行的列表
+       #+BEGIN_EXAMPLE
+       Runas_Alias RUNAS_FLAG = root, oracle
+       #+END_EXAMPLE
+
+*** sudo命令
+    #+BEGIN_EXAMPLE bash
+    # 显示当前的sudo配置
+    sudo -ll
+
+    # 查看某个用户的sudo配置
+    sudo -lU <user>
+
+    # 切换为root用户
+    sudo su -
+    #+END_EXAMPLE
+
+*** 通过visudo编辑sudo配置
+    命令visudo会锁住/etc/sudoers文件，然后将修改保存到临时文件中，待格式检查无误后才会覆盖/etc/sudoers文件。
+    *注意：若/etc/sudoers文件格式错误则会导致sudo不可用*
+
+    visudo的默认编辑器为vi，可通过环境变量VISUAL和EDITOR设置，其中VISUAL优先级更高。
+    #+BEGIN_EXAMPLE bash
+    # 修改编辑器为nano
+    EDITOR=nano visudo
+    #+END_EXAMPLE
+
+*** 利用/etc/sudoers.d/配置sudo
+    命令sudo会解析读取/etc/sudoers.d/下的文件，而这些文件的格式和/etc/sudoers一样。
+    读取解析顺序：
+    1) 按字母顺序加载
+    2) 以 ~.~ 或 =~= 开头的文件会被跳过(文件名建议以双字母开头)
+
+*** 实例
+    1) 允许普通用户apps具体/etc/init.d/nagios脚本重启的权限
+       #+BEGIN_EXAMPLE 
+       apps ALL= NOPASSWD: /etc/init.d/nagios restart
+       #+END_EXAMPLE
+    2) 允许普通用户apps具体root的所有权限
+       #+BEGIN_EXAMPLE
+       apps ALL=(ALL) NOPASSWD: ALL
+       #+END_EXAMPLE
+    3) 允许用户组apps中所有用户具体root的所有权限
+       #+BEGIN_EXAMPLE
+       %apps ALL=(ALL) NOPASSWD: ALL
+       #+END_EXAMPLE
+    4) 允许用户apps执行部分命令
+       #+BEGIN_EXAMPLE
+       apps ALL=/sbin/halt,/sbin/poweroff
+       #+END_EXAMPLE
+    5) 设置用户apps的sudo凭证存活时间为20分钟，若设置为0则每次执行sudo都会询问密码
+       #+BEGIN_EXAMPLE
+       Defaults:apps timestamp_timeout=20
+       #+END_EXAMPLE
+    6) 禁用root
+       *注意：禁用root之前要配置好普通用户的sudo权限*
+       #+BEGIN_EXAMPLE bash
+       # 锁住root
+       passwd -l root
+
+       # 解锁root
+       sudo passwd -u root
+       #+END_EXAMPLE
+   
 * 设置代理
 
 ** 服务端tinyproxy设置
@@ -112,7 +221,6 @@ Allow 18.90.12.145
 | ftp_proxy   | 设置ftp协议代理                                              |                                            |
 | all_proxy   | 一次性设置所有协议的代理，设置这个后上述变量都不用设置了     |                                            |
 | no_proxy    | 设置无需代理的主机名或域名，可使用通配符，多个时使用逗号分隔 | *.aiezu.com, 10.*,*,*                      |
-
 
 * 网络
 
@@ -169,6 +277,9 @@ Allow 18.90.12.145
 
    # 传输公钥到服务端的~/.ssh/authorized_keys文件中
    ssh-copy-id -i ~/.ssh/id_rsa.pub <user>@<remote_server_ip>
+
+   # 删除known_hosts中主机的信息
+   ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
    #+END_EXAMPLE
 
 *** 本地配置多个SSH key供不同的服务端使用
@@ -193,3 +304,15 @@ Allow 18.90.12.145
     IdentityFile ~/.ssh/github-rsa
     #+END_EXAMPLE
 
+*** QA
+    1) SSH发起连接访问时报 ~Permission denied (publickey,gssapi-keyex,gssapi-with-mic).~
+       1) 前提条件：若没有将向服务端发送过public key，而是采用密码方式验证。
+          - 解决方法：可能是没有启用PasswordAuthentication
+            1) 修改/etc/ssh/sshd_config
+               #+BEGIN_EXAMPLE 
+               PasswordAuthentication yes
+               #+END_EXAMPLE
+            2) 重启sshd
+               #+BEGIN_EXAMPLE bash
+               systemctl restart sshd
+               #+END_EXAMPLE

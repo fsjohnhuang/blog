@@ -282,11 +282,250 @@ python setup.py install
 *** setuptools(不支持Python3.x)
 官网： https://pypi.org/project/setuptools/
 为PEAK(Python Enterprise Application Kit)开发的Python的基于distutils工具的增强工具，提供依赖项管理机制，更方便地创建和发布Egg包。
+*distutils* 是标准库中内置的用于Python包安装和发布的工具，但功能单一业界不直接使用。
+*distutils2* 试图利用disutils、setuptools和distribute成为Python标准库中的发布工具，但该项目已经被废弃了。
 
-Egg文件实质上就是Zip文件
+**** 打包格式
+两种格式在安装时都不需要重新编译程序，并且两者本质上就是个Zip文件。
+1) Egg: 后缀为.egg，由setuptools在2004年引入。
+2) Wheel: 后缀为.whl，由PEP427在2012年定义，用于替代Egg的二进制包的标准格式。
 
+两者的区别[[https://packaging.python.org/discussions/wheel-vs-egg/][https://packaging.python.org/discussions/wheel-vs-egg/]]：
+1) Wheel 有一个官方的 PEP427 来定义，而 Egg 没有 PEP 定义
+2) Wheel 是一种分发格式，即打包格式。而 Egg 既是一种分发格式，也是一种运行时安装的格式，并且是可以被直接 import
+3) Wheel 文件不会包含 .pyc 文件
+4) Wheel 使用和 PEP376 兼容的 .dist-info 目录，而 Egg 使用 .egg-info 目录
+5) Wheel 有着更丰富的命名规则。
+6) Wheel 是有版本的。每个 Wheel 文件都包含 wheel 规范的版本和打包的实现
+7) Wheel 在内部被 sysconfig path type 管理，因此转向其他格式也更容易
+
+**** setup.py
+Python打包分法的关键
+#+BEGIN_EXAMPLE python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import io
+import os
+import sys
+
+from setuptools import setup, find_packages
+
+# Package meta-data
+NAME = 'mypackage'
+DESCRIPTION = 'description of my project.'
+URL = 'project url'
+EMAIL = 'me@mail.com'
+AUTHOR = 'fsjohnhuang'
+REQUIRES_PYTHON = '>=2.7'
+VESION = '0.1.0'
+
+# What packages are required for this module to be executed?
+# 默认从pypi仓库下载依赖包进行安装
+REQUIRED = [
+  # 'requests>1.0', 'paramiok'
+]
+
+# What packages are optional?
+EXTRAS = {
+  # 'fancy_feature': ['django'], 
+}
+
+here = os.path.abspath(os.path.dirname(__file__))
+
+# Import the README and use it as the long-description.
+# Note: this will only work if 'README.md' is present in your MANIFEST.in file!
+try:
+    with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
+        long_description = '\n' + f.read()
+except FileNotFoundError:
+    long_description = DESCRIPTION
+
+# Load the package's __version__.py module as a dictionary.
+about = {}
+if not VERSION:
+    project_slug = NAME.lower().replace('-', '_').replace(' ', '_')
+    with io.open(os.path.join(here, project_slug, '__version__.py') as f:
+        exec(f.read(), about)
+else:
+    about['__version__'] = VERSION
+
+setup(
+    name=NAME,
+    version=about['__version__'],
+    description=DESCRIPTION,
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    author=AUTHOR,
+    author_email=EMAIL,
+    maintainer=AUTHOR,
+    maintainer_email=EMAIL,    
+    python_requires=REQUIRES_PYTHON,
+    url=URL,
+    # 需要打包的包目录(目录下包含__init__.py)
+    # find_packges函数 默认在与setup.py相同目录下搜索各个包含 __init__.py 的目录作为包
+    packages=find_packages(where='.', include=['*'], exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
+
+    # If your package is a single module, use this instead of 'packages':
+    # 需要打包的Python 模块(不含文件扩展名.py)列表
+    # py_modules=['__init__', 'mypackage'],
+
+    # 若不使用find_packages函数来指定packages参数值，又想指定某目录下的所有包则使用package_dir
+    # 下面表示root package的模块位于src目录下
+    # packge_dir={'': 'src'}
+
+    # 安装时会将指定可执行脚本复制到系统PATH路径下
+    # scripts=['bar.sh'],
+
+    # entry_points={
+    #     'console_scripts': ['mycli=mymodule:cli'],
+    # },
+
+    install_requires=REQUIRED,
+    extras_require=EXTRAS,
+
+    # 指定依赖包下载地址，默认为pypi仓库
+    # dependency_links=[
+    #     'http://packages.example.com',
+    # ],
+
+    # 指定将打包的包中包含的数据文件
+    # 值为包名为键，glob数组为值的键值对
+    # package_data={'mypackage': ['data/*.data']},
+    
+    # 替代package_data用于自动发现包中的数据文件并打包
+    # 可通过exclude_packate_data来排除部分数据文件
+    include_package_data=True,
+    
+    # 指定打包非包中的数据文件，如配置文件、消息目录等
+    # 值为一组二元组，二元组格式为 (目的安装目录, 源文件)
+    # 若目的安装目录为相对目录，则相对于安装目录进行解析
+    # data_files=[('./data.yml', './data.yml'),]
+
+    license='MIT',
+
+    # 包的分类信息(Trove classifiers)
+    # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
+    classifiers=[
+        # 发展期，常见如下
+        # 3 - Alpha
+        # 4 - Beta
+        # 5 - Production/Stable
+        'Development Status :: 3 - Alpha',
+        
+        # 目标用户
+        'Intended Audience :: Developers',
+        
+        # 所属类型
+        'Topic :: Software Development :: Build Tools',
+
+        # 许可证信息
+        'License :: OSI Approved :: MIT License',        
+
+        # 目标 Python 版本
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Programming Language :: Python :: Implementation :: PyPy'
+    ],
+    # 自定义命令
+    # $ setup.py publish support.
+    cmdclass={
+        'upload': UploadCommand,
+    },
+)
+#+END_EXAMPLE
+
+**** setup命令
+#+BEGIN_EXAMPLE bash
+# 查看帮助
+python setup.py --help-commands
+
+# 编译不打包
+python setup.py build
+
+# 构建源码分发包
+# 默认压缩格式为 Linux下为.tar.gz，Windows下为.zip
+# 还可以修改压缩包的所有者和所属组信息
+python setup.py sdist --formats=gztar,zip --owner=root --group=root
+
+# 编译并打包为二进制分发包
+python setup.py bdist
+
+# 编译并打包为RPM分发包
+python setup.py bdist_rpm
+
+# 构建二进制的Egg分发包
+python setup.py bdist_egg
+
+# 构建WinNT下的二进制分发包
+python setup.py bdist_wininst
+
+# 将包安装到Python安装目录的lib下
+python setup.py install
+
+# 在开发阶段
+# 测试安装包的有效性，实际上是在文件系统中创建一个符号链接到包的实际目录，当修改包内容时就能在依赖该包的项目中直接使用，而不用重复安装卸载
+develop
+#+END_EXAMPLE
+
+***** ~python setup.py sdist~ 详解
+用于构建源码分发包。
+选项：
+1) ~--formats~ 设置压缩格式
+   - 默认值： ~--formats=gztar,zip~ 表示Unix下为 ~.tar.gz~ 而Windows下为 ~.zip~ 。
+   - 可用格式表
+     | Format | Description |
+     |--------+-------------|
+     | zip    | .zip        |
+     | gztar  | .tar.gz     |
+     | bztar  | .tar.bz     |
+     | xztar  | .tar.xz     |
+     | ztar   | .tar.Z      |
+     | tar    | .tar        |
+2) ~--owner~ 设置分发包的所有者
+3) ~--group~ 设置分发包的所属组
+4) ~--no-defaults~ 剔除默认的打包内容规则
+5) ~--no-prune~ 剔除默认的排除内容规则
+6) ~--manifest-only~ 仅从MANIFEST.in生成MANIFEST文件，而不执行构建打包
+
+****** 默认打包内容规则
+1) 默认打包内容：
+   1) all Python source files implied by the py_modules and packages options.
+   2) all C source files mentioned in the ext_modules or libraries options.
+   3) scripts identified by the scripts option.
+   4) anything that looks like a test script: test/test*.py (currently, the Distutils don’t do anything with test scripts except include them in source distributions, but in the future there will be a standard for testing Python module distributions)
+   5) README.txt (or README), setup.py (or whatever you called your setup script), and setup.cfg.
+   6) all files that matches the package_data metadata.
+   7) all files that matches the data_files metadata.
+2) 默认排除内容：
+   1) all files in the Distutils “build” tree (default build/)
+   2) all files in directories named RCS, CVS, .svn, .hg, .git, .bzr or _darcs
+   
+****** 自定义打包内容规则
+通过和setup.py同目录的MANIFEST.in可自定义打包内容规则，MANIFEST.in内每行包含一条文件筛选命令，运行结果为生成MANIFEST文件(临时文件)，MANIFEST内每行为打包的文件路径。
+#+BEGIN_EXAMPLE in
+include *.py *.yaml # 从项目根目录开始包含所有后缀为.py和.yaml的文件
+
+exclude test.* # 从项目根目录开始排除所有匹配test.*的文件
+
+recursive-include dir1 *.exe # 从目录dir1开始递归包含所有后缀为.exe的文件
+
+recursive-exclude dir2 test.* # 从目录dir2开始递归排除所有匹配test.*的文件
+
+prune dir3 # 排除目录dir3下的所有文件
+ 
+graft dir4 # 包含目录dir4下的所有文件
+#+END_EXAMPLE
+
+****** MANIFEST生成规则
+1) 若存在MANIFEST文件，并且首行没有标识该文件由MANIFEST.in生成，则直接使用；
+2) 若存在MANIFEST.in文件，则将该文件和默认打包规则和排除规则合并后生成MANIFEST文件；
+3) 若不存在MANIFEST.in文件，则直接根据默认打包规则和排除规则生成MANIFEST文件。
 
 *** distribute(支持Python3.x)
+作为setuptools的一个分支后来又合并会setuptools项目中，而又因为共享命名空间，因此在导入setuptools时 ~import setuptools~ 时实际上也导入了distribute。
 
 ** ~from xxx import *~ 的陷阱
 #+BEGIN_EXAMPLE python
@@ -2301,7 +2540,7 @@ https://jeffknupp.com/blog/2013/08/16/open-sourcing-a-python-project-the-right-w
 |- setup.py
 #+END_EXAMPLE
 
-** setuptools和setup.py文件
+** #+SETUPFILE: uptools和setup.py文件
 #+BEGIN_EXAMPLE python
 from __future__ import print_function
 from setuptools import setup
@@ -2408,3 +2647,6 @@ OtherError
 https://github.com/dadadel/pyment
 
 ** Sphinx使用
+* Python界大神
+1) kennethreitz [[https://github.com/kennethreitz][https://github.com/kennethreitz]]
+   - setup.py human readable template: [[https://github.com/kennethreitz/setup.py][https://github.com/kennethreitz/setup.py]]
