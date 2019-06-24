@@ -69,7 +69,7 @@ Vagrant使用的基础镜像称为box，作为VM模板然后根据模板文件(V
     sudo apt install vagrant vagrant-libvirt
     #+END_EXAMPLE
 
-*** 资源
+*** Box资源
 1) 官方: https://app.vagrantup.com/boxes/search
    从官网通过浏览器或其它第三方工具下载box
    1) 获取box地址: ~{box具体版本的主页地址}/providers/{虚拟机厂商}.box~
@@ -182,6 +182,15 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   # 桥接
   config.vm.network :public_network, bridge: "en1: Wi-Fi (AirPort)"
+
+
+  # 默认情况Vagrant设置虚拟机的SSHD采用基于公钥的验证方式
+  # 指定密钥路径
+  config.vm.ssh.private_key_path = "~/.ssh/id_rsa"
+  
+  # 启用基于口令的验证方式
+  config.vm.ssh.username = "vagrant"
+  config.vm.ssh.password = "vagrant"
   
   config.vm.provider :virtualbox do |v|
     v.name = "自定义虚拟机名称"

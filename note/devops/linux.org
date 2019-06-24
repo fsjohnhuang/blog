@@ -1,4 +1,3 @@
-
 * 查看系统信息
 
 ** 查看系统版本
@@ -10,7 +9,6 @@ uname -a
 cat /etc/issue
 cat /etc/redhat-release
 #+END_EXAMPLE
-
 
 * 中断
 定义：当需要时，CPU暂停执行当前程序转而执行其他程序的机制。
@@ -42,7 +40,6 @@ chkconfig <service_name> on
 #              proxy and IMAP/POP3 proxy server
 #+END_EXAMPLE
 
-
 * 常用命令
 
 ** ps
@@ -65,6 +62,8 @@ tail -f <filepath>
 
 ** md5sum
 根据一个或多个文件内容生成MD5编码．
+
+** TODO eval
 
 * 定时任务
 
@@ -271,16 +270,96 @@ Allow 18.90.12.145
     bye
     #+END_EXAMPLE
 ** SSH
-   #+BEGIN_EXAMPLE bash
-   # 生成SSH公钥(~/.ssh/id_rsa.pub)和密钥(~/.ssh/id_rsa)
-   ssh-keygen -t rsa -C 'xxx@xxx.com'
+   SSH作为通用协议其全名为Secure Shell协议，是由国际互联网工程任务组(The Internet Engineering Task Force, IETF)指定的一个标准，目的是为创建一个工作在应用层和传输层的基础上的安全协议，避免数据以明文传输。
+   OpenSSH作为SSH的一个具体实现(包含客户端openssh和服务端openssh-server)，是一个由OpenBSD管理的项目。OpenSSH基于SSH这种通用协议上，提供很多其他应用层协议及工具。
+   1) ssh，用于登录远程服务器以及在其上执行命令。
+   2) scp，在两台服务器间传输文件。
+   3) sftp，基于OpenSSH实现类似FTP程序。
 
-   # 传输公钥到服务端的~/.ssh/authorized_keys文件中
-   ssh-copy-id -i ~/.ssh/id_rsa.pub <user>@<remote_server_ip>
+   另外，OpenSSH还提供如下命令行工具方便进行ssh操作
+   1) ssh-add
+   2) ssh-keysign
+   3) ssh-keyscan
+   4) ssh-keygen
+   5) ssh-copy-id
 
-   # 删除known_hosts中主机的信息
-   ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
-   #+END_EXAMPLE
+*** 命令
+    #+BEGIN_EXAMPLE bash
+    # 删除known_hosts中主机的信息
+    ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169「」
+    #+END_EXAMPLE
+
+*** 基于密码和密钥的认证方式
+    1) 基于密钥的认证方式
+       1) 客户端在 =~/.ssh= 下生成一对公钥密钥，并将公钥发送到将要登录的服务器上
+          #+BEGIN_EXAMPLE bash
+          # 生成SSH公钥(~/.ssh/id_rsa.pub)和密钥(~/.ssh/id_rsa)
+          ssh-keygen -t rsa -C "xxx@xxx.com"
+          # 传输公钥到服务端的~/.ssh/authorized_keys文件中
+          ssh-copy-id -i ~/.ssh/id_rsa.pub <user>@<remote_server_ip>
+          #+END_EXAMPLE 
+       2) 客户端发起连接请求，并将客户端公钥一并发到服务端
+          客户端第一次登录服务端时，服务端会发送 *公钥指纹* 让用户确认将要连接的服务器是否有效(防止伪装)，若输入yes确认继续访问则会将给服务端的公钥保存到客户端的 =~/.ssh/known_hosts= 文件中，后续登录相同服务器时会作为依据和服务端的公钥进行验证，若验证失败则有可能是服务端被伪装了。但可通过修改客户端的 ~/etc/ssh/ssh_config~ 禁用这验证过程：
+          #+BEGIN_EXAMPLE
+          StrictHostKeyChecking no
+          #+END_EXAMPLE
+       3) 服务端从请求登录的用户的 =~/.ssh/authorized_keys= 目录下获取步骤1中的客户端公钥，与请求中的公钥作对比，不一致则登录失败
+       4) 服务端生成一段challenge(质询)并用客户端公钥加密后发送给客户端
+       5) 客户端使用客户端密钥解密得到服务端发送过来的chanllenge，然后用服务端公钥加密再发送给服务端，若和之前生成的一致则登录成功
+       6) 客户端和服务端的后续通信则通过双方的公钥加密数据，然后各自通过密钥解密数据。
+    2) 基于密码的认证方式
+       1) 客户端发起连接请求
+       2) 服务端接收请求后向客户端发送服务端公钥
+          客户端第一次登录服务端时，服务端会发送 *公钥指纹* 让用户确认将要连接的服务器是否有效(防止伪装)，若输入yes确认继续访问则会将给服务端的公钥保存到客户端的 =~/.ssh/known_hosts= 文件中，后续登录相同服务器时会作为依据和服务端的公钥进行验证，若验证失败则有可能是服务端被伪装了。但可通过修改客户端的 ~/etc/ssh/ssh_config~ 禁用这验证过程：
+          #+BEGIN_EXAMPLE
+          StrictHostKeyChecking no
+          #+END_EXAMPLE
+       3) 客户端用服务端公钥加密登录密码，并连通客户端公钥发送给服务端
+       4) 服务端通过服务端密钥解密获取登录密码后，验证通过则允许登录。
+       5) 客户端和服务端的后续通信则通过双方的公钥加密数据，然后各自通过密钥解密数据。
+
+*** 服务端配置
+    1) 配置文件路径: ~/etc/ssh/sshd_config~
+       #+BEGIN_EXAMPLE
+       # Port 22 sshd服务端口号
+       # ListenAddress 0.0.0.0 服务器一般有多张网卡，这里用于指定sshd服务绑定到哪张网卡(监听哪张网卡的请求)，默认0.0.0.0为绑定到所有网卡上。可以通过多条配置绑定多个网卡。
+       
+       PermitRootLogin yes # 允许root用户远程登录
+   
+       PasswordAuthentication yes # 允许使用基于密码/口令校验的登录方式
+       PermitEmptyPasswords no # 允许空密码
+   
+       RSAAuthentication yes
+       PubkeyAuthentication yes # 允许基于密钥校验的登录方式
+   
+       # AllowUsers myuser jerry 仅允许myuser和jerry远程登录该服务器
+       # DenyUsers root foo 不允许root和foo远程登录该服务器
+       #+END_EXAMPLE
+
+    2) 从TCP层面控制 ~/etc/host.allow~
+       #+BEGIN_EXAMPLE
+       sshd: 192.168.2.12 192.168.2.13 # 仅允许这两个IP访问sshd服务
+       #+END_EXAMPLE
+
+*** 启用sshd
+    #+BEGIN_EXAMPLE bash
+    service sshd restart
+    # 或 systemctl restart sshd
+    #+END_EXAMPLE
+
+*** 登录远程服务器
+    #+BEGIN_EXAMPLE bash
+    ssh root@192.168.10.12
+    # sshd默认端口号为22
+    # 或 ssh root@192.168.10.12:22
+    # 或 ssh -p 22 root@192.168.10.12
+
+    # 指定使用哪个密钥访问服务端
+    ssh -i <private_key_path> <user>@<ip>
+
+    # 临时设置客户端配置
+    ssh -o StrictHostKeyChecking=no <user>@<ip>
+    #+END_EXAMPLE
 
 *** 本地配置多个SSH key供不同的服务端使用
     #+BEGIN_EXAMPLE bash
@@ -302,6 +381,42 @@ Allow 18.90.12.145
     HostName github.com
     PreferredAuthentications publickey
     IdentityFile ~/.ssh/github-rsa
+    #+END_EXAMPLE
+
+*** SSH Agent
+    使用场景：
+    1) 无需重复输入密码：用ssh-add添加密钥时，如果私钥有密钥，那么仅需输入一次密码，后续使用时不用再输入密码。
+    2) 客户端A已经和服务端B、服务端C建立基于密钥登录机制，通过客户端A远程访问服务端B，在服务端B再远程访问服务端C时，依然要通过口令来验证登录。通过ssh-agent则可以使用免密访问登录。
+      
+    使用：
+    1) 启动ssh-agent
+       #+BEGIN_EXAMPLE bash
+       eval ssh-agent
+       #+END_EXAMPLE
+    2) 添加密钥
+       #+BEGIN_EXAMPLE bash
+       ssh-add ~/.ssh/id_rsa
+       #+END_EXAMPLE
+    3) 启用允许使用ssh-agent进行转发
+       全局配置在 ~/etc/ssh/ssh_config~ 上设置，而局部配置则在 =~/.ssh/config= 上设置。
+       #+BEGIN_EXAMPLE
+       Host *
+         ForwardAgent yes
+       #+END_EXAMPLE
+
+*** sshpass
+    通过非交互方式实现基于口令的SSH协议的远程登录验证（即在命令行中输入口令），支持SSH协议下的所有命令，如ssh、scp和sftp。
+    
+    实例：
+    #+BEGIN_EXAMPLE bash
+    # 从环境变量SSPPASS中获取登录密码
+    sshpass -e ssh <user>@<ip>
+
+    # 在命令行输入登录密码
+    sshpass -p <password> ssh <user>@<ip>
+
+    # 从文件中去读取登录密码
+    sshpass -f <path/to/password> ssh <user>@<ip>
     #+END_EXAMPLE
 
 *** QA
