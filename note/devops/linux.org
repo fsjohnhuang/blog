@@ -63,14 +63,50 @@ tail -f <filepath>
 ** md5sum
 根据一个或多个文件内容生成MD5编码．
 
-** TODO eval
+** eval
+   - 格式
+     #+BEGIN_EXAMPLE bash
+     eval <cmd>[;<cmd>]*
+     #+END_EXAMPLE
+   - 执行逻辑：
+     1) 扫描入参命令行集，若遇到变量替换符 ~${}~ 则展开；
+     2) 执行替换后的命令行集。
+   - 注意
+     1) 不能通过eval获取函数处理结果
+     2) eval嵌套和不嵌套运行结果一样
+   - 示例
+     1) 执行包含变量值为命令的命令
+        #+BEGIN_EXAMPLE bash
+        TEST="Hello World"
+        WORD='echo $TEST'
+        echo ${WORD}      # 回显 TEST
+        eval echo ${WORD} # 回显 Hello World
+        #+END_EXAMPLE
+     2) 获取shell传来的最后一个参数值
+        #+BEGIN_EXAMPLE bash
+        #!/bin/bash
+        # file: test.sh
+        
+        echo "\$$#"      # test.sh first last 回显 $2
 
+        eval echo "\$$#" # test.sh first last 回显 last
+        #+END_EXAMPLE
 * 定时任务
 
 ** at
 
 * 用户管理
-  
+
+** 用户密码管理  
+   1) 2种无交互方式初始化密码的方式
+      1) ~echo initial-password | passwd <user> --stdin~
+      2) ~chpasswd <user>:<passwd>~
+   2) 随机密码生成方式
+      #+BEGIN_EXAMPLE bash
+      # 生成8个字符的随机密码
+      openssl rand -base64 8
+      #+END_EXAMPLE
+
 ** sudo详解
    作用为将当前用户切换到root或指定用户下，然后以他们的身份去执行命令，最后直接回退到当前用户的身份。
 
@@ -391,7 +427,7 @@ Allow 18.90.12.145
     使用：
     1) 启动ssh-agent
        #+BEGIN_EXAMPLE bash
-       eval ssh-agent
+       ssh-agent
        #+END_EXAMPLE
     2) 添加密钥
        #+BEGIN_EXAMPLE bash
@@ -431,3 +467,4 @@ Allow 18.90.12.145
                #+BEGIN_EXAMPLE bash
                systemctl restart sshd
                #+END_EXAMPLE
+               
