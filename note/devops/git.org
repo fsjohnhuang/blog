@@ -435,3 +435,6 @@ Git Review + Gerrit
    由于rebase会修改提交记录
    1) 不对master分支执行rebase，否则会引起很多问题
    2) 仅对本地/特性/个人开发的分支进行rebase
+
+* TODO http://www.git-legit.org/
+Git Workflow for Humans

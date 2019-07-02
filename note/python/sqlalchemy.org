@@ -1,0 +1,431 @@
+官方教程：https://docs.sqlalchemy.org/en/13/core/tutorial.html
+
+* 安装
+#+BEGIN_EXAMPLE bash
+pip install sqlalchemy
+#+END_EXAMPLE
+
+* 数据库链接字符串
+格式: ~数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名~
+
+1) SQLite, ~sqlite:///<filepath>~
+   1) 绝对路径, ~sqlite:////test.db~
+   2) 相对路径, ~sqlite:///test.db~
+
+* 组成
+从上自下分为两大模块（最底层为DBAPI）
+1) SQLAlchemy ORM
+   - Object Relational Mapper(ORM)
+2) SQLAlchemy ORM
+   1) Schema/Types
+   2) SQL Expression Language
+      1) SQL Expression， 通过SQLAlchemy的DSL书写SQL表达式（为ORM的基础）
+      2) Raw SQL，直接书写SQL
+      3) ORM，避免书写SQL
+   3) Engine
+      1) Connection Pooling
+      2) Dialect
+3) DBAPI
+   
+
+内置DataSource 和 日志功能
+
+* 操作
+
+** 连接数据库
+#+BEGIN_EXAMPLE python
+from sqlalchemy import create_engine
+# Args: 
+#   encoding(str): 编码方式。
+#   echo(bool): 设置是否在控制台输出SQL等日志信息，默认值为False。
+# 
+# Returns:
+#   sqlalchemy.engine.base.Engine: 数据引擎实例，只有调用数据库操作时才会去连接数据库
+engine = create_engine('mysql://root:@localhost:3306/webpy?charset=utf8', encoding='utf-8', echo=True)
+# connectionless execution
+# 适合不需要事务的操作
+# Args:
+#   sql(str): SQL语句
+engine.execute('select 1 from dual').scalar()
+# connection execution
+# 适合需要事务控制的操作
+conn = engine.connect()
+conn.execute('select * from dual')
+#+END_EXAMPLE
+
+** 定义映射(表必须定义主键)
+1) 分步定义Table类、实体类 和 类表映射关系
+   #+BEGIN_EXAMPLE python
+   from sqlalchemy import (
+        create_engine,
+        MetaData,
+        Table,
+        Column,
+        Integer,
+        String,
+        ForeignKey,
+    )
+    from sqlalchemy.orm import mapper
+
+    # 数据库引擎
+    engine = create_engine('sqlite:///test.db')
+    # 表和实体映射关系元数据
+    metadata = MetaData()
+
+    # 定义表
+    userTable = Table('user', metadata,
+                 Column('id', Integer, primary_key=True),
+                 Column('name', String(20), unique=True, nuallale=False),
+           )
+    addrTable = Table('addr', metadata,
+                 Column('id', Integer, primary_key=True),
+                 Column('user_id', None, ForeignKey('user.id')),
+                 Column('email', String(60), nullable=False),
+           )
+
+    # 若表不存在则创建       
+    metadata.create_all(engine)
+
+    # 定义实体类
+    class User(object):
+        pass
+    class Addr(object):
+        pass
+      
+    # 创建表和实体类间的映射
+    userMapper = mapper(User, userTable)
+    addrMapper = mapper(Addr, addrTable)
+    #+END_EXAMPLE
+    
+2) 通过 ~declarative_base~ 统一定义
+   ~declarative_base~ 类用于维护类和表的映射关系， 应用中一个数据库使用唯一一个Base作为该数据库下所有映射的父类。
+   #+BEGIN_EXAMPLE python
+   from sqlalchemy import (
+       create_engine,
+       MetaData,
+       Table,
+       Column,
+       Integer,
+       String,
+       ForeignKey,
+   )
+   from sqlalchemy.ext.declarative import declarative_base
+
+      
+   Base = declarative_base()
+   # 统一定义
+   class User(Base):
+       __tablename__ = 'user'
+       id = Column('id', Integer, primary_key=True)
+       name = Column('name', String(20), unique=True, nuallale=False)
+
+       def __init__(self, name, ):
+           self.name = name
+          
+       def __repr__(self):
+           return '<{}({},{})>'.format(self.__class__.__name__, self.id, self.name)
+
+   class Addr(Base):
+       __tablename__ = 'addr'
+       id = Column('id', Integer, primary_key=True)
+       user_id = Column('user_id', None, ForeignKey('user.id'))
+       email = Column('email', String(60), nullable=False)
+
+       def __init__(self, user_id, email, ):
+           self.user_id = user_id
+           self.email = email
+          
+       def __repr__(self):
+           return '<{}({},{},{})>'.format(self.__class__.__name__, self.id, self.user_id, self.email)
+
+   # 数据库引擎
+   engine = create_engine('sqlite:///test.db')
+   # 以Base子类为依据自动生成Table并调用mapper()，后续可通过User.table获取表定义，通过User.__mapper__获取映射关系对象。
+   Base.metadata.create_all(engine)
+   #+END_EXAMPLE
+
+*** 清理表结构
+#+BEGIN_EXAMPLE
+Base.metadata.drop_all()
+#+END_EXAMPLE
+
+*** 字段类型
+    1) 通用类型位于 ~sqlalchemy~ 下
+    2) 特定数据库(如MySQL)的类型位于 ~sqlalchemy.dialects~ 下
+    
+** 自增主键
+1) 数据库不提供自增字段的(如Oracle)
+   #+BEGIN_EXAMPLE python
+   from sqlalchemy import Sequence
+   Column('id', Integer, Sequence('user_idseq'), primary_key=True )
+   #+END_EXAMPLE
+
+** 通过Session跟踪管理Domain
+   Session内部维护着一个Identity Map，其键值为Domain实例的Primary Key，而值则为该Domain实例。
+   而Domain实例处于4种状态：
+   1) Transient(瞬时的)，实例还不在Session管理中，也没有在数据库中对应的记录。如刚通过User()创建的实例，仅仅只有mapper()与之关联。
+   2) Pending(挂起的)，调用session.add()后添加到Session的跟踪管理下，但仍然没有在数据库中存在与之对应的记录，需要等待flush动态才能存储到数据库中。
+   3) Persistent(持久的)，实例处于Session跟踪管理下，并且在数据库中有与之对应的记录。
+   4) Detached(游离的)，实例不在Session管理中，但在数据库中有对应的记录，对实例的任何操作都不会触发任何SQL语句。
+
+*** 创建Session
+    #+BEGIN_EXAMPLE python
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    
+    engine = create_engine('sqlite:///test.db')
+    
+    DBSession = sessionmaker(bind=engine)
+    # 后期也可以设置数据库引擎，DBSession.configure(bind=engine)
+    session = DBSession()
+
+
+    session.rollback()
+    session.commit()
+    #+END_EXAMPLE
+
+*** 查询
+    1) Query实例
+       #+BEGIN_EXAMPLE python
+       # 定义返回的结果组件类型为User
+       q1: Query = session.query(User)
+       # 定义返回的结果组件类型为tuple(User.name, User.age)
+       q2: Query = session.query(User.name, User.age)
+       # 定义返回的结果组件类型为tuple(user: User, User.name)    
+       q3: Query = session.query(User, User.name)
+
+       for name, age in q2.all():
+           print('name: {}, age: {}'.format(name, age))
+       #+END_EXAMPLE
+    2) Query实例方法
+       1) ~filter_by~ 参数为关键字参数
+          #+BEGIN_EXAMPLE python
+          records = q2.filter_by(name='john').all()
+          #+END_EXAMPLE
+       2) ~filter~ 参数为SQL表达式结构
+          #+BEGIN_EXAMPLE python
+          records = q2.filter(User.name == 'john').all()          
+          records = q2.filter(User.name != 'john').all()     
+          records = q2.filter(User.name.like('j%')).all()     
+          # IN
+          records = q2.filter(User.name.in_(['a', 'b'])).all()
+          # NOT IN
+          records = q2.filter(~User.name.in_(['a', 'b'])).all()     
+          records = q2.filter(User.name == None).all()     
+          records = q2.filter(User.name != None).all()     
+          # 3种AND的方式
+          records = q2.filter(User.name != None, User.age == 12).all()               
+          records = q2.filter(User.name != None).filter_by(age == 12).all()
+          from sqlalchemy import and_
+          records = q2.filter(and_(User.name != None, age == 12)).all()
+          # OR
+          from sqlalchemy import or_
+          records = q2.filter(or_(User.name != None, User.age == 12)).all()               
+          # 入参raw sql
+          from sqlalchemy import text
+          records = q2.filter(text('id<24')).order_by(text('id')).all()       
+          #+END_EXAMPLE
+       3) 触发返回结果
+          1) ~all()~ 返回所有
+          2) ~first()~ 返回第一个元素
+          3) ~one()~ 有且仅有一个元素时才返回
+          4) ~count()~ 返回记录数目
+       4) 分组
+          #+BEGIN_EXAMPLE python
+          from sqlalchemy import func
+
+          q4 = session.query(func.count(), User.name).group_by(User.name)
+          #+END_EXAMPLE
+       5) 排序
+          #+BEGIN_EXAMPLE python
+          q4 = q2.order_by(text('id'))
+          #+END_EXAMPLE
+
+*** 插入
+    #+BEGIN_EXAMPLE python
+    user = User(name='john')
+    session.add(user)
+    session.commit()
+    #+END_EXAMPLE
+
+*** 删除
+    #+BEGIN_EXAMPLE python
+    user = session.query(User).get(0)
+    session.delete(user)
+    session.commit()
+    #+END_EXAMPLE
+
+*** 更新
+    #+BEGIN_EXAMPLE python
+    user = session.query(User).get(0)
+    user.name = 'johnjohn'
+    session.commit()
+    #+END_EXAMPLE
+
+*** 触发flush的时机
+    1) ~session.commit()~
+    2) ~session.flush()~
+    3) ~session.query()~ 等查询语句
+*** 分页查询
+
+* 关联关系
+** ~sqlalchemy.orm.relationship~ 参数说明
+   1) ~backref~ 参数则为关系提供反向引用的声明，即在关系的另一端的类中定义一个指向当前类对象的属性。
+      1) 仅仅使用 ~relationship~
+         #+BEGIN_EXAMPLE python
+         class User(Base):
+             __tablename__ = 'user'
+             id = Column('id', Integer, primary_key=True)
+             addr = relationship('Addr')
+          
+         class Addr(Base):
+             __tablename__ = 'addr'
+             id = Column('id', Integer, primary_key=True)
+             user_id = Column(Integer, ForeignKey('user.id'))
+   
+         user = session.query(User).get(0)
+         user.addr # 可访问
+   
+         addr = session.query(Addr).get(0)
+         addr.user # 访问失败
+         #+END_EXAMPLE
+      2) 使用 ~relationship~ 和 ~backref~
+         #+BEGIN_EXAMPLE python
+         class User(Base):
+             __tablename__ = 'user'
+             id = Column('id', Integer, primary_key=True)
+             addr = relationship('Addr', backref='user')
+          
+         class Addr(Base):
+             __tablename__ = 'addr'
+             id = Column('id', Integer, primary_key=True)
+             user_id = Column(Integer, ForeignKey('user.id'))
+   
+         user = session.query(User).get(0)
+         user.addr # 可访问
+   
+         addr = session.query(Addr).get(0)
+         addr.user # 可访问
+         #+END_EXAMPLE
+   2) ~lazy~ 参数表示仅访问关联对象时才连接数据库查询，默认值为True
+   3) ~remote_side~ 表示外键指向自身
+      1) 普通定义
+         #+BEGIN_EXAMPLE python
+         class Node(Base):
+             __tablename__ = 'nodes'
+             id = Column(Integer, primary_key=True)
+             parent_id = Column(Integer, ForeignKey('nodes.id'))
+             parent = relationship('Node', remote_side=[id])
+         #+END_EXAMPLE
+      2) 建立双向关联
+         #+BEGIN_EXAMPLE python
+         class Node(Base):
+             __tablename__ = 'nodes'
+             id = Column(Integer, primary_key=True)
+             parent_id = Column(Integer, ForeignKey('nodes.id'))
+             children = relationship('Node', backref=backref('parent', remote_side=[id]))
+         #+END_EXAMPLE
+
+   4) ~primaryjoin~
+      默认情况下连接条件为主键和外键，但可通过 ~primaryjoin~ 来指定连接条件
+      #+BEGIN_EXAMPLE python
+      parent = relationship('Parent', primaryjoin=lambda: and_(User.id==Addr.user_id, User.name.like('john%')))
+      #+END_EXAMPLE
+   5) ~secondaryjoin~
+   6) ~order_by~
+      #+BEGIN_EXAMPLE python
+      relationship('Addr', order_by=lambda : desc(Addr.email))
+      relationship('Addr', order_by='desc(Addr.email)')
+      #+END_EXAMPLE
+
+** 一对多(one to many)
+   就是relationship定义在一的一方。
+   #+BEGIN_EXAMPLE python
+   class Parent(Base):
+     __tablename__ = 'parent'
+     id = Column(Integer,primary_key = True)
+     children = relationship("Child",backref='parent') # 在Child中添加属性parent用于指向其关联Parent实例
+
+   class Child(Base):
+     __tablename__ = 'child'
+     id = Column(Integer,primary_key = True)
+     parent_id = Column(Integer,ForeignKey('parent.id'))
+   #+END_EXAMPLE
+
+** 多对一(many to one)
+   就是ForeignKey和relationship都定义在多的一方。
+   #+BEGIN_EXAMPLE python
+   class Parent(Base):
+     __tablename__ = 'parent'
+     id = Column(Integer, primary_key=True)
+
+   class Child(Base):
+     __tablename__ = 'child'
+     id = Column(Integer, primary_key=True)
+     parent_id = Column(Integer, ForeignKey('parent.id'))
+     parent = relationship("Parent", backref="children", cascade='all') # 在Parent中添加属性children用于指向其关联Child实例集合
+     # cascade='all' 用于设置级联删除，否则删除Parent时仅将其Child的parent.id置空
+   #+END_EXAMPLE
+
+** 一对一(one to one)
+   1) 从一对多语法改为一对一
+      #+BEGIN_EXAMPLE python
+      class Parent(Base):
+        __tablename__ = 'parent'
+        id = Column(Integer,primary_key = True)
+        child = relationship("Child",backref='parent', uselist=False) # 在Child中添加属性parent用于指向其关联Parent实例
+
+      class Child(Base):
+        __tablename__ = 'child'
+        id = Column(Integer,primary_key = True)
+        parent_id = Column(Integer,ForeignKey('parent.id'))
+      #+END_EXAMPLE
+
+   2) 从多对一语法改写为一对一
+      #+BEGIN_EXAMPLE python
+      class Parent(Base):
+        __tablename__ = 'parent'
+        id = Column(Integer, primary_key=True)
+
+      class Child(Base):
+        __tablename__ = 'child'
+        id = Column(Integer, primary_key=True)
+        parent_id = Column(Integer, ForeignKey('parent.id'))
+        parent = relationship("Parent", backref=backref("child", uselist=False), cascade='all') # 在Parent中添加属性child用于指向其关联Child实例
+        # cascade='all' 用于设置级联删除，否则删除Parent时仅将其Child的parent.id置空
+      #+END_EXAMPLE
+
+** 多对多(many to many)
+   需要一张中间表，然后通过 ~secondary~ 来指定。
+   #+BEGIN_EXAMPLE python
+   post_keywords = Table('post_keywords', Base.metadata,
+                         Column('post_id', Integer, ForeignKey('posts.id')),
+                         Column('keyword_id', Integer, ForeignKey('keywords.id')),
+                   )
+
+   class Post(Base):
+       __tablename__ = 'posts'
+       id = Column(Integer, primary_key=True)
+       keywords = relationship('Keyword', secondary=post_keywords, backref='posts')
+
+   class Keyword(Base):
+       __tablename__ = 'keywords'
+       id = Column(Integer, primary_key=True)
+   #+END_EXAMPLE
+
+** 关联查询
+   1) 手工指定关联
+      #+BEGIN_EXAMPLE python
+      user, addr = session.query(User, Addr).filter(User.id==Addr.user_id).first()
+      #+END_EXAMPLE
+
+   2) 通过定义外键自动关联
+      #+BEGIN_EXAMPLE python
+      user = session.query(User).join(Addr).filter(Addr.email.like('%test')).first()
+      #+END_EXAMPLE
+
+
+
+
+
+

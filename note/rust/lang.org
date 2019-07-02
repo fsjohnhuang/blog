@@ -1,0 +1,504 @@
+* 系统调用和应用程序接口(API)
+  1) 应用程序接口(API)
+     - 定义：供应用程序和开发人员基于某软件或硬件的用于访问一组进程的能力。
+     - 利用API而不是直接调用系统调用的好处：
+       1) API隐藏绝多数细节，让开发人员无需理解内部工作机制的细节；
+       2) API和具体的内核底层没有必然联系，因此具有更好的移植性。
+     - 3种常用的API
+       1) Windows 的 Win32 API
+       2) 遵循POSIX的 POSIX API
+       3) 遵循POSIX的 Java API
+  2) 系统调用(System Call)
+     - 定义：为操作系统内核提供的服务接口，一般使用C或C++开发，但对于特定的底层任务则采用汇编指令开发。
+     - 实现：每个系统调用都对应一个整数，所有系统调用对应的整数维护在一张列表中，当使用支持系统调用的程序语言调用系统调用时就会被拦截并通过这张表调用实际的系统调用。
+     - 系统调用的参数：
+       1) 通过寄存器直接传递参数
+       2) 参数存储在内存的块和表上，然后将块的地址作为参数
+       3) 参数压栈，并由操作系统弹出
+     - 分类（各分类下的方法没有列全）
+       |                        | Windows                        | Unix     |
+       |------------------------+--------------------------------+----------|
+       | Process Control        | CreateProcess()                | fork()   |
+       |                        | ExitProcess()                  | exit()   |
+       |                        | WaitForSingleObject()          | wait()   |
+       | File Manipulation      | CreateFile()                   | open()   |
+       |                        | ReadFile()                     | read()   |
+       |                        | WriteFile()                    | write()  |
+       |                        | CloseHandle()                  | close()  |
+       | Device Manipulation    | SetConsoleMode()               | ioctl()  |
+       |                        | ReadConsole()                  | read()   |
+       |                        | WriteConsole()                 | write()  |
+       | Information Maintenace | getCurrentProcessID()          | getpid() |
+       |                        | SetTimer()                     | alarm()  |
+       |                        | Sleep()                        | sleep()  |
+       | Communication          | CreatePipe()                   | pipe()   |
+       |                        | CreateFileMapping()            | shmget() |
+       |                        | MapViewOfFile()                | mmap()   |
+       | Protection             | SetFileSecurity()              | chmod()  |
+       |                        | InitializeSecurityDescriptor() | umask()  |
+       |                        | SetSecurityDescriptorGroup()   | chown()  |
+       
+* 静态链接库和动态链接库
+  1) 静态(链接)库
+     - 定义：函数和数据被编译进一个二进制文件(后缀名一般为 ~.lib~)。在编译链接可执行文件时，会从静态库中复制这些函数和数据并把它们和应用程序的其他模块组合起来创建最终的可执行文件(Windows下后缀为 ~.exe~, Linux下没有后缀)
+  2) 动态(链接)库
+     - 定义：包含两个文件：引入库(后缀为 ~.lib~) 和 动态链接库(Windows下后缀为 ~.dll~, Linux下后缀为 ~.so~)。引入库包含被动态链接库导出的函数和变量的符号名(即函数和变量的声明)。在编译链接可执行文件时，只需链接引入库即可，而动态链接库的函数和数据不用复制到可执行文件中，而是在运行时再加载动态链接库来访问具体的函数实现和数据。
+     - 作用：不能直接运行，也不能接收消息，必须由其他可执行程序或其他库调用它提供的函数和数据才能发挥作用。
+     - Windows API：动态链接库作为Windows系统的基础，Windows API均以动态链接库的形式提供，其中最重要的3个动态链接库为
+       1) Kernel32.dll 包含用于管理内存、进程和线程的函数
+       2) User32.dll 包含执行用户界面任务(如窗口创建)的函数
+       3) GUI32.dll 包含画图和显示文本的函数
+     - 动态链接库被多个进程访问的机制
+       申请一个独立的内存空间作为动态链接库的虚拟内存空间，然后引用该动态链接库的进程在其自身的虚拟内存空间中通过地址映射的方式引用动态链接库的函数和数据。
+     - 动态链接库的加载方式
+       1) 隐式链接
+          
+       2) 显式加载
+          通过FFI(Foreign Function Interface)映射一个可执行模块或动态链接库到当前调用进程的地址空间。
+          1) Python显式加载
+             #+BEGIN_EXAMPLE python
+             from ctype import cdll
+             
+             lib = cdll.loadLibrary('target/release/libembed.os')
+             # 直接调用库函数
+             lib.process()
+             #+END_EXAMPLE
+          2) Nodejs显示加载
+             #+BEGIN_EXAMPLE javascript
+             var ffi = require('ffi')
+             
+             var lib = ffi.Library('target/release/libembed.os', {
+               process: ['void', []]
+             })
+             lib.process()
+             #+END_EXAMPLE
+
+** Win32 API
+   
+*** 获取内存信息
+    通过Kernel32.dll的GlobalMemoryStatus和GlobalMemoryStatusEx来获取当前可用的物理和虚拟内存信息，其中GlobalMemoryStatus只能获取单根内存条的状态，而GlobalMemoryStatusEx可以获取多根内存条状态。
+    #+BEGIN_EXAMPLE c
+    BOOL WINAPI GlobalMemoryStatusEx(_Inout_  LPMEMORYSTATUSEX lpBuffer);
+
+    typedef struct _MEMORYSTATUSEX
+    {
+         DWORD     dwLength; //本结构长度
+         DWORD     dwMemoryLoad; //已用内存百分比
+         DWORDLONG ullTotalPhys; //物理内存总量
+         DWORDLONG ullAvailPhys; //可用物理内存
+         DWORDLONG ullTotalPageFile; //交换文件总的大小
+         DWORDLONG ullAvailPageFile; //交换文件中空余部分大小
+         DWORDLONG ullTotalVirtual; //用户可用地址空间
+         DWORDLONG ullAvailVirtual; //当前空闲的地址空间
+         DWORDLONG ullAvailExtendedVirtual; //保留值，设为0
+    } MEMORYSTATUSEX, *LPMEMORYSTATUSEX;
+    #+END_EXAMPLE
+    C++测试代码
+    #+BEGIN_EXAMPLE c++
+    #include <iostream>
+    #include <windows.h>
+
+    using namespace std;
+
+    int main()
+    {
+        MEMORYSTATUSEX memStatus;
+        memStatus.dwLength = sizeof (memStatus);
+        GlobalMemoryStatusEx (&memStatus);
+
+        cout << "内存初始状态：" << endl;
+        cout << "内存繁忙程度 = " << memStatus.dwMemoryLoad << endl;
+        cout << "总物理内存 = " << double(memStatus.ullTotalPhys) /(1024*1024) << "M" << endl;
+        cout << "可用物理内存 = " << double(memStatus.ullAvailPhys) /(1024*1024) << "M" << endl;
+        cout << "总页文件 = " << double(memStatus.ullTotalPageFile) /(1024*1024) << "M" << endl;
+        cout << "可用页文件 = " << double(memStatus.ullAvailPageFile) /(1024*1024) << "M" << endl;
+        cout << "总进程空间 = " << double(memStatus.ullTotalVirtual) /(1024*1024) << "M" << endl;
+        cout << "可用进程空间 = " << double(memStatus.ullAvailVirtual) /(1024*1024) << "M" << endl << endl;
+    
+        system("pause");
+    
+        return 0;
+    }
+    #+END_EXAMPLE
+
+* Cargo
+ 
+** QA
+   1) 通过 ~cargo install~ 安装crate时报 ~error: specified package has no binaries~
+      解决方法：
+      1) 将crate的名称和版本号添加到Cargo.toml的dependencies节点下
+         #+BEGIN_EXAMPLE toml
+         [dependencies]
+         winapi = "0.2"
+         #+END_EXAMPLE
+      2) 执行编译时会自动下载 ~cargo build~
+
+* TODO 数据类型
+  
+** 基础数据类型(scalar type)
+   *注意：*
+   1) Rust不会自动对数据类型进行隐式转换，都需要开发人员进行现实转换。
+   2) 存储在调用栈中，当作用域(scope)结束，则自动出栈被销毁。
+   
+   分类：
+   1) Integer Types
+      1) ~i8,u8~ 占8位
+      2) ~i16,u16~ 占16位
+      3) ~i32,u32~ 占32位
+      4) ~i64,u64~ 占64位
+      5) ~i128,u128~ 占128位
+      6) ~isize,usize~ 根据当前操作系统位数决定整型位数，32位系统则为32位，64位操作系统为64位
+      7) 字面量格式
+         | Number literal | Example     | Equals     |
+         |----------------+-------------+------------|
+         | Decimal        | 92_222      | 92222      |
+         | Hex            | 0xff        |            |
+         | Octal          | 0o77        |            |
+         | Binary         | 0b1111_0000 | 0b11110000 |
+         | Byte(u8 only)  | b'A'        |            |
+         - ~_~ 作为分隔符仅用于提高可读性，对实际值没有任何影响
+         - 除了Byte类型的Number literal格式外，其他格式均可在值后紧接，如 ~0xffu16~
+      8) 关于Integer Overflow问题
+         - 通过 ~cargo build~ 以debug模式编译时，编译器会提示 ~panicking(when a program exits with an error)~
+         - 通过 ~cargo build --release~ 编译时，Rust会采用补码方式来存储整数，因此如u8类型的256会得到0、257会得到1。
+      9) Rust默认使用i32(性能最高)
+         #+BEGIN_EXAMPLE rust
+         let i = 32;
+         #+END_EXAMPLE
+   2) Floating-Point Types
+      1) ~f32~
+      2) ~f64~ Rust默认使用
+   3) Boolean Type
+      - 值 ~true/false~
+      - 示例
+        #+BEGIN_EXAMPLE rust
+        let is_valid: bool = true;
+        #+END_EXAMPLE
+   4) Character Type
+      每个字符为占4位的Unicode编码。
+      #+BEGIN_EXAMPLE rust
+      let c: char = 'z';
+      #+END_EXAMPLE
+
+** 内置复合数据类型(compound type)
+   1) Tuple Type
+      - 特点
+        1) 容量在定义时已经固定下来，后期不能修改(cannot grow or shrink in size)
+        2) 元素的数据类型可以不同
+      - 示例
+        #+BEGIN_EXAMPLE rust
+        let tup: (i32, f64, u8) = (500, 6.1, b'A');
+
+        // 通过pattern matching进行destructure
+        let (x, y, z) = tup
+
+        // 通过下标获取元素
+        let x1: i32 = tup.0
+        let y1: f64 = tup.1
+        #+END_EXAMPLE
+   2) Array Type
+      - 特点
+        1) 容量在定义时已经固定下来，后期不能修改(cannot grow or shrink in size)
+        2) 元素的数据类型必须相同
+      - 示例
+        #+BEGIN_EXAMPLE rust
+        let a = [1,2,3];
+        let b: [char; 2] = ['a', 'b'];
+
+        // 赋值['a', 'a', 'a']的语法糖
+        let c = ['a'; 3];
+
+        // 通过下标访问元素
+        println!("{}", c[0]);
+        c[1] = 'b'
+        #+END_EXAMPLE
+      - Rust对越界访问的处理
+        以调试模式编译时会提示panicking
+
+** TODO 标准库的数据类型 ~std~
+   1) Vec
+      容量可修改的数组。
+   2) Range
+   3) String
+      #+BEGIN_EXAMPLE rust
+      let ss: &str = "hello"; // 字符串字面量，由于不可变和编译期可知，因此性能很高。
+
+      // String提供运行时可变特性，存储在heap上。
+      // 运行时动态向操作系统申请内存资源，并在使用完毕后归还内存资源给操作系统。
+      let mut s: String = String::from(ss); // 若不声明为mutable则不能执行修改操作
+      s.push_str(", world!");
+
+      println!("{}", s); // 回显
+      #+END_EXAMPLE
+   
+* 函数
+  - 特点：
+    1) 函数调用为表达式
+       - Rust绝大部分元素都是表达式
+         1) ~let a = 6;~ 其中字面量6就是表达式
+         2) macro调用为表达式
+         3) 用于创建新scope的block结构也是表达式
+            #+BEGIN_EXAMPLE rust
+            let y = {
+                let x = 3;
+                x + 1     // 注意表达式后没有分号(semicolon)
+            };
+            #+END_EXAMPLE
+    2) 默认返回值为函数体的最后一个表达式，若没有则返回 empty tuple ~()~
+    3) 函数命名和变量命名风格采用 /snake case/
+    4) 形参必须声明参数数据类型
+  - 示例
+    #+BEGIN_EXAMPLE rust
+    fn sum_after_add1(a: i32, b:i32) -> i32 {
+        (a + 1) + (b + 1) // 若行尾带分号，则为statement就不作为函数的返回值
+    }
+
+    fn sum_if_greater_than_3(a: i32) -> i32 {
+        if a < 2 {
+            return a; // 通过return语句返回函数返回值
+        }
+        a + 1
+    }
+
+    fn main() {
+        let sum = sum_after_add1(1, 2);
+        println!("The value of x is: {}", sum);
+    }
+    #+END_EXAMPLE
+
+* 控制流程
+  1) ~if...[else [if]...]~
+     - 特点：
+       1) 判断条件表达式必须返回bool
+       2) 整体为表达式，各arm中的返回值类型必须一致
+          #+BEGIN_EXAMPLE rust
+          let n = 5;
+          let x = if n < 2 {
+              2
+          }
+          else if n == 3 {
+              3
+          }
+          else {
+              5
+          };
+          #+END_EXAMPLE
+       3) 分支逻辑（Rust称分支为arm）必须被花括号 ~{}~ 包裹
+  2) ~loop~
+     - 特点：
+       1) 整体为表达式，通过break跳出循环并返回返回值
+          #+BEGIN_EXAMPLE rust
+          let mut counter: i32 = 1;
+          let result = loop {
+              if counter > 5 {
+                  break counter * 2;
+              }        
+              counter += 1;
+          }
+          #+END_EXAMPLE
+  3) ~while~
+     #+BEGIN_EXAMPLE rust
+     let mut i: i32 = 1;
+     while i != 10 {
+         i += 1;
+     }
+     #+END_EXAMPLE
+  4) ~for...in...~
+     #+BEGIN_EXAMPLE rust
+     let xs:[i32; 5] = [2; 5];
+
+     for x in xs.iter() {
+         println!("The value is: {}", x);
+     }
+     #+END_EXAMPLE
+
+
+     
+* Ownership
+  用于保证内存安全而不用使用垃圾回收机制，通过一个包含一组规则的Ownership系统在编译期管理内存。
+
+** Ownership规则
+   1) 每个值都拥有owner属性
+   2) 每个值在同一个时间只能属于一个owner
+   3) 当owner离开作用域(scope)，那么将销毁该值除非作为函数返回值传递给调用者
+      #+BEGIN_QUOTE
+      the memory is automatically returned once the variable that owns it goes out of scope.
+      #+END_QUOTE
+      - 示例1
+        #+BEGIN_EXAMPLE rust
+        fn test() {
+            // 变量s不在作用域，因此无效
+
+            let s = String.from("test"); // 从行开始，变量s在作用域
+            // do stuff with s
+
+            // s.drop() 即将离开作用域，编译器会识别作用域并添加内存释放函数drop。 相当于C++中的析构函数。
+        }
+        #+END_EXAMPLE
+      - 示例2——Move
+        #+BEGIN_EXAMPLE rust
+        fn test() {
+            // a变量在stack中存储ptr、len和capacity三个字段，其中ptr指向heap的字符串首字节地址
+            let a = String::from("abc");
+            // 在其它语言中，下列操作会复制一份a在stack的内容给b；(称为ShallowCopy)
+            // Rust中除了上述操作外，还会将a在stack中的内容设置为invalid，后续不能再操作a变量。
+            let b = a;
+
+            println!("{}", a); // 编译时报a value used here afther move
+        }
+        #+END_EXAMPLE
+        - 若不这样处理将引发的问题
+          Rust会在scope末尾自动调用变量的drop函数，若a和b指向同一个heap空间，执行内存资源重复释放会导致安全问题(security vulnerbilities)。
+      - 示例3——Clone
+        #+BEGIN_EXAMPLE rust
+        fn test() {
+            // a变量在stack中存储ptr、len和capacity三个字段，其中ptr指向heap的字符串首字节地址
+            let a = String::from("abc");
+            // 复制一份a的ptr指向的heap空间，并将新地址赋值给b的ptr字段
+            let b = a.clone();
+
+            println!("a: {}, b: {}", a, b);
+        }
+        #+END_EXAMPLE
+      - 示例4——Stack-only Data Copy
+        #+BEGIN_EXAMPLE rust
+        fn test() {
+            let a = 1;
+            let b = a; // 等价于 let b = a.clone();
+
+            println!("a: {}, b: {}", a, b);
+        }
+        #+END_EXAMPLE
+        对于仅存储在stack的数据类型，Rust提供Copy trait来进行注解，那么在赋值时就会默认采用Deep Copy的方式，因此不会出现前一个变量invaild的情况。但Rust规定自定数据类型中若成员的数据有存储在heap部分(注解Drop trait)时，则不能注解Copy trait。 *内置的scalar types均注解Copy trait，而成员均为Copy trait的tuple也是Copy trait。*
+      - 示例5——通过函数参数传递Ownership
+        #+BEGIN_EXAMPLE rust
+        fn main() {
+            let s = String::from("abc");
+            take_ownership(s); // s的ownership已经move到函数中，因此s从此为invalid
+
+            let x = 5;
+            makes_copy(x); // x的ownership为copy到函数中，后续依然可用
+
+            // 由于s已经为invalid，因此不调用s.drop()；而x依然valid，但x为stack only data因此随调用栈帧出栈会自动释放内存
+        }
+       
+        fn take_ownership(some_string: String) {
+            println!("{}", some_string);
+            // 调用some_string.drop()释放内存资源
+        }
+        fn makes_copy(some_integer: i32) {
+            println!("{}", some_integer);
+            // some_integer为stack only data因此随调用栈帧出栈会自动释放内存
+        }
+        #+END_EXAMPLE
+      - 示例6——通过函数返回值传递Ownership
+        #+BEGIN_EXAMPLE rust
+        fn main() {
+            let s1 = gives_ownership(); // gives_ownership moves its return value into s1.
+
+            let s2 = String::from("abc"); // s2 comes into scope.
+            let (s3, length) = takes_and_gives_back(s2); // s2 moves into takes_and_gives_back, which also moves its return value into s3.
+
+            // drop s1 and s3, while s2 is moved/invalid so nothing happens.
+        }
+
+        fn gives_ownership() -> String {
+            let s = String::from("321");
+            s // s is returned and moves out to the calling function.
+        }
+
+        fn takes_and_gives_back(some_string: String) -> String {
+            println!("{}", some_string);
+            (some_string, some_string.len())
+        }
+        #+END_EXAMPLE
+
+
+       
+
+
+
+
+   variable scope
+   scope: is the range within a program for which an item is valid.
+
+   borrowing,slices,lays data out in memory
+** References and Borrowing
+   允许引用某个值而用获取ownership。
+   符号：
+   1) reference ~&~
+   2) dereference ~*~
+   示例
+   - 示例1
+     #+BEGIN_EXAMPLE rust
+     fn main() {
+         let s1: String = String::from("hello");
+         let s2: &String = &s1; // s2指向s1在stack的地址，而不发生move来获取ownership，因此s1依然有效。
+         // s1.ptr -> s2.stack address
+         // s2.ptr -> content in heap
+         let len = calc_length(s2);
+
+         println!("the length of {} is: {}", s1, len);
+     }
+     
+     // 函数参数包含Reference类型的称为Borrowing
+     fn calc_length(ref_str: &String) -> usize { // ref_str为一个指向String类型变量stack地址的引用
+       ref_str.len()
+       // 由于ref_str为引用而不用获取ownership，因此不会执行ref_str.drop()
+     }
+     #+END_EXAMPLE
+   - 示例2——Mutable Reference
+     #+BEGIN_EXAMPLE rust
+     let mut s1: String = String.from("hello"); // 原来的变量要设置为 mutable
+     let s2: &mut String = &mut s1;             // 通过 &mut <type> 声明引入为 mutable reference
+     s2.push_str(", world!");
+
+     let s3: &String = &s1;
+     s3.push_str("test"); // 编译时报异常
+     #+END_EXAMPLE
+   - 示例3——Multiple Mutable Reference
+     #+BEGIN_EXAMPLE rust
+     let mut s1: String = String.from("hello");
+     let s2: &mut String = &mut s1;
+     let s3: &mut String = &mut s1;
+     // 不允许在同一个scope中出现多个mutable reference。可通过block scope处理
+     // {
+     //      let s2: &mut String = &mut s1;
+     // }
+     // let s3: &mut String = &mut s1;
+     #+END_EXAMPLE
+     不允许在同一个scope中出现多个mutable reference是为了避免在编译时出现Data Races的问题，当出现下列三种的行为则会发生Data Races问题：
+     1) Two or more pointers access the same data at the same time.
+     2) At least one of the pointers is being used to write to the data.
+     3) There’s no mechanism being used to synchronize access to the data.
+   - 示例4——Imutable and Mutable Reference
+     #+BEGIN_EXAMPLE rust
+     let mut s1: String = String.from("hello"); // 原来的变量要设置为 mutable
+     let s2: &mut String = &mut s1;             // 通过 &mut <type> 声明引入为 mutable reference
+     let s3: &String = &s1;
+     println!("{} {} {}", s1, s2, s3); 
+     // 编译时报错
+     // Referece Scope: 从定义开始，到最后一次调用。
+     // Rust不允许Imutable Reference Scope和Mutable Reference Scope存在重叠的情况。而示例2虽然都同时存在Imutable Reference和Mutable Reference，但它们的Scope没有重叠，因此没有问题。
+     #+END_EXAMPLE
+** Dangling References
+   1) 出现dangling reference的问题代码，Rust编译时会报错
+      #+BEGIN_EXAMPLE rust
+      fn dangle() -> &String { // returns a reference to a String
+          let s = String::from("test"); 
+          &s // return a reference to a String, but s goes out of scope, and is droped.
+          // Its memory goes away already.
+          // Danger.
+      }
+      #+END_EXAMPLE
+   2) 应该修改为
+      #+BEGIN_EXAMPLE rust
+      fn no_dangle() -> String {
+          let s = String::from("test");
+          s // return s and its ownership to calling function.
+      }
+      #+END_EXAMPLE
+
+
+
+

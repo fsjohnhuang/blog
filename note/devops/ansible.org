@@ -1369,12 +1369,92 @@ ansible-doc -l <keyword>
        - ~q~ quit from the debugger. the playbook execution is aborted
    - [[https://testinfra.readthedocs.io/en/latest/index.html][Testinfra]]
      对Ansible Playbook执行结果做单元测试，由ThoughtWorks开发对标[[https://serverspec.org][Serverspec]]。作为Pytest测试引擎的插件来使用。
+     - 实践示例
+       - https://github.com/philpep/test-driven-infrastructure-example
+       - Testinfra作者的GitHub: https://github.com/philpep
      - 安装
        #+BEGIN_EXAMPLE bash
        pip install testinfra
        pip install paramiko
        pip install pytest-xdist # 添加多线程支持
        #+END_EXAMPLE
+     - 测试实例
+       #+BEGIN_EXAMPLE python
+       #!/user/bin/evn python
+       # -*- coding: utf-8 -*-
+       # file: ./test/test_host.py
+       
+       # 入参host就是被测试主机
+       def test_passwd_file(host):
+           passwd = host.file('/etc/passwd')
+           assert passwd.exists
+           assert passwd.contains('root')
+           assert passwd.user == 'root'
+           assert passwd.group == 'root'
+           assert passwd.mode = 0o644
+
+       def test_nginx_is_installed(host):
+           nginx = host.package('nginx')
+           assert nginx.is_installed
+           assert nginx.version.startswith('1.2')
+
+       def test_nginx_running_and_anbled(host):
+           nginx = host.service('nginx')
+           assert nginx.is_running
+           assert nginx.is_enabled
+       #+END_EXAMPLE
+     - 运行方式
+       1) 测试本地主机
+          #+BEGIN_EXAMPLE bash
+          pytest ./test/test_host.py
+          #+END_EXAMPLE
+       2) 测试Vagrant创建的虚拟机
+          #+BEGIN_EXAMPLE bash
+          vagrant ssh-config > .vagrant/ssh-config
+          pytest --hosts="<hostname>[,<hostname>]*" --ssh-config=.vagrant/ssh-config ./test/test_host.py
+          #+END_EXAMPLE
+          - QA
+            1) 选项 ~--hosts~ 设置为虚拟机IP时报 ~paramiko.ssh_exception.AuthenticationException: Authentication failed~
+               - 解决方法1：只能设置在Vagrantfile中为这台虚拟机设置的hostname
+                 #+BEGIN_EXAMPLE ruby
+                 config.vm.define :node do |node_conf|
+                     node_conf.vm.hostname = "node-linux" # --hosts要设置为node-linux
+                 end
+                 #+END_EXAMPLE
+               - 解决方法2：ssh-config中的Host就是 ~--hosts~ 的合法值
+            2) 断言 ~assert host.file('/home/apps/svr').exists~ 总是报失败，但文件是存在的
+               - 原因：通过这种方式运行测试式以用户vagrant来运行测试，若默认vagrant没有该路径的权限，因此断言必定失败。
+       3) 和Jenkins集成
+          - 前提：Jenkins Slave运行Vagrant
+          - 脚本：
+            #+BEGIN_EXAMPLE bash
+            pip install testinfra paramiko
+            vagrant up
+            vagrant ssh-config > .vagrant/ssh-config
+            py.test --hosts=default --ssh-config=.vagrant/ssh-config --junit-xml junit.xml tests.py
+            #+END_EXAMPLE
+          - 然后Jenkins读取junit.xml获取测试结果
+       4) 直接调用testinfra API
+          #+BEGIN_EXAMPLE python
+          import testinfra
+          
+          host = testinfra.get_host('paramiko://root@host')
+          #+END_EXAMPLE
+       5) 通过
+     - 高级用法
+       1) 参数化测试(test parametrization)
+          #+BEGIN_EXAMPLE python
+          import pytest
+
+          @pytest.mark.parametrize('name, version', [
+              ('nginx', '1.6'),
+              ('python', '2.7'),
+          ])
+          def test_packages(host, name, version):
+              pkg =  host.package(name)
+              assert pkg.is_installed
+              assert pkg.version.startswith(version)
+          #+END_EXAMPLE
 
 * TODO 管理Windows服务器
   PowerShell: 以.NET Framework为平台，接收和返回.NET对象

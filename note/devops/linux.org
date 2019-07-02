@@ -95,7 +95,24 @@ tail -f <filepath>
 
 ** at
 
-* 用户管理
+* TODO 用户和用户组管理
+
+** 用户组
+用户组信息位于: ~/etc/group~
+
+#+BEGIN_EXAMPLE bash
+# 查看用户所属的用户组列表
+groups <user>
+
+# 将用户从原有用户组剔除，添加到新的用户组
+usermod -G <groupA> <user>
+
+# 将用户添加到新的用户组
+usermode -a -G <groupA> <user>
+#+END_EXAMPLE
+
+
+
 
 ** 用户密码管理  
    1) 2种无交互方式初始化密码的方式

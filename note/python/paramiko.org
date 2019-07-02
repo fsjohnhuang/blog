@@ -1,0 +1,5 @@
+官网：http://docs.paramiko.org/en/2.6/
+
+* 作为客户端
+Paramiko会负责key signature和verification的工作，但用户要提供密钥(private keys)和验证服务端提供的公钥签名是否合法。
+

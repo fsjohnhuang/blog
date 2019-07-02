@@ -22,7 +22,7 @@ gpip() {
 *** 安装
 #+BEGIN_EXAMPLE shell
 # 将pipenv安装到~/.local下
-pip install pipenv --user
+pip install pipenv --user --upgrade
 # 将~/.local/bin加入到环境变量PATH中，后续在shell中可使用pipenv命令
 export PATH=$HOME/.local/bin:$PATH
 #+END_EXAMPLE
@@ -34,6 +34,12 @@ mkdir foo_project && cd foo_project
 
 # 创建虚拟环境
 pipenv --python 2.7
+
+# 创建Python2的虚拟环境
+pipenv --two
+
+# 创建Python3的虚拟环境
+pipenv --three
 
 # 安装第三方依赖
 pipenv install jenkins-job-builder
@@ -105,6 +111,13 @@ pipenv --py
        - 清华大学：https://pypi.tuna.tsinghua.edu.cn/simple/
        - 中国科学技术大学：https://pypi.mirrors.ustc.edu.cn/simple/
     2) 当安装包时发现lock步骤缓慢，可以通过 ~pipenv install <package> --skip-lock~ 跳过lock步骤。若还是慢则需要采用上述方式更换源了。
+    3) 若要生成运行时依赖的requirements.txt，那么必须生成 ~.lock~ 文件。生成requirements.txt的命令为 ~pipenv lock -r > requirments.txt~
+    4) 若移动了项目的目录路径，那么原来的virtualenvs和项目路径的映射将会失效。通过在 =~/.bashrc= 中设置如下配置，将映射关系保存到项目目录下
+       #+BEGIN_EXAMPLE bash
+       #!/bin/bash
+       export PIPENV_VENV_IN_PROJECT=1
+       #+END_EXAMPLE
+    5) 若项目中依赖自定义环境变量，可配置到项目根目录下的 ~.env~ 文件，pipenv运行时会自动加载
 
 *** Pipfile和Pipfile.lock的区别
     Pipfile和Pipfile.lock对标Ruby中的Gemfile和Gemfile.lock。
@@ -123,7 +136,25 @@ pipenv --py
    Windows下使用
 
 * 其他
-tox
+tox或nox会自动运行测试和linter，并构建文档。它们支持”依赖矩阵“。
+
+* 版本管理
+采用SemVer或CalVer。
+可通过工具帮忙管理：incremental,bumpversion和setuptools_scm等。
+
+* style和linting
+flake8
+
+自动格式化整个项目
+
+* code coverage
+coverage.py
+
+* 安全漏洞检测
+bandit
+
+* 第三方依赖漏洞检测
+safety
 
 * 自动化测试
 Robot Framework
