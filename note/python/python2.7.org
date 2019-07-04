@@ -845,7 +845,7 @@ raise FileNotFoundError(errno.ENOENT, os.stderror(errno.ENOENT), filename)
 * TODO 迭代器/游标
 当迭代器取完数据后，再次尝试取元素时会抛出 ~StopIteration~ 异常。
 
-** 可迭代对象
+** 可迭代对象(iterable)
 1) 列表
 2) 元组
 3) 字符串
@@ -885,33 +885,93 @@ for x in ic:
     print(x)      # 3,4,5
 #+END_EXAMPLE
 
-** 自定义迭代器
-迭代器就是实现了next方法的类
-#+BEGIN_EXAMPLE python
-class Text(object):
-    def __init__(self, text):
-        self.__cursor = 0
-        self.__text = text
+** 通过实现Iterator Protocol自定义迭代器
+   1) 数据即迭代器的实现方式
+      #+BEGIN_EXAMPLE python
+      class Text(object):
+          def __init__(self, text):
+              self.__cursor = 0
+              self.__text = text
+      
+          def __iter__(self):
+              return self
+      
+          def __next__(self):
+              """
+              Python 3.x
+              """
+              if self.__cursor == len(self.__text):
+                  raise StopIteration()
+              else:
+                  i = self.__cursor
+                  self.__cursor += 1
+                  return self.__text[i]
+      
+          def next(self):
+              """
+              Python 2.x compatibility
+              """
+              return self.__next__()
+      
+      for char in Text('abcd'):
+          print(char)
+      #+END_EXAMPLE
 
-    def __iter__(self,):
-        return self
+   2) 数据和迭代器分离的实现方式
+      #+BEGIN_EXAMPLE python
+      class Text(object):
+          """
+          Text is a concrete Iterable implementation that requires the class implements method `__iter__(self) -> Iterator`.
+          """
 
-    def next(self,):
-        if self.__cursor == len(self.__text):
-            raise StopIteration()
-        else:
-            i = self.__cursor
-            self.__cursor += 1
-            return self.__text[i]
+          def __init__(self, text):
+               self.__text = text
+               
+          def __iter__(self):
+               return TextIterator(self.__text)
 
-for char in Text('abcd'):
-    print(char)
-#+END_EXAMPLE
+      class TextIterator(object):
+          """
+          Text is a concrete Iterator implementation that requires the class obey Iterator Protocol implements method `__iter__(self) -> Iterator` 
+          and method `__next__(self) -> Any` for Python3.x or  method `next(self) -> Any` for Python2.x .
+          """
+      
+          def __init__(self, text):
+              self.__text = text
+              self.__cursor = 0
+
+          def __iter__(self):
+              return self
+
+          def __next__(self):
+              if self.__cursor == len(self.__text):
+                  raise StopIteration()
+              else:
+                  i = self.__cursor
+                  self.__cursor += 1
+                  return self.__text[i]
+
+          def next(self):
+              return self.__next__()
+      #+END_EXAMPLE
 
 ** TODO 生成器(Generator)
+   提供一种便捷的方式实现Iterator Protocol。
+   1) 生成器表达式(Generator Expression)
+   2) 生成器函数(Generator Function)
 
-* 修饰器
+
+https://docs.python.org/3.6/reference/expressions.html#yieldexpr
+
+** TODO 异步生成器
+https://docs.python.org/3.6/reference/expressions.html#asynchronous-generator-functions
+
+* 修饰器(Decorator)
 面向切面编程，对原有函数进行增强。
+可修饰：
+1) 函数
+2) 类实例方法
+3) 类
 
 注意： 模块加载时马上执行修饰器生成新函数。
 
@@ -1007,10 +1067,20 @@ print(bingo_results) # 回显 [0,1,2,3,4]
 1) Python2.x中
    int, long, float, complex, str
    - 没有bool类型，而是通过0和1表示
+   - float占64位，其中52位表示底数，11位表示指数，剩下一位表示符号。
+   - complex由实数部分和虚数部分组成，一般形式为 ~x+yj~ ，x和y都是实数类型。
 2) Python3.x中
    int, float, complex, bool, str
    - 若长度大于int范围，会自动转型为long，因此int包含了long类型。
    - 提供bool类型，但它们的值依然为0和1，并且可以与其它数字作算术运算。
+
+*** 类型转换
+    1) ~int(x)~
+    2) ~float(x)~
+    3) ~bool(x)~
+       1) 转换为False的值 ~0,'',None,0.0,[],tuple(),set()~
+    4) ~str(x)~
+    5) ~complex(i, j)~
 
 ** 集合数据类型
 1) list
@@ -1305,6 +1375,94 @@ Python解释器将类定义语句解释为元组后作为入参调用 ~type~ 方
          return '%s company.' % cls.get_company()
 #+END_EXAMPLE
 
+** setter/getter属性定义
+   1) 方式1
+      #+BEGIN_EXAMPLE python
+      class Test(object):
+        @property
+        def name(self):
+            """
+            定义属性name的getter
+            
+            Examples:
+              test = Test()
+              print(test.name)
+            """
+            return self.__name
+
+        @name.setter
+        def name(self, value):
+            """
+            定义属性name的setter
+
+            Examples:
+              test = Test()
+              test.name = 'john'
+            """
+            self.__name = value
+
+        @name.deleter
+        def name(self):
+            """
+            定义属性的deleter
+            
+            Examples:
+              test = Test()
+              del test.name
+              hasattr(test, 'name') # 返回False
+            """
+            del self.__name
+      #+END_EXAMPLE
+   2) 方式2
+      #+BEGIN_EXAMPLE python
+      def name():
+          doc = """Doc String"""
+          def fget(self):
+              """
+              定义属性name的getter
+  
+              Examples:
+                test = Test()
+                print(test.name)
+              """
+              return self.__name
+
+          def fset(self, value):
+              """
+              定义属性name的setter
+  
+              Examples:
+                test = Test()
+                test.name = 'john'
+              """
+              self.__name = value
+
+          def fdel(self):
+              """
+              定义属性的deleter
+              
+              Examples:
+                test = Test()
+                del test.name
+                hasattr(test, 'name') # 返回False
+              """
+              del self.__name
+
+          return locals()
+
+      """
+      函数property的作用为 在新式类中返回属性值。
+
+      Args:
+        fget(function): Getter function.
+        fset(function): Setter function.
+        fdel(function): Deleter function.
+        doc(str): Doc String. Copy the docstring from function `fget` if parameter `doc` is not provided.
+      """
+      name = property(**name())
+      #+END_EXAMPLE
+
+   *注意： 由于getter函数中的私有/保护变量在setter之前不会被定义和初始化，因此需要在__init__或类中预先定义这些变量，或在getter中特殊处理否则会在调用getter时报错。*
 ** 多继承和调用父类方法
 从Python2.2开始引入super类，super对象在搜索命名空间时是基于类实例的mro进行。
 
@@ -1421,7 +1579,7 @@ john = Employee('john', 'TL')
 john.__dict__ : 类的属性（包含一个字典，由类的数据属性组成）
 john.__doc__ :类的文档字符串
 john.__name__: 类名
-john.__module__: 类定义所在的模块（类的全名是'__main__.className'，如果类位于一个导入模块mymod中，那么className.__module__ 等于 mymod）
+john.__module__: 类定义所在的模块（类的全名是'module_name.class_name'，如果类位于一个导入模块mymod中，那么className.__module__ 等于 mymod）
 john.__bases__ : 类的所有父类构成元素（包含了一个由所有父类组成的元组）
 #+END_EXAMPLE
 
@@ -2144,7 +2302,6 @@ if __name__ == '__main__':
 **** html
    插件： ~pytest-html~
   
-
 * str和unicode
 
 ** 类型不同导致正则匹配失败
@@ -2965,4 +3122,101 @@ https://github.com/dadadel/pyment
    #+END_EXAMPLE
 
 
+* 内省(Introspection) 和 反射(Reflection)
+
+** 内省(Introspection)
+   也称为类型内省，是一种在运行时进行的对象检测机制。可通过内省获取对象所有信息，包括对象类型、包含的属性等。
+   1) ~dir(obj)~ 将一个对象的所有属性名以字符串列表的形式返回
+   2) ~type(obj)~ 获取对象的数据类型(check the type/class of an object)
+   3) ~isinstance(obj, type)~ 检查对象是否属于某类型或其子类(check the object is specific type or class)
+   4) ~issubclass(SonClass, ParentClass)~ 检查类型的父子关系(check if an object's class is a subclass of a parent class)
+   5) ~callable(obj)~ 检查对象是否为可调用对象，即是否实现了 ~__call__()~ 方法
+   6) ~__builtins__~ 包含Python默认引入的内置属性和方法
+   7) 模块 ~inspect~ 下包含很多用于内省的方法。
+      - 示例
+        #+BEGIN_EXAMPLE python
+        import inspect
+        from functools import wraps
+
+        def what_am_i(decorated):
+            def wrapper(*args, **kwargs):
+                if inspect.isclass(decorated):
+                    print('{} is a class'.format(decorated.__name__))
+                    return decorated(*args, **kwargs)
+                
+                if inspect.isfunction(decorated):
+                    print('{} is a function'.format(decorated.__name__))
+                    return decorated(*args, **kwargs)
+                                
+            return wrapper
+
+        @what_am_i
+        def my_function():
+            print('hello')
+
+        @what_am_i
+        class MyClass:
+            def __init__(self, name):
+                self.name = name
+        #+END_EXAMPLE
+   8) 模块 ~keyword~ 判断是否存在和字符串入参相同的关键字
+      #+BEGIN_EXAMPLE python
+      import keywords
+      
+      # 打印所有keyword
+      for k in keyword.kwlist:
+          print(k)
+      
+      keyword.iskeyword('if')   # True
+      keyword.iskeyword('True') # False
+      #+END_EXAMPLE
+
+** 反射(Reflection)
+   反射使得程序具有在运行时动态修改自身结构和行为的能力。
+   
+   1) ~setattr~ 动态为对象添加属性
+      #+BEGIN_EXAMPLE python
+      import os
+      from importlib import import_module
+
+      # 将环境变量全部导入到当前模块中，并作为属性向外提供
+      
+      for k, v in os.environ.items():
+          # 注意：仅模块和自定义类型的对象可以在没有该属性时动态添加，内置数据类型的对象必须要已经定义该属性才能设置，不支持动态添加。
+          setattr(import_module(__name__), # 通过反射将__name__中的字符串模块名称生成模块对象
+                  k, 
+                  v)
+      #+END_EXAMPLE
+   2) ~getattr~ 动态获取对象属性
+      #+BEGIN_EXAMPLE python
+      class Conf(object):
+          name = 'john'
+          def __init__(self,):
+              pass
+
+      conf = Conf()
+      getattr(conf, 'name') # 返回 john
+      #+END_EXAMPLE
+   3) ~__getattr__~ 动态实现类中没有定义的方法
+
+* 字符串格式化
+  1) %-formatting， ~sentence = '%s %d' % ('hello', 123,)~
+  2) str.format， ~sentence = '{} {}'.format('hello', 123)~
+  3) f-formatting，Python3.6后新特性
+     #+BEGIN_EXAMPLE python
+     
+     sentence = f'
+     #+END_EXAMPLE
+
+* 环境变量
+  通过模块 ~os~ 来获取
+  #+BEGIN_EXAMPLE python
+  # python3.6
+  import os
+
+  os.getenv('ENV_VARIABLE')
+
+  for k, v in os.environ.items():
+      print(f'key: {k}, value: {v}')
+  #+END_EXAMPLE
 

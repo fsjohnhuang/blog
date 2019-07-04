@@ -15,11 +15,91 @@
 4) Selenium WebDriver
    作为Selenium RC的替代者。
 
+* 元素定位
+8种定位方式：
+| 类型              | 方法                                   |
+|-------------------+----------------------------------------|
+| id                | find_element(s)_by_id()                |
+| class name        | find_element(s)_by_class_name()        |
+| link text         | find_element(s)_by_link_text()         |
+| xpath             | find_element(s)_by_xpath()             |
+| name              | find_element(s)_by_name()              |
+| tag name          | find_element(s)_by_tag_name()          |
+| partial link text | find_element(s)_by_partial_link_text() |
+| css selector      | find_element(s)_by_css_selector()      |
+
+特别说明
+1) link text，根据 ~<a>text</a>~ 中text的内容通过完全匹配来定位元素
+2) partial link text，根据 ~<a>text</a>~ 中text的内容通过部分匹配来定位元素
+3) xpath，作为一种在XML文档中定义元素的DSL，也可用于HTML。
+   1) 绝对路径定位 ~/html/body/div[2]~
+      - 下标从1开始
+      - 绝对路径以单个斜杠开始 ~/~
+   2) 元素属性定位 
+      - 相对路径以两个斜杠开始 ~//~ ，表示当前页面某个目录下
+      - 属性必须位于方括号内，并以 ~@~ 开始。如 ~[@id=''],[@name=''],[@class=''],[@type='']~
+      - 示例
+        #+BEGIN_EXAMPLE
+        //input[@name='cc']
+        #+END_EXAMPLE
+   3) 层级和属性结合
+      #+BEGIN_EXAMPLE
+      //input[@name='cc']/div[2]/button[@class='primary' and @id='kw']
+      #+END_EXAMPLE
+
+** XPath和CSS Selector对比
+| 定位方式      | XPath                | CSS Selector    |
+|---------------+----------------------+-----------------|
+| 标签          | //div                | div             |
+| By id         | //div[@id='elid']    | div#elid        |
+| By class      | //div[@class='elid'] | div.elid        |
+| By attributes | //div[@title='test'] | div[title=test] |
+| 定位子元素    | //div/h1,//div/*     | div>h1,div>*    |
+
 * 等待操作
 
-** TODO 隐式等待(implicitly_wait) 详解
+** 隐式等待(implicitly_wait) 详解
+通过一定的时长等待页面上某元素加载完成，若超出设置时长元素仍然没被加载，则抛出NoSuchElementException。
 
-** EC(expected_conditions) 模块详解
+#+BEGIN_EXAMPLE python
+driver = webdriver.Firefox()
+driver.implicitly_wait(10) # 0 second as default.
+
+# 当获取#dd时该元素还没被加载，则会在10秒内通过轮询方式获取该元素。若能获取则继续执行，否则抛出NoSuchElementException。
+driver.find_element((By.ID, 'dd'))
+# 当获取.cd时该元素还没被加载，则会在10秒内通过轮询方式获取该元素。若能获取则继续执行，否则抛出NoSuchElementException。
+driver.find_element((By.CLASS, 'cd'))
+#+END_EXAMPLE
+
+** 显示等待详解
+让WebDriver在指定时间范围内等待某条件成立时继续执行，否则抛出TimeoutException。
+
+#+BEGIN_EXAMPLE python
+"""
+Args:
+  driver(WebDriver): Browser driver.
+  timeout(int): Seconds of timeout.
+  poll_frequency(float): Frequency of checking, default value is 0.5 second.
+  ignored_exceptions(Exception): Indicate which exception would be raised when operation is timeout, raise NoSuchElementException by default.
+
+Returns:
+  WebDriverWait: 
+"""
+WebDriverWait(driver, timeout, poll_frequency=0.5, ignored_exceptions=None)
+
+"""
+Args:
+  method(()->bool): Wait until `method` returns True.
+"""
+until(method, message='')
+"""
+Args:
+  method(()->bool): Wait until `method` returns False.
+"""
+until_not(method, message='')
+#+END_EXAMPLE
+
+*** EC(expected_conditions) 模块详解
 #+BEGIN_EXAMPLE python
 from selenium import webdriver
 from selenium.webdriver.support.wait import WebDriverWait
@@ -27,20 +107,6 @@ from selenium.webdriver.support import expected_conditions as EC
 
 driver = webdriver.Chrome()
 driver.get('url')
-
-# WebDriverWait(driver: WebDriver, timeout: int, freq: float) -> WebDriverWait
-# Args:
-#     driver(WebDriver): 浏览器驱动
-#     timeout(int): 超时时间
-#     freq(float): 检测频率
-# Retuns:
-#     WebDriverWait
-#
-# WebDriverWait.until(ec: EC)
-# Args:
-#     ec(EC): 监测条件
-# Returns:
-#     bool: 在指定时间内满足条件则返回True，否则返回False
 
 # 判断title是否是一致
 EC.title_is('')
@@ -76,6 +142,94 @@ EC.element_selection_state_to_be(driver.find_element(locator),True)
 EC.element_located_selection_state_to_be((locator),True)
 # 判断页面上是否存在alert,如果有就切换到alert并返回alert的内容
 EC.alert_is_present()
+#+END_EXAMPLE
+
+* WebElement
+通过定位获取的元素类型WebElement或WebElement集合。
+
+** 常用方法和属性
+#+BEGIN_EXAMPLE python
+we = driver.find_element_by_id('test')
+
+we.clear() # 清除文本
+we.send_keys('abc') # 模拟键盘输入字符
+we.click() # 模拟单击操作
+we.submit() # 模拟回车操作
+we.get_attribute('name') # 获取元素特性
+we.get_attribute('class') # 获取元素特性
+we.is_displayed() # 返回该元素是否用户可见
+
+we.size # 返回元素的尺寸
+we.text # 返回元素的文本(textContent, innerText)
+#+END_EXAMPLE
+
+* 鼠标事件
+封装在类ActionChains中。
+
+1) 右键菜单
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.common.action_chains import ActionChains
+
+   driver = webdriver.Firefox()
+   we = driver.find_element_by_id('test')
+   ActionChains(driver)
+       .context_click(we) # 定义执行右键菜单动作
+       .perform() # 执行操作
+   #+END_EXAMPLE
+2) 双击
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.common.action_chains import ActionChains
+
+   driver = webdriver.Firefox()
+   we = driver.find_element_by_id('test')
+   ActionChains(driver)
+       .double_click(we) 
+       .perform() # 执行操作
+   #+END_EXAMPLE
+3) 拖动
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.common.action_chains import ActionChains
+
+   driver = webdriver.Firefox()
+   source = driver.find_element_by_id('source')
+   target = driver.find_element_by_id('target')
+   ActionChains(driver)
+       .drag_and_drop(source, target) 
+       .perform() # 执行操作
+   #+END_EXAMPLE
+4) 悬停
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.common.action_chains import ActionChains
+
+   driver = webdriver.Firefox()
+   we = driver.find_element_by_id('test')
+   ActionChains(driver)
+       .move_to_element(we) 
+       .perform() # 执行操作
+   #+END_EXAMPLE
+
+* 键盘事件
+通过类Keys来输入键盘上所有按键，甚至是组合键(如 ~Ctrl+A~ 等)
+
+#+BEGIN_EXAMPLE python
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+
+driver = webdriver.Firefox()
+we = driver.find_element_by_id('test')
+
+we.send_keys(Keys.BACK_SPACE) # 删除键
+we.send_keys(Keys.SPACE)
+we.send_keys(Keys.TAB)
+we.send_keys(Keys.ESCAPE)
+we.send_keys(Keys.ENTER)
+we.send_keys(Keys.CONTROL, 'a') # Ctrl+A
+we.send_keys(Keys.F1)
+we.send_keys(Keys.F12)
 #+END_EXAMPLE
 
 * 执行JavaScript
