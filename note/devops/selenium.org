@@ -281,7 +281,7 @@ driver.execute_script('arguments[0].setAttribute("style", arguments[1]);', el, '
          2) 在用户名称输入框输入信息 ~set_username(text)~
   3) 然后在测试用例中调用Page Object的方法编排测试逻辑
 
-* WebDriver配置
+* TODO WebDriver配置
 
 ** Firefox 
 #+BEGIN_EXAMPLE python
@@ -292,7 +292,9 @@ from selenium.webdriver.firefox.options import Options
 
 firefox_options = Options()
 firefox_options.add_argument('--headless')
-firefox_options.add_argument('--disable-gpu)
+firefox_options.add_argument('--disable-gpu')
+firefox_options.add_argument('--mute-audio') # without audio
+firefox_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36')
 driver_path = r'C:\Program Files (x86)\Mozilla Firefox\geckodriver.exe'
 binary = FirefoxBinary(r'C:\Program Files (x86)\Mozilla Firefox\firefox.exe')
 driver = webdriver.Firefox(firefox_binary=binary,
@@ -307,7 +309,14 @@ from selenium.webdriver.chrome.options import Options
 
 chrome_options = Options()
 chrome_options.add_argument('--headless')
-chrome_options.add_argument('--disable-gpu)
+chrome_options.add_argument('--disable-gpu')
+chrome_options.add_argument('--no-sandbox')
+##INFO = 0
+##WARNING = 1
+##LOG_ERROR = 2
+##LOG_FATAL = 3
+##default is 0
+chrome_options.add_argument('--log-level=3')
 driver_path = r'C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe'
 driver = webdriver.Chrome(chrome_options=chrome_options
                           executable_path=driver_path)

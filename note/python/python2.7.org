@@ -641,26 +641,43 @@ compileall.compile_dir('/path/to/dir')
 ** 生成.pyo文件
 ~python -O -m py_compile /path/to/source.py~ ，将.pyc优化为.pyo文件。
 ~python -OO -m py_compile /path/to/source.py~ ，将.pyc优化移除了文档字符串的.pyo文件。
-* 异常处理
+* TODO 异常处理
 Python的错误分为语法错误 和 异常，语法错误是解析器报的错误，而异常是虚拟机运行时报的错误。
 BaseException为所有异常的基类，Exception为常规异常的基类。
 
 ** 捕获异常
- #+BEGIN_EXAMPLE python
- try:
-     <语句>
- except <异常类>:
-     <语句>
- except (<异常类1>, <异常类2>):
-     # 捕获多种异常
-     <语句>
- except <异常类>, <异常实例>:
-     <语句>
- else:
-     <不抛出异常时执行的语句>
- finally:
-     <总会执行的语句>
- #+END_EXAMPLE
+   1) Python2.x
+      #+BEGIN_EXAMPLE python
+      try:
+          <语句>
+      except <异常类>:
+          <语句>
+      except (<异常类1>, <异常类2>):
+          # 捕获多种异常
+          <语句>
+      except <异常类>, <异常实例>:
+          <语句>
+      else:
+          <不抛出异常时执行的语句>
+      finally:
+          <总会执行的语句>
+      #+END_EXAMPLE
+   2) Python3.x
+      #+BEGIN_EXAMPLE python
+      try:
+          <语句>
+      except <异常类>:
+          <语句>
+      except (<异常类1>, <异常类2>):
+          # 捕获多种异常
+          <语句>
+      except <异常类> as <异常实例>:
+          <语句>
+      else:
+          <不抛出异常时执行的语句>
+      finally:
+          <总会执行的语句>
+      #+END_EXAMPLE
 
 ** 自定义异常
 #+BEGIN_EXAMPLE python
@@ -842,6 +859,11 @@ filename = '/path/to/file'
 raise FileNotFoundError(errno.ENOENT, os.stderror(errno.ENOENT), filename)
 #+END_EXAMPLE
 
+** TODO raise主动抛出异常
+   #+BEGIN_EXAMPLE python
+   raise [Exception [, args [, traceback]]]
+   #+END_EXAMPLE
+
 * TODO 迭代器/游标
 当迭代器取完数据后，再次尝试取元素时会抛出 ~StopIteration~ 异常。
 
@@ -966,59 +988,94 @@ https://docs.python.org/3.6/reference/expressions.html#yieldexpr
 ** TODO 异步生成器
 https://docs.python.org/3.6/reference/expressions.html#asynchronous-generator-functions
 
-* 修饰器(Decorator)
+* TODO 修饰器(Decorator)
 面向切面编程，对原有函数进行增强。
 可修饰：
 1) 函数
 2) 类实例方法
 3) 类
 
-注意： 模块加载时马上执行修饰器生成新函数。
+*注意： 模块加载时马上执行修饰器生成新函数。*
 
-#+BEGIN_EXAMPLE python
-from functools import wraps
+** 多个修饰器的执行顺序
+   顺序为从上至下执行。
 
-def add1_missing_attrs(func):
-    """定义个普通的修饰器
-    """
-    def inner(*args, **kwargs):
-        result = func(*args, **kwargs)
-        return result + 1
+   #+BEGIN_EXAMPLE python
+   from functools import wraps
 
-    return inner
+   def first(func):
+       print('first')
 
-def add1_leaving_attrs(func):
-    """由于装饰器实际是高阶函数，因此原函数的__name__,__doc__和__module__等函数特性会被外层函数替换掉， 通过functools.wraps复制原函数特性到外层函数特性。
-    """
-    @wraps(func)
-    def inner(*args, **kwargs):
-        result = func(*args, **kwargs)
-        return result + 1
+       @wraps(func):
+       def wrapper(*args, **kwargs):
+           args += ('first',)
+           return func(*args, **kwargs)
 
-    return inner    
+       retrn wrapper
 
-def addx(x):
-    def tmp(func):
-        @wraps(func)
-        def inner(*args, **kwargs):
-            return x + func(*args, **kwargs)
+   def second(func):
+       print('second')
+
+       @wraps(func):
+       def wrapper(*args, **kwargs):
+           args += ('second',)
+           return func(*args, **kwargs)
+
+       retrn wrapper
+         
+
+   @first
+   @second
+   def say(first, second):
+       print('{} {}'.format(first, second))
+   #+END_EXAMPLE
+
+** 实例
+
+ #+BEGIN_EXAMPLE python
+ from functools import wraps
+
+ def add1_missing_attrs(func):
+     """定义个普通的修饰器
+     """
+     def inner(*args, **kwargs):
+         result = func(*args, **kwargs)
+         return result + 1
+
+     return inner
+
+ def add1_leaving_attrs(func):
+     """由于装饰器实际是高阶函数，因此原函数的__name__,__doc__和__module__等函数特性会被外层函数替换掉， 通过functools.wraps复制原函数特性到外层函数特性。
+     """
+     @wraps(func)
+     def inner(*args, **kwargs):
+         result = func(*args, **kwargs)
+         return result + 1
+
+     return inner    
+
+ def addx(x):
+     def tmp(func):
+         @wraps(func)
+         def inner(*args, **kwargs):
+             return x + func(*args, **kwargs)
         
-        return inner
+         return inner
     
-    return tmp
+     return tmp
 
-@add1_missing_attrs
-def add2(n):
-    return n + 1
+ @add1_missing_attrs
+ def add2(n):
+     return n + 1
 
-@add1_leaving_attrs
-def add3(n):
-    return n + 2
+ @add1_leaving_attrs
+ def add3(n):
+     return n + 2
 
-@addx(4)
-def add4(n):
-    return n
-#+END_EXAMPLE
+ @addx(4)
+ def add4(n):
+     return n
+ #+END_EXAMPLE
 
 * 函数
 
@@ -1846,7 +1903,7 @@ gc.set_debug(gc.DEBUG_LEAK)  # 调试内存泄漏
 gc.set_debug(gc.DEBUG_SAVEALL)  # 让回收的对象保存在gc.garbage中，以便检查
 #+END_EXAMPLE
 
-* 日志
+* TODO 日志
 官网： https://docs.python.org/2/library/logging.html
 
 ** 概念
@@ -1894,7 +1951,7 @@ logging.log(logging.ERROR, 'error message')
 logging.log(logging.FATAL, 'critical message')
 #+END_EXAMPLE
 
-** 通过默认logger和基本配置输出日志到文件
+** 设置默认logger输出日志到文件
 #+BEGIN_EXAMPLE python
 import logging
 
@@ -1918,43 +1975,7 @@ except Exception:
     # 等价于 logging.error('global error', exc_info=True)，记录traceback信息到日志
 #+END_EXAMPLE
 
-** 自定义日志对象
-实际项目中会先定义根日志对象，然后在各模块中创建子日志对象（有需要时定制子日志对象的Handler等属性）输出日志记录。
-#+BEGIN_EXAMPLE python
-# yuri/__init__.py
-import logging
-import .db as db
-
-# 定义名为yuri的日志对象（非根日志对象），那么名称以yuri.开头的日志对象均为该日志对象的子日志对象，
-# 当子日志对象没有配置Handler时则采用yuri日志对象的Handler配置。
-app_logger = logging.getLogger(‘yuri’)
-app_logger.setLevel(logging.NOTSET) # 日志对象默认的日志级别为logging.NOTSET
-
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(name)s:%(levelname)s:%(message)s'))
-console_handler.setLevel(logging.INFO)
-
-file_handler = logging.FileHandler(filename='log.txt', encoding='utf-8') # 若为日志记录含中文，那么必须设置encoding='utf-8'
-file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)s:%(levelname)s:%(message)s'))
-file_handler.setLevel(logging.DEBUG)
-
-app_logger.addHandler(console_handler)
-app_logger.addHandler(file_handler)
-
-db.execute()
-
-# yuri/db.py
-import logging
-
-# 创建模块的日志对象，
-logger = logging.getLogger(__name__)
-
-def execute():
-    logger.info('info message')   # 向sys.stdout和文件中输出日志
-    logger.debug('debug message') # 仅向文件中输出日志
-#+END_EXAMPLE
-
-** 通过配置文件自定日志对象
+** 通过配置文件自定义日志对象
 
 *** 从dict获取配置
 #+BEGIN_EXAMPLE python
@@ -2010,7 +2031,7 @@ keys=root, yuri
 keys=simpleFormatter
 
 [handlers]
-keys=consoleHandler
+keys=consoleHandler, fileHandler
 
 [logger_root]
 level=DEBUG
@@ -2018,9 +2039,15 @@ handlers=consoleHandler
 
 [handler_consoleHandler]
 class=StreamHandler
-formatter=simpleFormatter
-level=DEBUG
 args=(sys.stdout,)
+level=DEBUG
+formatter=simpleFormatter
+
+[handler_fileHandler]
+class=FileHandler
+args=('logging.log', 'a',)
+level=ERROR
+formatter=simpleFormatter
 
 [formatter_simpleFormatter]
 format=%(asctime)s %(name)s:%(levelname)s:%(message)s
@@ -2029,9 +2056,131 @@ format=%(asctime)s %(name)s:%(levelname)s:%(message)s
 import logging
 import logging.config
 
+"""
+Args:
+  fname(str|File|configparser.RawConfigParser): Path or file object of logging configuration file.
+  defaults: Parameters passed to ConfigParser, None as default. 
+  disable_existing_loggers(bool): Disable the existing logger, except who or whose ancestors are set in config file obviously, True as default.
+"""
 logging.config.fileConfig(fname='logging.ini', disable_existing_loggers=False)
 logger = logging.getLogger()
 #+END_EXAMPLE
+
+*** ini文件格式说明
+    ~logging.config.fileConfig~ 内调用 ~configparser.ConfigParser~ 来解析ini文件，然后通过 ~_create_fomatters~, ~_install_handlers~, ~_install_loggers~ 来配置日志对象。
+    
+**** ~configparser.ConfigParser~ 用法
+     #+BEGIN_EXAMPLE python
+     from configparser import ConfigParser
+
+     path = 'log.ini'
+     cp = ConfigParser()
+     cp.read(path)
+
+     # 或
+     #with open(path) as file:
+     #    cp = ConfigParser()
+     #    cp.read_file(file)
+
+     """
+     获取某Section下的所有属性
+     Args:
+         section(str): Section name.
+     
+     Returns:
+         list<(item_name: str, item_value: str)>: Items under specific section.
+     """
+     cp.items(‘loggers’)
+     #+END_EXAMPLE
+
+**** ini文件格式详解
+     #+BEGIN_EXAMPLE ini
+     # 这三个section通过选项keys设置logger、handler、formatter标识，多个标识以逗号分隔
+     # loggers中必须包含root标识
+     [loggers]
+     keys=root,db
+     [handlers]
+     keys=consoleHandler
+     [formatters]
+     keys=simpleFormatter
+
+     # 根logger的具体配置
+     [logger_root]
+     level=DEBUG # 必填项，值范围：NOSET,DEBUG,INFO,WARNING,ERROR,CRITICAL
+     handlers=consoleHandler # 必填项，设置日志记录处理器标识，多个处理器标识间以逗号分隔
+     
+     # 非根logger的具体配置
+     [logger_db]
+     level=DEBUG # 必填项，值范围：NOSET,DEBUG,INFO,WARNING,ERROR,CRITICAL。非根logger的level设置为NOSET，那么会自动继承父级的level。
+     handlers=consoleHandler # 必填项，设置日志记录处理器标识，多个处理器标识间以逗号分隔
+     # 对于非根logger为必填项，表示logger的层级关系。如qualname为autoui的logger为qualname是autoui.*的logger的父级。
+     # 那么logging.getLogger('autoui.test') 由于没有定义其自身的日志配置，因此它会采用autoui的日志配置。
+     qualname=autoui.database
+     propagate=0 # 选填项，表示是否将日志记录往上级传递，默认为1即传递，0为不传递。
+     
+     [handler_consoleHandler]
+     # 必填项，指定日志记录处理器的类
+     # 要么为相对于模块 ~logging~ 的全限定类名(如 ~StreamHandler~, ~handlers.TimeRotatingFileHandler~ 等)
+     # 要么为绝对的全限定类名(如 ~abc.handlers.HttpHandler~)，但相关代码文件必须位于 ~sys.path~ 的路径下。
+     class=StreamHandler
+     args=(sys.stdout,) # 必填项，作为class指定类型实例化时入参的tuple字面量。
+     formatters=simpleFormatter # 可选项，默认为直接输出日志信息，不附带其他信息。
+     level=DEBUG # 可选项
+     
+     [formatter_simpleFormatter]
+     # 这里所有项目都是可选的
+     class=logging.Formatter # 指定格式器全限定类名
+     format= # 指定日志消息格式
+     datafmt=%Y-%m-%d %H:%M:%S # 指定asctime的时间格式
+     #+END_EXAMPLE
+
+**** Formatter中可用的LogRecord属性
+     | Attritube   | Format          | Description                                                                                                   |
+     |-------------+-----------------+---------------------------------------------------------------------------------------------------------------|
+     | asctime     | %(asctime)s     | 将日志时间的构造为可读形式，默认为'2016-02-8 12:00:00,123'毫秒级别。可额外指定datefmt参数来指定该变量的格式。 |
+     | filename    | %(filename)s    | 包含path的文件名                                                                                              |
+     | funcName    | %(funcName)s    | 由哪个function发出日志                                                                                        |
+     | levelname   | %(levelname)s   | 日志的最终等级(被filter修改后)                                                                                |
+     | message     | %(message)s     | 日志信息                                                                                                      |
+     | lineno      | %(lineno)d      | 发出日志的源码行号                                                                                            |
+     | pathname    | %(pathname)s    | 完整路径                                                                                                      |
+     | process     | %(process)s     | 发出日志的进程号                                                                                              |
+     | thread      | %(thread)s      | 发出日志的线程号                                                                                              |
+     | name        | %(name)s        | 日志对象的名称                                                                                                |
+     | processName | %(processName)s | 发出日志的进程名称                                                                                            |
+     | threadName  | %(threadName)s  | 发出日志的线程名称                                                                                            |
+
+**** QA
+     1) 通过ConfigParser实例读取ini文件时抛出 ~ConfigParser.MissingSectionHeaderError: File contains no section headers.~
+        - 原因：ini文件中存在BOM，因此需要将编码方式修改为UTF-8 without BOM.
+
+** 通过代码自定义日志对象
+   实际项目中会先定义根日志对象，然后在各模块中创建子日志对象（有需要时定制子日志对象的Handler等属性）输出日志记录。
+   #+BEGIN_EXAMPLE python
+   import logging
+   
+   # 定义名为yuri的日志对象（非根日志对象），那么名称以yuri.开头的日志对象均为该日志对象的子日志对象，
+   # 当子日志对象没有配置Handler时则采用yuri日志对象的Handler配置。
+   app_logger = logging.getLogger(‘yuri’)
+   app_logger.setLevel(logging.NOTSET) # 日志对象默认的日志级别为logging.NOTSET
+   
+   console_handler = logging.StreamHandler()
+   console_handler.setFormatter(logging.Formatter('%(name)s:%(levelname)s:%(message)s'))
+   console_handler.setLevel(logging.INFO)
+   
+   file_handler = logging.FileHandler(filename='log.txt', encoding='utf-8') # 若为日志记录含中文，那么必须设置encoding='utf-8'
+   file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)s:%(levelname)s:%(message)s'))
+   file_handler.setLevel(logging.DEBUG)
+   
+   app_logger.addHandler(console_handler)
+   app_logger.addHandler(file_handler)
+   
+   # 创建模块的日志对象，
+   logger = logging.getLogger('yuri.test')
+   
+   logger.info('info message')   # 向sys.stdout和文件中输出日志
+   logger.debug('debug message') # 仅向文件中输出日志
+   #+END_EXAMPLE
 
 ** 禁止日志输出
 1) 默认日志对象采用 ~logging.disable(logging.INFO)~ 禁止输入某一级别的日志记录
@@ -2101,6 +2250,8 @@ handler_stderr.setLevel(logging.WARN)
 logger.addHandler(handler_stderr)
 #+END_EXAMPLE
 
+** TODO 多线程/多进程下的并发问题
+   
 * TODO 调试/性能优化
 pdb和ipdb
 追踪模块trace用于追踪打印运行路径， ~python -m trace --trace foo.py~ 。
@@ -2125,7 +2276,7 @@ from __future__ import (
 
 * TODO 单元测试
 
-** 通过unittest2模块进行单元测试
+** unittest2模块进行单元测试
 unittest2模块是对unittest模块API的优化，并让测试用例书写上更符合pythonic。
 Python2.7内置的unittest模块就是unittest2模块；
 而Python2.6及以下版本则需要 ~pip install unittest2~
@@ -2283,7 +2434,7 @@ if __name__ == '__main__':
    runner.run(test_suite)
 #+END_EXAMPLE
 
-** TODO 通过pytest
+** TODO pytest
 *** 测试用例搜索规则
   1) 若没有在命令行设置目录路径 ，则从环境变量testpaths或当前目录开始递归遍历，期间遇到被设置在环境变量norecursedirs的目录路径则不递归遍历其子目录；
   2) 递归遍历期间发现文件名称匹配 ~test_*.py~ 或 ~*_test.py~ 的文件，则读取它们的内容；
@@ -2302,6 +2453,46 @@ if __name__ == '__main__':
 **** html
    插件： ~pytest-html~
   
+** doctest
+   将代码中的docstring作为测试用例来运行，从而判断函数执行的正确性，并形成运行结果。
+   优点：
+   1) 实现文档和代码同步，作为书写教程的一个好工具；
+   2) 将代码测试融入文档中。
+
+   缺点：
+   1) 没有提供测试套件，因此书写测试用例时十分繁琐。
+
+   因此仅适合刚书写测试用例，若大型项目时还是使用pytest。
+
+   分为 *普通注释部分* 和 *代码执行部分*
+   *普通注释部分* 和以前的注释无差异，但 *代码执行部分* 则有不同的规定：
+   1) 以 ~>>>~ 和 ~...~ 来和普通注释部分区分；
+   2) 代码执行部分分为 *输入* 和 *输出*
+
+*** 示例
+    #+BEGIN_EXAMPLE python
+    # factorial.py
+    
+    def factorial(n):
+        """
+        Return the factorial of n.
+        
+        >>> [factorial(n) for n in range(6)]
+        [1,1,2,6,24,120]
+        >>> [factorial(n) for n in range(6)]
+        [1,1,2,6,24,120]
+        """
+        pass
+
+    if __name__ == '__main__':
+        import doctest
+        # 搜索整个模块的所有__doc__，并运行代码执行部分的测试用列。
+        # 运行 python factorial.py 时，仅实际运行值与期望值不同时才会显示测试结果
+        # 运行 python factorial.py -v 时，则会详细显示测试结果
+        doctest.testmod()
+        doctest.testfile('doctest_test.txt') # 测试某文件中的测试用例。
+    #+END_EXAMPLE
+
 * str和unicode
 
 ** 类型不同导致正则匹配失败
@@ -2331,7 +2522,7 @@ unmatched
 1) 不要用print调试；
 2) 字符串都用unicode类型的。
 
-* 时间和日期
+* TODO 时间和日期
 挂钟时间(Wall clock time)：以某个固定时间为起点到现在的时间间隔。
 处理器时间(Processor clock time)：用于度量进程占用CPU的时间。
 
@@ -2372,6 +2563,16 @@ t = datetime.strptime(str, format)
 # datetime格式化输出
 print(t.strftime(format))
 #+END_EXAMPLE
+
+1) ~datetime.timedelta~
+   - 属性
+     1) ~days: int~
+     2) ~seconds: int~
+     3) ~microseconds: int~
+   - 方法
+     1) ~total_seconds() -> float~ 将days+seconds+microseconds转换为秒。
+
+** calendar模块
 
 * 信号量 
 异步
@@ -2423,10 +2624,38 @@ signal.alarm(5)
 1) 手工操作
    没有操作系统的概念，必须逐个用户通过打孔卡片完成输入，然后等待CPU计算处理后，再将结果输出到卡片/纸条等媒介．
 2) 联机批处理
-   存在批处理程序，用户将作业(程序和数据)通过输入机输入，等待作业数达到一定量后批量传输给CPU计算处理，然后将结果输出到输出机．
+   存在批处理程序，用户将作业(程序和数据)通过输入机输入，等待作业数达到一定量后批量通过输入机传输给CPU计算处理，然后将结果输出到输出机．
+   但在作业输入输出的过程中，CPU依然处于空闲状态。
 3) 离线批处理
-   输入机、输出机、卫星机和高速磁带组成一套与CPU独立的输入输出系统。用户将作业(程序和数据)通过输入
-
+   输入机、卫星机、高速磁带和输出机组成一套与CPU独立的输入输出系统。用户将作业(程序和数据)通过输入机(多台)录入作业，作业通过卫星机连接高速磁带从而将作业存储到高速磁带上，当CPU(主机)处于空闲状态时则自动从高速磁带上读取作业执行，再将结果输出到高速磁带，然后卫星机从高速磁带读取结果输出到输出机。
+   但每次CPU(主机)内存中仅存放一道作业，每当它运行期间发出IO请求后，高速的CPU便会处于等待低速IO完成的空闲状态。
+4) 多道程序系统
+   同时把多个程序加载到内存，并允许它们交替在CPU中运行，它们共享系统中各种硬、软件资源，当一道程序因IO请求而暂停运行时，CPU便立即转去运行另一道程序。
+   多道程序系统的出现，标志这操作系统逐渐趋成熟的阶段，先后出现作业作业调度管理、处理机管理、存储器管理、外部设备管理、文件系统管理等功能。
+   由于多个程序同时在计算机中运行，开始有了空间隔离的概念，只有内存空间隔离，才能让数据更加安全、稳定。除了空间隔离之外，多道技术还第一次体现了时空复用的特点，遇到IO操作就切换程序，提高CPU利用率，让计算机的工作效率更高。
+   但若一个程序一直占用CPU，那么其他程序将无法获取CPU资源。
+5) 多道批处理系统
+   在多道程序系统上添加批处理功能，在系统运行期间不允许用户与作业发生交互。
+   好处提高系统吞吐量。
+6) 分时系统
+   一台计算机可同时连接多个用户终端，而每个用户可在自己的终端上联机使用计算机，好像自己独占机器一样。
+   分时技术：把处理机的运行时间分成很短的时间片，按时间片轮流把处理机分配给各联机作业使用。
+   特点：
+   1) 多路性，若干个用户同时使用一个台计算机。微观上是各用户轮流使用计算机；宏观上是各用并行工作。
+   2) 交互性，用户可根据系统对请求的响应进一步向系统提出新的请求。因此分时系统又称为交互式系统。
+   3) 独立性，用户之间可以独立操作，互不干扰。
+   4) 及时性，系统对用户的输入能及时作出响应。
+   5) 限制：分时系统在接收多个用户请求时，由于内存空间有限，因此会将未轮到的作业放入磁盘，一旦轮到则调入内存。若CPU时间片用完后，又将作业存回磁盘。
+   6) 缺点：当没有发生IO操作而是因CPU时间片用完被切换掉，这样并没有提高CPU的效率，反而会降低。
+7) 实时系统
+   用于实时控制和实时信息处理的应用领域。实时系统能够及时响应随机发生的外部事件，并在严格的时间范围内完成对该事件的处理。
+   如：飞机控制和导弹控制系统。
+   特点：
+   1) 及时响应，每个信息接收、分析处理和发送的过程必须在严格的时间限制内完成；
+   2) 高可靠性，需采取冗余措施，双机系统前后台工作，可包括必要的保密措施等。
+8) 通用操作系统
+   操作系统的3种基本类型：多道批处理系统、分时系统、实时系统。
+   通用操作系统：具有多种类型特征的操作系统，可以同时兼由多道批处理、分时和实时处理的功能，或其中两种的功能。
 
 ** 多进程
 
@@ -2532,9 +2761,9 @@ signal.alarm(5)
      2) 增删改运行环境不影响父进程和已创建的子进程。
    - 系统环境变量 ~PYTHONPATH~ 将决定模块查找路径
 8) 进程结构
-   1) 代码段
-   2) 数据段
-   3) 堆栈段
+   1) 代码段/文本区域(text region)，存放处理器执行的代码；
+   2) 数据段(data region)，存放变量和进程执行期间使用的动态分配的内存；
+   3) 堆栈段(stack region)，存放这活动过程调用的指令和本地变量。
 9) 进程间通信(IPC)
    - 由于操作系统隔离各个进程可以访问的的内存地址空间(即进程拥有各自的用户地址空间)，因此内核提供一套称为IPC的机制用于进程间交换数据。
    - 底层原理：内核开辟一段地址空间作为缓冲区，进程A将数据从A的用户地址空间复制到内核缓冲区，然后再将数据从内核缓冲区复制到进程B的用户地址空间。
@@ -2549,25 +2778,26 @@ signal.alarm(5)
 Windows下进程的创建成本比Unix/Linux高。
 
 *** 进程创建方式——system
-system函数会通过启用 ~/bin/sh~ 进程执行入参指定的shell命令，shell命令执行期间信号量SIGCHID会被阻塞（即告知内核不要在发送SIGCHID信号量），而SIGINT和SIGQUIT会被忽略。
+    system函数会通过启用 ~/bin/sh~ 进程执行入参指定的shell命令，shell命令执行期间信号量SIGCHID会被阻塞（即告知内核不要在发送SIGCHID信号量），而SIGINT和SIGQUIT会被忽略。
 system函数内部逻辑为：
 1) 通过系统调用fork创建一个子进程，失败则返回-1，正常则执行第2步；
 2) 然后在子进程中调用系统调用excl执行 ~/bin/sh -c <command>~ 执行入参指定的命令，若excl执行失败则返回127，成功则返回入参命令的返回值；
 3) 而父进程进入TASK_INTERRUPTABLE状态，等待子进程结束后恢复为TASK_RUNNING，并返回子进程的返回状态；
-4) 若父进程在休眠状态被信号量终端时，则返回-1。
+4) 若父进程在休眠状态被信号量中断时，则返回-1。
 
 而Python中的 ~os.system~ 则是对C标准库中的 ~system~ 函数的封装。
 #+BEGIN_EXAMPLE python
 import os
 
 # 返回值为0则表示命令执行成功，其他值表示执行失败。
+# 当子进程是被信号中断时，返回值为负数。
 # 若有异常则抛出OSError。
 ret_code = os.system('ls')
 #+END_EXAMPLE
 
 *** 进程创建方式——exec函数族
-  在Linux系统中创建进程分为两步：创建进程实例 和 加载进程映像。
-而exec函数族则用于在当前进程实例上加载新的进程映像替代原有的进程映像，即将代码段换成新的程序代码，废弃原有的数据段和堆栈段，保留进程其他信息（PID/PPID/PGID/SID）。
+    exec*族函数为POSIX系统的直接映射，在Unix系统中创建进程分为两步：创建进程实例 和 加载进程映像。
+而exec函数族则用于在当前进程实例上加载新的进程映像替代原有的进程映像，即将代码段换成新的程序代码，废弃原有的数据段和堆栈段，保留进程其他信息（PID/PPID/PGID/SID），并且原来已打开的描述符均可继续使用，原来进程的环境变量也继续使用。
   os.exec*函数族为对Linux下exec函数族的封装。因此Python程序通过os.exec*函数族创建新进程时，Pyton程序将马上退出，因此os.exec*函数族没有返回值。
 #+BEGIN_EXAMPLE python
 import os
@@ -2622,6 +2852,12 @@ import os
 
 # :returns os._Environ: 返回运行环境/环境变量
 os.environ
+os.environ.get('PATH')
+for key in os.environ.keys():
+    print(key)
+os.environ['NEW’] = ‘new environment variable’
+
+os.getenv('PATH')
 
 # :returns int: 当前进程PID
 os.getpid()
@@ -2636,6 +2872,8 @@ os.getpgid(pid)
 # :returns int: 指定进程所属会话ID
 os.getsid(pid)
 #+END_EXAMPLE
+
+当创建进程时，子进程会得到父进程环境变量的一个副本。当子进程创建完毕后，对父进程环境变量的修改就不会影响到子进程了。也不会影响系统环境变量。
 
 *** 退出进程
 #+BEGIN_EXAMPLE python
@@ -2684,7 +2922,77 @@ os.EX_NOPERM - 没有权限执行该操作
 os.EX_CONFIG - 配置错误                               
 """
 os._exit(ret_code)
+
+"""
+向进程或进程组发送信号
+
+Args:
+  pid(int): 进程或进程组id
+  signal(int): 信号量
+"""
+os.kill(pid: int, signal: int)
 #+END_EXAMPLE
+
+*** 高阶模块subprocess管理进程
+    可以调用外部的系统命令创建新的子进程，同时连接到子进程的input/output/error管道上，并得到子进程的返回值。用于替代原有的 ~os.system,os.spawn*,os.popen*,popen2.*,commands.*~ 等方法。
+    
+**** Popen类
+     #+BEGIN_EXAMPLE python
+     class Popen(args: str|sequence, # 为要执行的外部程序
+                 bufsize = 0, 
+                 executable = None, 
+                 stdin = None, # 指定子进程的标准输入的处理器，其值可以为subprocess.PIPE、文件描述符和None等。
+                 stdout = None, # 指定子进程的标准输出的处理器，其值可以为subprocess.PIPE、文件描述符和None等。
+                 stderr = None, # 指定子进程的标准错误的处理器，其值可以为subprocess.PIPE、文件描述符和None等。
+                 preexec_fn = None,
+                 close_fds = False,
+                 # Linux下若为False则调用fork创建子进程，然后调用os.execvp执行外部程序，若为True则调用系统shell来执行指定程序。
+                 # Windows下不管为True或False，均为调用CreateProcess执行指定的外部程序，若args为序列则先调用list2cmdline转换为字符串。
+                 shell = False,
+                 cwd = None,
+                 env = None,
+                 universal_newlines = False,
+                 startupinfo = None,
+                 creationflags = 0)
+     #+END_EXAMPLE
+     
+     示例
+     1) ping 域名
+        #+BEGIN_EXAMPLE python
+        import subprocess
+        
+        proc1 = Popen(args='ping -c 4 www.baidu.com', shell=True)
+        # 因为os.execvp('ping', ('ping', '-c 4', 'www.baidu.com')是这样，所以Popen的args入参必须为序列。
+        # proc2 = Popen(args=('ping', '-c 4', 'www.baidu.com'), shell=False)
+        proc1.wait() # 等待子进程完成在执行后续代码
+        print(proc.pid)
+        print(proc.returncode)
+        #+END_EXAMPLE
+     2) 重定向子进程的标准输出
+        #+BEGIN_EXAMPLE python
+        import subprocess
+
+        proc = Popen(args='ping -c 4 www.baidu.com', shell=True, stdout=subprocess.PIPE)
+        proc.wait()
+        
+        # proc.stdout: <open file '<fdopen>', mode 'rb'>
+        print(proc.stdout.read()) # 读取子进程的输出
+        #+END_EXAMPLE
+     3) 重定向子进程的标准输入，顺便接收标准输出和标准错误
+        #+BEGIN_EXAMPLE python
+        import subprocess
+
+        proc = Popen(args='cat', shell=True, stdin=subprocess.PIPE)
+        # 由于标准输出和标准错误都直接缓存到内存中，因此数据量大时不要使用该方法。
+        stdout, stderr = proc.communicate(input='Hello World')
+        print(stdout.read())
+        print(stderr.read())
+        #+END_EXAMPLE
+
+**** 便捷方式：方法 ~call~ 和 ~call_check~
+     两者为Popen类的简化版，它们的入参和Popen构造方法一致，但添加一些额外功能。
+     1) ~call~ 直接调用命令生成子进程，并等待子进程结束后返回子进程的返回值。
+     2) ~call_check~ 行为和 ~call~ 相同，但最后若返回值不为0则抛出 CallProcessError异常，而返回值会保存到异常对象的returncode属性中。
 
 *** IPC——管道
 管道是所有*nix系统均提供的一种古老的IPC方式。
@@ -2893,14 +3201,15 @@ def create_named_pipes():
 # client.py
 #+END_EXAMPLE
 
-
 *** IPC——消息队列
-
 *** IPC——共享内存
 nmap模块
 
 *** IPC——信号量
-
+    信号是操作系统提供的一种软件中断，采用异步方式向应用程序传递相关消息。最早由Unix操作系统引入，后来在各操作系统上都有类似的实现，但各平台的信号机制实现不尽相同。
+    而Python中的signal模块并不是使用Python来实现，而是依赖具体的平台实现，即仅平台包含的信号可用而其他平台的信号则不可用。
+    另外Python中对每个信号都有一个默认的信号处理程序，应用程序收到信号后若没有自定义信号处理程序，则会调用默认的信号处理程序。
+    
 *** IPC——Socket
 
 *** multiprocessing模块
@@ -2918,8 +3227,6 @@ from multiprocessing import (
 
 def job(
 #+END_EXAMPLE
-
-
 
 ** 多线程
 
@@ -3121,7 +3428,6 @@ https://github.com/dadadel/pyment
    print(m2.hexdigest())
    #+END_EXAMPLE
 
-
 * 内省(Introspection) 和 反射(Reflection)
 
 ** 内省(Introspection)
@@ -3199,7 +3505,7 @@ https://github.com/dadadel/pyment
       #+END_EXAMPLE
    3) ~__getattr__~ 动态实现类中没有定义的方法
 
-* 字符串格式化
+* TODO 字符串格式化
   1) %-formatting， ~sentence = '%s %d' % ('hello', 123,)~
   2) str.format， ~sentence = '{} {}'.format('hello', 123)~
   3) f-formatting，Python3.6后新特性
@@ -3208,7 +3514,7 @@ https://github.com/dadadel/pyment
      sentence = f'
      #+END_EXAMPLE
 
-* 环境变量
+* TODO 环境变量
   通过模块 ~os~ 来获取
   #+BEGIN_EXAMPLE python
   # python3.6
@@ -3220,3 +3526,134 @@ https://github.com/dadadel/pyment
       print(f'key: {k}, value: {v}')
   #+END_EXAMPLE
 
+* Python3的bytes和str
+  str类型为unicode编码字符串，bytes类型为二进制数据。
+  两者不能进行隐式转换，必须采用显式转换。
+  #+begin_src
+  # str类型转bytes类型
+  str_var = "hello world"
+  bytes_var = str_var.encode("utf-8")
+  
+  # bytes类型转str类型
+  bytes_var = b"\xe2\xac20"
+  str_var = bytes_var.decode("utf-8")
+  #+end_src
+  str类型是文本抽象表示，即对文本的操作（分割、切片、拼接和搜索）均不用关心底层（如一个字符要多少个字节表示等）。
+
+* 延迟执行
+
+** 单线程阻塞调用，通过 ~sched.scheduler~
+   缺点：所有任务均在同一线程中执行，若前面的任务执行时间过长则会延后后续事件的时间开始时间。
+
+   #+BEGIN_EXAMPLE python
+   import time
+   from sched import scheduler
+
+   """
+   Args:
+       timeFunc(()->float): 执行run()时调用该函数来生成基准时间，基准时间+延迟就是实际执行时间。
+       delayFunc(function): 提供实现延迟的方法。
+   """
+   sched = scheduler(time.time, time.sleep)
+
+   """
+   设置绝对时间延迟执行任务。
+   
+   Args:
+       time(float): 绝对时间。
+       priority(int): 若多个任务延迟执行重叠时，按优先级逐个执行，0优先级别最高。
+       action(function): 任务函数。
+       argument(tuple): 传递给任务函数的入参tuple。
+
+   Returns:
+       Event: 延迟任务事件
+   """
+   evt1 = sched.enterabs(time.time + 10, 0, lambda x: print(x), ('abc',))
+   """
+   设置相对时间延迟执行任务。
+   
+   Args:
+       delay(float): 延迟。
+       priority(int): 若多个任务延迟执行重叠时，按优先级逐个执行，0优先级别最高。
+       action(function): 任务函数。
+       argument(tuple): 传递给任务函数的入参tuple。
+
+   Returns:
+       Event: 延迟任务事件
+   """
+   evt2 = sched.enter(10, 1, lambda x: print(x), ('cde',))
+
+   """
+   取消延迟任务
+
+   Args:
+       event(Event): 延迟任务事件
+
+   Raises:
+       ValueError: 若事件不在当前队列中，则抛出。
+   """
+   sched.cancel(evt1)
+
+   """
+   检查事件队列是否为空
+
+   Returns:
+       bool:
+   """
+   sched.empty()
+
+   """
+   运行所有延迟任务。
+
+   Cautions:
+       调用时会阻塞当前线程，直到所有任务执行完毕。
+   """
+   sched.run()
+
+   # 按运行顺序排列的事件列表
+   # 每个事件实例都包含：时间、优先级、动作和参数字段。
+   sched.queue
+   #+END_EXAMPLE
+
+** 多线程非阻塞调用，通过 ~threading.Timer~
+   #+BEGIN_EXAMPLE python
+   from threading import Timer
+ 
+   
+   timer1 = Timer(5, lambda x: print(x), ('abc',))
+   timer2 = Timer(10, lambda x: print(x), ('cde',))
+
+   timer1.start()
+   timer2.start()
+   timer2.cancel()
+   #+END_EXAMPLE
+   Timer的实例方法：
+   1) ~cancel()~
+   2) ~start()~
+   3) ~join()~
+
+* 随机数
+  #+BEGIN_EXAMPLE python
+  import random
+
+  # 返回[0,1)范围的随机浮点数
+  random.random() -> float
+
+  # 返回[start, end)范围的随机整数
+  random.randint(includeed_start: int, excluded_end: int) -> int
+
+  # 返回[start, end)范围的随机浮点数
+  random.uniform(includeed_start: float, excluded_end: float) -> float
+
+  # 从序列中随机返回一个元素
+  random.choice(sequence: list|tuple|str) -> Any
+
+  # 返回[start, end)范围内间隔为step的随机整数
+  random.randrange(includeed_start: int, excluded_end: int, step: int) -> int
+
+  # 将sequence中的元素顺序随机打乱
+  random.shuffle(sequence: list|tuple|str)
+
+  # 从序列中随机提取count个元素组成新的列表
+  random.sample(sequence: list|tuple|str, count: int) -> list
+  #+END_EXAMPLE

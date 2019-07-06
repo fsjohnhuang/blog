@@ -1,0 +1,14 @@
+#+BEGIN_EXAMPLE sql
+
+-- 查看所有表的表结构
+select *
+from sqlite_master
+where type = 'table';
+
+
+-- 查看某表的表结构
+select * 
+from sqlite_master
+where name = 'table_name';
+#+END_EXAMPLE
+
