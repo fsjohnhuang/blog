@@ -339,8 +339,9 @@ DESCRIPTION = 'description of my project.'
 URL = 'project url'
 EMAIL = 'me@mail.com'
 AUTHOR = 'fsjohnhuang'
-REQUIRES_PYTHON = '>=2.7'
-VESION = '0.1.0'
+# Python版本要求，大于等于2.7,不支持3.0和3.1
+REQUIRES_PYTHON = '>=2.7, !=3.0.*, !=3.1.*'
+VERSION = '0.1.0'
 
 # What packages are required for this module to be executed?
 # 默认从pypi仓库下载依赖包进行安装
@@ -467,30 +468,48 @@ python setup.py --help-commands
 # 编译不打包
 python setup.py build
 
-# 构建源码分发包
+# 构建源码分发包，保存在目录dist下
 # 默认压缩格式为 Linux下为.tar.gz，Windows下为.zip
 # 还可以修改压缩包的所有者和所属组信息
-python setup.py sdist --formats=gztar,zip --owner=root --group=root
+python setup.py sdist build --formats=gztar,zip --owner=root --group=root
 
-# 编译并打包为二进制分发包
-python setup.py bdist
+# 编译并打包为二进制分发包，保存在目录dist下
+python setup.py bdist build --universal
 
-# 编译并打包为RPM分发包
-python setup.py bdist_rpm
+# 编译并打包为RPM分发包，保存在目录dist下
+python setup.py bdist_rpm build
 
-# 构建二进制的Egg分发包
-python setup.py bdist_egg
+# 构建二进制的Egg分发包，保存在目录dist下
+python setup.py bdist_egg build
 
-# 构建WinNT下的二进制分发包
-python setup.py bdist_wininst
+# 构建WinNT下的二进制分发包，保存在目录dist下
+python setup.py bdist_wininst build
 
-# 将包安装到Python安装目录的lib下
+# 将包安装到Python安装目录的lib/site-packages
 python setup.py install
 
 # 在开发阶段
 # 测试安装包的有效性，实际上是在文件系统中创建一个符号链接到包的实际目录，当修改包内容时就能在依赖该包的项目中直接使用，而不用重复安装卸载
-develop
+python setup.py develop
 #+END_EXAMPLE
+
+**** 分发到pypi.python.org
+     1) 打包 ~python setup.py sdist build~
+     2) 分发
+        1) 通过setuptools
+           帐号密码采用明文传输，推荐使用twine
+           #+BEGIN_EXAMPLE bash
+           python setup.py sdist upload
+           #+END_EXAMPLE
+        2) 通过twine
+           #+BEGIN_EXAMPLE bash
+           pip install twine
+
+           twine upload dist/*
+           #+END_EXAMPLE
+
+
+
 
 ***** ~python setup.py sdist~ 详解
 用于构建源码分发包。
@@ -644,6 +663,29 @@ compileall.compile_dir('/path/to/dir')
 * TODO 异常处理
 Python的错误分为语法错误 和 异常，语法错误是解析器报的错误，而异常是虚拟机运行时报的错误。
 BaseException为所有异常的基类，Exception为常规异常的基类。
+
+** 内置异常类
+1) AttributeError 属性错误
+   访问一个对象没有的属性时抛出。
+2) IOError 输入输出错误
+3) ImportError 模块导入错误
+   因路径问题无法导入包或模块。
+4) IndentationError 缩进错误
+5) IndexError 索引错误
+   下标索引超出序列边界
+6) KeyError 关键字错误
+   访问字典中不存在的键
+7) KeyboardInterrupt 键盘中断错误
+   ~Ctrl+C~ 按下
+8) NameError 名称错误
+   使用一个未赋值的变量
+9) SyntaxError 语法错误
+10) TypeError 类型错误
+    传入对象与要求不符合
+11) UnboundLocalError 局部变量错误
+    试图访问一个还未被设置的局部变量，基本上是由于另有一个同名的全局变量，导致你以为正在访问它
+12) ValueError 值错误
+    传入一个调用者不期望的值，即使值的类型是正确的。
 
 ** 捕获异常
    1) Python2.x
@@ -1150,11 +1192,29 @@ print(bingo_results) # 回显 [0,1,2,3,4]
    # 通过键获取值
    d['john'] # 若键不存在则抛出KeyError
    d.get('john') # 若键不存在则返回None
+   d.get('john', 'default value') # 若键不存在则返回默认值 'default value'
    # 设置值
    d['john'] = 90
-   # 移除键值对
-   d.pop('john')
+   val = d.pop('john') # 移除指定键的键值对，并返回值若没有键值对则返回None
+   val = d.pop('john', 'default value')  # 移除指定键的键值对，并返回值若没有键值对则返回 ‘default value'
+
+   item = d.popitem() # 随机移除键值对并返回
+
+   d.update({'new_dict': 1}) # 将另一个字典更新到已有字典中
+   d.setdefault(key, default=None) # 若不存在指定的键则设置值，否则设置。
+
+   shallow_copy = d.copy() # 浅复制
+   d.clear() # 清空字典
+   d.fromkeys(seq[,val]) # 以seq中的元素作为键，以val作为值，创建一个新的字典
+   d.has_key(key) # 
    #+END_EXAMPLE
+   1) ~dict_items: iterable(tuple(k,v))~
+      #+BEGIN_EXAMPLE python
+      d = {'a': 1}
+      items = d.items()
+      for item in items:
+          print('key: %s, value: %s' % item)
+      #+END_EXAMPLE
 4) array
    #+BEGIN_EXAMPLE python
    from array import array
@@ -1649,6 +1709,11 @@ dir(obj)，返回实例的所有公开属性和方法（包含特殊方法）
 callable(obj)，返回布尔值，判断该对象是否为Callable对象，即是否实现了__call__方法
 #+END_EXAMPLE
 
+*** 判断对象是否为函数的3种方式
+1) ~hasattr(obj, '__call__')~
+2) ~callable(obj)~
+3) ~inspect.isfunction(obj)~
+
 ** 通过__getattr__实现动态SDK
 #+BEGIN_EXAMPLE python
 class SDK(object):
@@ -1691,7 +1756,7 @@ print(a.get_age())
 print(A.info())
 #+END_EXAMPLE
 
-** 通过metaclass实现ORM框架
+** TODO 通过metaclass实现ORM框架
 metaclass为类型类,用于定义创建类的行为。
 ORM框架中具体的数据模型由框架使用后期制定，因此要在ORM框架中获取数据模型属性再映射到数据表，若通过反射方式则需要在save、delete或显示调用映射等才能获取，但通过metaclass则在定义数据模型时会提取。
 
@@ -1919,12 +1984,12 @@ Formatter，用于配置日志的输出格式。
 默认输出格式： ~<日志级别>:<Logger实例名称>:<日志消息内容>~ ，如 ~WARNING:root:warn message~ 。
 
 日志级别
-1) notset，最低日志级别；
-2) debug，详细信息，只有开发调试时需要关注；
-3) info，证明事件按预期工作，突出强调应用的运行过程；
-4) warn/warning，发生可容忍的错误，但需要修复；
-5) error，严重错误，但程序可以继续运行，需要马上修复；
-6) critical/fatal，严重错误，程序已经不能继续运行。
+1) notset，0, 最低日志级别；
+2) debug，10, 详细信息，只有开发调试时需要关注；
+3) info，20, 证明事件按预期工作，突出强调应用的运行过程；
+4) warn/warning，30, 发生可容忍的错误，但需要修复；
+5) error，40, 严重错误，但程序可以继续运行，需要马上修复；
+6) critical/fatal，50, 严重错误，程序已经不能继续运行。
 
 logging日志记录流程
 1) 判断当前Logger的日志级别是否可用，不可用则不输出日志，并流程结束；
@@ -1983,7 +2048,19 @@ import logging
 import logging.config
 
 cfg = {
-  "version": 1,
+  "version": 1, # 版本 - 被设置为表示模式版本的整数值。目前唯一有效的值是1，但拥有这个键可以使模式发展，同时仍然保持向后兼容性。
+  # 根日志记录器配置
+  "root": {
+    "handlers": ['console', 'file'],
+    "level": 'DEBUG', # 默认为WARN，并且根日志记录器不能设置为NOSET。
+  },
+  # 非根日志记录器配置
+  "loggers": {
+    "yuri": {
+      "handlers": ['console'],
+      "level": 'DEBUG'
+    }
+  }
   "formatters": {
     "simple": {
       "format": '%(asctime)s %(name)s:%(levelname)s:%(message)s',
@@ -2004,23 +2081,13 @@ cfg = {
       "formatter": 'simple'
     }
   },
-  "loggers": {
-    "root": {
-      "handlers": ['console', 'file'],
-      "level": 'NOTSET'
-    },
-    "yuri": {
-      "handlers": ['console'],
-      "level": 'DEBUG'
-    }
-  }
 }
 
 logging.config.dictConfig(cfg)
 logger = logging.getLogger()
 yuri_logger = logging.getLogger('yuri')
 #+END_EXAMPLE
-上述可将配置写到YML文件，然后读取出来转换为dict就可以了。
+上述可将配置写到YML文件，然后通过 ~pyyaml~ 读取出来转换为dict就可以了。
 
 *** 从ini文件获取配置
 #+BEGIN_EXAMPLE logging.ini
@@ -2161,8 +2228,23 @@ logger = logging.getLogger()
    
    # 定义名为yuri的日志对象（非根日志对象），那么名称以yuri.开头的日志对象均为该日志对象的子日志对象，
    # 当子日志对象没有配置Handler时则采用yuri日志对象的Handler配置。
+   # 若入参相同，则返回相同的日志记录器实例。
    app_logger = logging.getLogger(‘yuri’)
-   app_logger.setLevel(logging.NOTSET) # 日志对象默认的日志级别为logging.NOTSET
+   # 日志对象默认的日志级别为logging.NOTSET，若为根logger则处理所有日志消息，则为非根logger则将日志消息委派给父日志(父日志会递归向上委派给非NOSET的父日志或根日志)处理。
+
+   # 若日志级别不如所设日志级别重要的日志，则忽略。
+   app_logger.setLevel(logging.NOTSET) 
+
+   # 若日志记录器级别非NOSET，则直接返回级别(如logging.DEBUG)
+   # 若日志记录器级别设置为NOSET，则递归上父日志记录器搜索，直到找到非NOSET或根日志记录器位置，然后返回找到的父日志记录器的日志级别。
+   app_logger.getEffectiveLevel()
+
+   # 返回name为app_logger.name + '.' + 'suffix'的子日志记录器。
+   app_logger.getChild('suffix')
+
+   # 检查日志记录器是否可以处理指定级别的日志消息，可以则返回True。
+   # 设置值logging.NOSET永远返回False
+   app_logger.isEnabledFor(logging.DEBUG)
    
    console_handler = logging.StreamHandler()
    console_handler.setFormatter(logging.Formatter('%(name)s:%(levelname)s:%(message)s'))
@@ -2180,6 +2262,26 @@ logger = logging.getLogger()
    
    logger.info('info message')   # 向sys.stdout和文件中输出日志
    logger.debug('debug message') # 仅向文件中输出日志
+   #+END_EXAMPLE
+
+** 日志输出方法
+   #+BEGIN_EXAMPLE python
+   logger = logging.getLogger()
+
+   """
+   Args:
+       msg(str): %-formatting string.
+       *args(tuple): Arguments for parameter `msg`.
+   
+   Kwargs:
+       exc_inf(bool): 默认值为False，若为True则调用sys.exc_info()获取最后抛出一个未捕获的异常，并将异常调用栈追加到日志记录中。
+   """
+   logger.debug(msg, *args, **kwargs)
+   logger.info(msg, *args, **kwargs)
+   logger.warning(msg, *args, **kwargs)
+   logger.error(msg, *args, **kwargs)     # exc_info默认为False
+   logger.exception(msg, *args, **kwargs) # exc_info默认为True
+   logger.critical(msg, *args, **kwargs)
    #+END_EXAMPLE
 
 ** 禁止日志输出
@@ -2252,6 +2354,32 @@ logger.addHandler(handler_stderr)
 
 ** TODO 多线程/多进程下的并发问题
    
+** 自定义Handler
+   #+BEGIN_EXAMPLE python
+   import logging
+
+   class MemoryHandler(logging.Handler):
+       def __init__(self, ):
+           super(MemoryHandler).__init__()
+
+       def emit(self, record):
+           self.message = self.format(record)
+
+
+   logging.basicConfig()
+   logger = logging.getLogger('test')
+   logger.setLevel(logging.INFO)
+   mem_handler = MemoryHandler()
+   logger.addHandler(mem_handler)
+
+   logger.info('hello')
+   print(mem_handler.message)
+   #+END_EXAMPLE
+
+** 源码剖析
+   根logger的类型为logging.RootLogger
+   非根类型的类型为logging.Logger
+
 * TODO 调试/性能优化
 pdb和ipdb
 追踪模块trace用于追踪打印运行路径， ~python -m trace --trace foo.py~ 。
@@ -2441,6 +2569,8 @@ if __name__ == '__main__':
   3) 在文件中搜索时规则如下
      1) 函数名匹配 ~test*~ 的函数
      2) 类名匹配 ~Test*~ 类且没有定义 ~__init__~ 方法的方法名匹配 ~test*~ 的方法
+
+*** 
 
 *** 配置文件pytest.ini
   https://docs.pytest.org/en/latest/customize.html#command-line-options-and-configuration-file-settings
@@ -2659,10 +2789,17 @@ signal.alarm(5)
 
 ** 多进程
 
+*** TODO 僵尸进程
+*** 守护进程
+运行在后台并且只在需要时才唤醒的进程，称为守护进程。（如电子邮件、新闻、打印等）
+
 *** Linux下的进程
 1) *会话(Session)* ，是一组 *进程组* 的集合，当用户通过ssh或其它终端接入Linux时就会创建一个会话，其下的所有进程组默认属于该会话
    1) *进程* 创建新 *会话* 时会同时创建一个 *默认进程组* ，并且该进程将作为默认进程组的组长进程，会话ID和进程组ID与进程该进程ID一致；
    2) 组长进程不能创建其他会话。
+   3) 会话结束时会销毁其下的所有前台和后台进程组（由于守护进程随系统启动而启动，不属于该会话下，因此不会被销毁）
+      具体是向其下的前台和后台进程发送信号量SIGINT和SIGHUP来结束进程。
+      - 让进程不被结束 ~nohup <command> &~
 2) *进程组(Process Group)* ，是一组 *进程* 的集合，可以接收来自同一个会话的 *信号*
    1) 每个进程必须属于一个进程组；
    2) 子进程默认从属于父进程所属的进程组；
@@ -2726,7 +2863,7 @@ signal.alarm(5)
       1) 将进程状态从TASK_INTERRUPTABLE转移为TASK_RUNNING；
       2) 然后当该进程被CPU执行时响应SIGKILL，状态从TASK_RUNNING转移为TASK_DEAD。
 5) PCB
-   - 对于多道程序操作系统而言，内存中将存在多个进程，为管理这些进程操作系统内核为每个进程建立一个task_struct结构体保存该进程相关的信息，这个结构体就是PCB(Process Control Block)。
+   - 对于多道程序操作系统而言，内存中将存在多个进程，为管理这些进程操作系统内核为每个进程建立一个task_struct结构体保存该进程相关的信息，这个结构体就是PCB(Process Control Block)，多个PCB组成进程表。
    - Linux下采用链式方式组织PCB。
    - PCB的组成
      1) 标识符，每个进程都有进程标识符、用户标识符和组标识符。
@@ -2764,7 +2901,7 @@ signal.alarm(5)
    1) 代码段/文本区域(text region)，存放处理器执行的代码；
    2) 数据段(data region)，存放变量和进程执行期间使用的动态分配的内存；
    3) 堆栈段(stack region)，存放这活动过程调用的指令和本地变量。
-9) 进程间通信(IPC)
+9) 进程间通信(IPC, Inter-Process Communication)
    - 由于操作系统隔离各个进程可以访问的的内存地址空间(即进程拥有各自的用户地址空间)，因此内核提供一套称为IPC的机制用于进程间交换数据。
    - 底层原理：内核开辟一段地址空间作为缓冲区，进程A将数据从A的用户地址空间复制到内核缓冲区，然后再将数据从内核缓冲区复制到进程B的用户地址空间。
    - 方式
@@ -2774,10 +2911,15 @@ signal.alarm(5)
      4) 信号量
      5) Socket
 
-
-Windows下进程的创建成本比Unix/Linux高。
-
-*** 进程创建方式——system
+*** 进程调度算法
+    1) 先来先服务调度算法(FCFS)
+       有利于长作业，不利于短作业。
+    2) 短作业优先调度算法(SJ/PF)
+       有利于短作业，不利于长作业。
+    3) 时间片轮转法(Round Robin, RR)
+    4) 多级反馈队列
+       优先级队列+时间片轮转，新任务最初放到优先级最高的队列，当执行过后当因时间片用完被切换下来后会放入优先级低一级的队列，那么短作业则会优先执行完，长作业则自动被识别并降级执行。另外还可以设置任务被执行的优先级，从而增加可控性。(Linux系统提供)
+*** Linux进程创建方式——system
     system函数会通过启用 ~/bin/sh~ 进程执行入参指定的shell命令，shell命令执行期间信号量SIGCHID会被阻塞（即告知内核不要在发送SIGCHID信号量），而SIGINT和SIGQUIT会被忽略。
 system函数内部逻辑为：
 1) 通过系统调用fork创建一个子进程，失败则返回-1，正常则执行第2步；
@@ -2795,7 +2937,7 @@ import os
 ret_code = os.system('ls')
 #+END_EXAMPLE
 
-*** 进程创建方式——exec函数族
+*** Linux进程创建方式——exec函数族
     exec*族函数为POSIX系统的直接映射，在Unix系统中创建进程分为两步：创建进程实例 和 加载进程映像。
 而exec函数族则用于在当前进程实例上加载新的进程映像替代原有的进程映像，即将代码段换成新的程序代码，废弃原有的数据段和堆栈段，保留进程其他信息（PID/PPID/PGID/SID），并且原来已打开的描述符均可继续使用，原来进程的环境变量也继续使用。
   os.exec*函数族为对Linux下exec函数族的封装。因此Python程序通过os.exec*函数族创建新进程时，Pyton程序将马上退出，因此os.exec*函数族没有返回值。
@@ -2822,10 +2964,17 @@ os.execlpe('bash', 'bash', '-c', '/bin/echo $TEST', {"TEST": 'test1'})
 #+END_EXAMPLE
 os.exec*函数族底层都是调用os.execve。
 
-*** 进程创建方式——fork
+*** 进程创建方式——fork(Unix 独有)
 Unix/Linux系统下提供一个 ~fork()~ 的系统调用，该函数会复制当前进程映像创建子进程，然后分别在父进程和子进程中各返回一次（一共返回两次），其中在父进程的返回值为子进程的PID，而在子进程的返回值恒为0。
 
-默认情况下子进程会集成父进程的所有文件描述符。
+默认情况下子进程会继承父进程的所有文件描述符(file descriptor)。
+*注意：当进程下存在多个线程时，那么这种方式是无法安全地创建子进程的。*
+
+#+BEGIN_QUOTE
+The child process begins, is effectively identical to the parent process. All resources of the parent are inherited by the child process. Note that safely forking a multithreaded process is problematic.
+
+Available on Unix only.
+#+END_QUOTE
  
 os模块封装了很多系统调用，如 ~os.fork()~ 就封装了UNIX系列的系统调用 ~fork~ 因此返回值也和系统调用fork一致，只是报错时会抛出OSError异常。而Windows下没有fork调用，因此下列代码无法在Windows下运行。
 #+BEGIN_EXAMPLE python
@@ -2845,6 +2994,16 @@ else:
 # I (876) just created a child process (877).
 # I am child process (877) and my parent is 876.
 #+END_EXAMPLE
+
+*** 进程创建方式——spawn(Windows和Unix均支持)
+    父进程会创建一个全新的子进程，子进程不会继承父进程中已打开的文件描述符和句柄，这种方式创建子进程相对fork和forkserver两种方式而言慢很多。
+    Windows采用的就是这种方式，因此说Windows下进程的创建成本比Unix/Linux高。
+
+*** 进程创建方式——forkserver(仅支持通过Unix pipes传递文件描述符的Unix支持)
+    启动一个独立的Fork Server进程，后续当需要一个新的进程时，父进程则连接Server进程请求其创建新进程，而Fork Server进程本身为单线程进程因此通过调用fork()能够安全地创子进程，并且不用继承任何无用的文件描述符。
+    #+BEGIN_QUOTE
+    A fork server starts. From then on, whenever a new process is needed, the parent process connects to the server and requests that it fork a new process. The fork server process is single threaded so it is safe for it to use fork(). No unnessary resources are inherited.
+    #+END_QUOTE
 
 *** 获取进程信息
 #+BEGIN_EXAMPLE python
@@ -3214,41 +3373,672 @@ nmap模块
 
 *** multiprocessing模块
 multiprocessing模块是跨平台通用的多进程模块。
+
+**** 设置创建进程的方式
+     1) 全局设置
+        #+BEGIN_EXAMPLE python
+        import multiprocessing as mp
+   
+        if __name__ == '__main__':
+            # 一个程序仅调用一次即可，不要重复调用。
+            # 可选值spawn,fork,forkserver，但要根据运行的OS设置。
+            mp.set_start_method('spawn')
+        #+END_EXAMPLE
+     2) 局部设置
+        #+BEGIN_EXAMPLE python
+        import multiprocessing as mp
+
+        def foo(i):
+            print(i)
+
+        
+        if __name__ == '__main__':
+            ctx = mp.get_context('spawn')
+            proc = ctx.Process(target=foo, args=(1,))
+            proc.start()
+            proc.join()
+        #+END_EXAMPLE
+        - 注意：不同上下文的对象不能互用，如下无法使用其他上下文的锁
+          #+BEGIN_EXAMPLE python
+          import multiprocessing as mp
+  
+          def foo(i):
+              lock2.acquire()
+              print(i)
+              lock2.release()
+  
+          
+          if __name__ == '__main__':
+              ctx1 = mp.get_context('spawn')
+              ctx2 = mp.get_context('fork')
+              lock2 = ctx2.Lock()
+              procs = []
+              for i in rage(4):
+                  procs.append(ctx1.Process(target=foo, args=(i, lock2)))
+
+              for proc in procs:
+                  proc.join()
+          #+END_EXAMPLE
+
+**** Process类(https://docs.python.org/3.6/library/multiprocessing.html)
+1) 使用方式一
+   #+BEGIN_EXAMPLE python
+   import os
+   from multiprocessing import Process
+   
+   def func(index):
+       print('pid: {}, index: {}'.format(os.getpid(), index))
+   
+   procs = []
+   for i in range(2):
+       # 将函数注册到子进程对象中
+       proc = Process(target=func, args=(i, ))
+       procs.append(proc)
+
+       # 底层采用c通知操作系统创建新的子进程并运行程序
+       proc.start()
+   
+   # 挂起主进程，等待子进程执行结束后再唤醒主进程
+   for proc in procs:
+       proc.join()
+   #+END_EXAMPLE
+2) 使用方式二
+   #+BEGIN_EXAMPLE python
+   import os
+   from multiprocessing import Process
+   
+   class PrintProcess(Process):
+       def __init__(self, index):
+           super(PrintProcess).__init()
+           self.index = index
+       
+       def run(self):
+           print('pid: {}, index: {}'.format(os.getpid(), self.index))
+
+   procs = []
+   for i in range(2):
+       proc = PrintProcess(i)
+       procs.append(proc)
+       proc.start()
+       
+   for proc in procs:
+       proc.join()
+   #+END_EXAMPLE
+3) Process类源码
+   #+BEGIN_EXAMPLE python
+   class Process(object):
+       def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
+           self.name = ''       # 进程名称
+           self.daemon = False  # 是否为守护进程（和Linux系统的守护进程不同）
+           self.authkey = None  # 进程的身份验证，默认值为通过os.urandom()生成的32个字符的字符串。用于涉及网络连接的底层进程通信提供安全保障，只有具有相同身份验证进程才能连接成功。
+           self.exitcode = None # 进程结束时的返回码，运行时为None，若为负数则表示进程为被信号量结束。
+           self.pid = 0         # 进程ID
+           self.sentinel = None # 当进程结束时设置值用于通知join或multiprocessing.connection.wait，它们等待的进程已结束。其值Unix下为文件描述符(被select使用)，Windows下为OS句柄(被WaitForSingleObject或WaitForMultipleObjects使用)。
+
+       def run(self):
+           """
+           调用C实现
+           """
+           pass
+     
+       def start(self):
+           """
+           调用C实现。
+           启动进程，内部会调用self.run()方法
+           """
+           pass
+
+       def ternimate(self):
+           """
+           调用C实现。
+           强制结束进程，并不会进行任何清理操作。
+           1. 内部为向进程发送信号量，因此不会立即结束该进程；
+           2. 若该进程创建了子进程，那么这些子进程将成为僵尸进程；
+           3. 若该进程持有锁，那么这个锁也不会被释放。
+           """
+           pass
+
+       def join(self, timeout=None):
+           """
+           调用C实现。
+           Args:
+               timeout(int): 单位为秒。为None时就是等待进程结束为止；为正整数时则要么超时，要么进程结束为止。
+
+           Cautions:
+               1. 可以调用多次join；
+               2. 进程内部不能调用join，否则会造成死锁；
+               3. 在调用start前，调用join会抛出异常。
+           """
+           pass
+
+       def is_alive(self):
+           """
+           若进程仍然在运行，则返回True。
+           """
+           return False
+   #+END_EXAMPLE
+4) 进程间存储空间隔离
+   #+BEGIN_EXAMPLE python
+   from multiprocess import Process
+   
+   def func():
+       # 在子进程中修改全局变量n的值
+       global n
+       n = 0
+       print('n within subprocess: {}%n'.format(n))
+
+   if __name__ == '__main__':
+       n = 100 # 在主进程中初始化全局变量n的值
+       proc = Process(target=func) 
+       proc.start()
+       proc.join()
+       print('n within main process: {}%n'.format(n))
+
+   # 执行回显
+   # n within subprocess: 0
+   # n within main process: 100
+   #+END_EXAMPLE
+5) 守护进程
+   - 普通子进程
+     1) 父进程已经执行结束，但子进程仍未执行结束，那么父进程必须等待所有子进程结束才能结束；
+     2) 普通子进程可以在其下创建子进程。
+   - 守护子进程
+     1) 父进程已经执行结束，但子进程仍未执行结束，父进程可强行结束子进程并结束自身；
+     2) 守护子进程不可以在其下创建子进程。创建时会抛出 ~AssertionError: daemonic processes are not allowed to have children~
+        #+BEGIN_EXAMPLE python
+        import time
+
+        def func():
+            while True:
+                print('123')
+                time.sleep(2)
+
+        proc = Process(target=func)
+        proc.daemon = True # 设置为守护进程
+        proc.start()
+
+        print('main')
+        #+END_EXAMPLE
+
+**** Lock 锁
+
 #+BEGIN_EXAMPLE python
-from __future__ import print_function
-from multiprocessing import (
-    Process,
-    Queue,
-    Pool,
-    Value,    
-    Lock,
-)
+import json
+from multiprocessing import (Process, Lock)
+
+def buy_ticket(lock):
+    
+    """
+    Args:
+        block(bool): 默认值为True
+                     True表示挂起当前进程，直到获取锁资源后将锁资源状态设置为加锁，并返回True；若设置timeout为正数，并超时则返回False。
+                     False表示不挂起当前进程，能获取锁资源则返回True，否则返回False。
+        timeout(int): 默认值为None，表示无限等待。block为False时，timeout无生效。block为True时，非正数等价与None，正数则表示挂起当前进程的超时秒数。
+
+    Returns:
+        bool: 能获取锁资源时返回True，无法获取锁资源时返回False。
+    """
+    lock.acquire()
+
+    with open('ticket') as f:
+        dic = json.load(f)
+        time.sleep(0.1)
+    
+    if dic['ticket'] > 0:
+       dic['ticket'] += 1
+       print('Got it.')
+    else:
+       print('What a pity')
+
+    with open('ticket') as f:
+       json.dump(dic, f)
+
+    lock.release()
 
 
-def job(
+if __name__ == '__main__':
+    lock = Lock()
+    procs = []
+    for i in range(10):
+        proc = Process(target=buy_ticket, args=(lock,))
+        procs.append(proc)
+        proc.start()
+
+    for proc in procs:
+        proc.join()
 #+END_EXAMPLE
+
+**** Semaphore 锁
+可以设置重复进入次数的Lock 锁。
+#+BEGIN_EXAMPLE python
+import time
+from multiprocessing import (Process, Semaphore)
+
+def enter_room(semaphore):
+    
+    """
+    入参和Lock的acquire一致。
+    Args:
+        block(bool): 默认值为True
+        timeout(int): 默认值为None
+    """
+    semaphore.acquire()
+    print('entered')
+    time.sleep(10)
+    print('leave')
+    semaphore.release()
+
+if __name__ == '__main__':
+    """
+    Args:
+        value(int): 重复进入次数
+    """
+    semaphore = Semaphore(5)
+    procs = []
+    for i in range(10):
+        proc = Process(target=buy_ticket, args=(semaphore,))
+        procs.append(proc)
+        proc.start()
+
+    for proc in procs:
+        proc.join()
+#+END_EXAMPLE
+
+**** Event
+     #+BEGIN_EXAMPLE python
+     from multiprocessing import Event
+
+     evt = Event()
+     # 默认为False
+     # 若为False则调用evt.wait()时会阻塞线程，直到evt.is_set()返回True
+     # 若为True则调用evt.wait()时不会阻塞线程
+     evt.is_set()
+     # 让evt.is_set()返回True
+     evt.set()
+     # 让evt.is_set()返回False
+     evt.clear()
+     #+END_EXAMPLE
+     这里两个进程操作同一个Event实例时，采用的是基于文件的Socket通信。而不是通过内存共享的方式。
+
+***** 示例——交通灯     
+      #+BEGIN_EXAMPLE python
+      import time
+      from multiprocessing import Event, Process
+
+      def car(evt):
+          if not evt.is_set():
+              print('oh my god')
+
+          evt.wait()
+          print('go go go')
+
+
+      def traffic(evt):
+          while True:
+              if evt.is_set():
+                  evt.set()
+                  print('green')
+                  time.sleep(200)
+              else: 
+                  evt.clear()
+                  print('red')
+                  time.sleep(200)
+
+
+      if __name__ == '__main__':
+          evt = Event()
+          Process(target=traffic, args=(evt,)).start()
+          
+          for i in range(20):
+              Process(target=car, args=(evt,)).start()
+      #+END_EXAMPLE
+
+**** Queue
+     ~multiprocessing.Queue~ 实例方法
+     - ~put(obj)~ 向队列放入数据，若满则阻塞直到可放入数据，为进程安全操作
+     - ~get([block=True[, timeout]])~ 从队列取数据，若没有数据可取则阻塞直到有数据可取，为进程安全操作
+       - block 是否阻塞
+       - timeout 阻塞多久，若超时则抛出异常queue.Empty
+     - ~get_nowait()~ 从队列取数据，若没有数据则抛出异常queue.Empty，为进程安全操作
+     - ~full()~ 判断队列是否满
+     - ~empty()~ 判断队列是否空
+
+***** 生产者消费者模型
+      #+BEGIN_EXAMPLE python
+      import time
+      import random
+      from multiprocessing import Queue, Process
+
+      def producer(q, name):
+          for i in rang(20):
+              q.put(name)
+              time.sleep(random.randint(1, 10))
+
+      
+      def consumer(q, name):
+          while True:
+              food = q.get()
+              if food is None:
+                  print('food is over')
+                  return
+
+              print('{} eat {}'.format(name, food))
+              time.sleep(random.randint(1, 5))
+
+
+      if __name__ == '__main__':
+          q = Queue(10)
+          ps = []
+          for name in ('a', 'b'):
+              ps.append(Process(target=producer, args=(q, name)))
+              ps[-1].start()
+             
+          cs = []
+          for name in ('john', 'mary', 'kery'):
+              cs.append(Process(target=consumer, args=(q, name)))
+              cs[-1].start()
+
+          for p in ps:
+              ps.join()
+
+          # 告知消费者进程退出
+          for c in cs:
+              q.put(None)
+      #+end_EXAMPLE
+
+**** JoinableQueue
+     可对Queue实现生产者消费者模式进行优化
+     #+BEGIN_EXAMPLE python
+      import time
+      import random
+      from multiprocessing import JoinableQueue, Process
+
+      def producer(q, name):
+          for i in rang(20):
+              q.put(name)
+              time.sleep(random.randint(1, 10))
+
+          # 阻塞等待队列中的所有数据都被消费完才继续后续操作
+          q.join()
+
+      
+      def consumer(q, name):
+          while True:
+              food = q.get()
+              print('{} eat {}'.format(name, food))
+              time.sleep(random.randint(1, 5))
+              # 标识当前从队列中获取的数据被消费完
+              q.task_done()
+
+
+      if __name__ == '__main__':
+          q = JoinableQueue(10)
+          ps = []
+          for name in ('a', 'b'):
+              ps.append(Process(target=producer, args=(q, name)))
+              ps[-1].start()
+             
+          cs = []
+          for name in ('john', 'mary', 'kery'):
+              cs.append(Process(target=consumer, args=(q, name)))
+              cs.daemon = True
+              cs[-1].start()
+
+          for p in ps:
+              ps.join()
+     #+END_EXAMPLE
+
+**** Pipe
+     进程不安全，必须通过加锁来保证对管道操作的进程安全。
+     1) 双向管道，即 ~Pipe()~ 返回的两个Connection实例均可以作为输入和输出端，但一个Connection实例作为输入端则另一个Connection实例作为输出端。
+        #+BEGIN_EXAMPLE python
+        from multiprocessing import Pipe
+   
+        conn1, conn2 = Pipe()
+        # conn1 作为输入端，conn2 作为输出端
+        conn1.send('123') 
+        val = conn2.recv() # 若没有值则会一直阻塞
+
+        # conn2 作为输入端，conn1 作为输出端
+        conn2.send(321) 
+        val = conn1.recv() # 若没有值则会一直阻塞
+        #+END_EXAMPLE
+     2) 管道的两个端口在多个进程间传递，实质是在管道上创建新的端口，因此在进程A上关闭端口不影响进程B上端口的使用。
+        #+BEGIN_EXAMPLE python
+        import time
+        import random
+        from multiprocessing import Pipe, Process
+
+        def func(conn1, conn2):
+            conn1.close() # 关闭位于主进程的输入端
+            while True:
+                try:
+                    val = conn2.recv()
+                    print('received: {}'.format(val))
+                except EOFError:
+                    # 当管道中所有输入端都close后，再在输出端调用recv则会抛出EOFError异常。
+                    conn2.close()
+                    print('over')
+
+
+        # conn1作为输入端，conn2作为输出端
+        conn1, conn2 = Pipe()
+        conn2.close() # 关闭位于主进程的输出端
+        Process(target=func, args=(conn1, conn2)).start()
+        # 目前位置，创建了1条管道，主进程有1个输入端和1个输出端，子进程有1个输入端和1个输出端。
+        for i in range(20):
+            conn1.send(i)
+            time.sleep(random.randint(0, 5))
+
+        conn1.close() # 关闭位于主进程的输入端
+        #+END_EXAMPLE
+
+**** Sharing Memory
+     通过 ~multiprocess.Manager~ 实现，非进程安全。
+
+     #+BEGIN_EXAMPLE python
+     from multiprocessing import Process, Manager
+
+     def func(d):
+         d['value'] = 32
+
+     if __name__ == '__main__':
+          # 必须在__main__下调用，否则会报错。
+          m = Manager()
+          d = m.dict({'value': 1})
+          p = Process(target=func, args=(d,))
+          p.start()
+          p.join()
+          
+          print(d['value']) # 回显32
+     #+END_EXAMPLE
+
+**** 进程池
+     #+BEGIN_EXAMPLE python
+     from multiprocessing import Pool
+
+     pool = Pool(3) # 进程池内置3个进程
+
+     """
+     异步向进程池输入iterable对象，而iterable对象中的元素个数即为并行执行的进程请求数，每个进程以对应元素为入参，调用第一个函数。
+     若请求数大于进程池的进程数则分批执行。
+
+     Args:
+         action(x -> Any): 
+         data(iterable):
+
+     Returns:
+     """
+     res = pool.map(lambda x: print(x), ['a', 'b', 1, 2, 3, 4, 5])
+     res.get() # 返回所有执行结果
+
+
+     """
+     同步提交任务，即会阻塞当前进程直到任务执行完毕（任务中调用time.sleep等都会等待其完成才继续运行主进程）
+
+     Args:
+         action(*args -> Any): 
+         **kwargs:
+             args(tuple): 入参
+
+     Returns:
+         
+     """
+     res = pool.apply(lambda x,y: print(x,y), args=(1,2))
+     res.get() # 阻塞获取结果
+
+     """
+     异步提交任务，即不会阻塞当前进程
+     并且主进程执行完则结束子进程，不等待子进程执行完。
+
+     Args:
+         action(*args -> Any): 
+         **kwargs:
+             args(tuple): 入参
+             callback(Any -> None): 回调函数
+
+     Returns:
+         
+     """
+     pool.apply_async(lambda x,y: print(x,y), args=(1,2))
+     res.get() # 阻塞获取结果
+
+     # 阻塞当前进程直到进程池中所有任务结束才继续运行
+     pool.close() # 指示不能再向进程池发起任务执行请求
+     pool.join()  # 阻塞当前进程直到进程池中所有任务结束才继续运行
+     #+END_EXAMPLE
 
 ** 多线程
 
- CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
- 因此thread模块是轻量级，而threading模块是对thread模块的封装。
- Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
+   60年代在OS中能拥有资源和独立运行的基本单元是进程，但由于进程的创建、销毁和切换存在较大的时空开销，因此引入轻量级进程。而对称多处理机(SMP)可满足并行运行，而多进程并行开销也比较大。
+   80年代出现能够独立运行的基本单位——线程。进程作为CPU调度的最小单位，每个进程中至少有一个线程，一个进程的线程可以在多个处理器中并行执行(CPython不行)。
+   每个线程有独立的寄存器、堆栈和TCB，和其它线程共享进程的text region, data region和文件描述等。
+   寄存器和堆栈的作用：
+   - 用于指示被执行的指令序列的程序计数器、保留局部变量、状态参数和返回地址等。
 
-** GIL(Global Interpreter Lock)
-CPython解释器内部通过GIL实现线程安全，即任何时候仅有一个Python线程执行。
-因此Python线程在多核服务器上，运行IO密集型计算性能好，但运行计算密集型则性能下降。
+   TCB(Threading Control Block)用于描述线程的动态特性，包含如下信息：
+   1) 线程状态
+   2) 当线程不运行时，被保存的现场资源
+   3) 一组执行堆栈
+   4) 存放每个线程的局部变量主存区
+   5) 访问同一个进程的主存和其他资源
 
-多线程环境下，虚拟机执行流程：
-1) 设置GIL
-2) 切换到某个线程并执行
-3) 运行指定的字节码集合
-4) 线程主动让出控制(调用time.sleep())
-5) 设置线程为休眠状态
-6) 解锁GIL
-7) 回到步骤1
+   多个TCB组成 *线程表* 。
 
-注意：当调用外部代码（如C/C++扩展函数）时会先释放GIL让其它线程运行。
-GIL源码在Python/ceval.c文件中。
+   线程分为 *用户级线程(User-Level Thread)* 和 *内核级线程(Kernel-Level Thread,或称为轻量级进程)*
+   - *用户级线程(User-Level Thread)*
+     - 线程表位于用户空间；
+     - 由用户程序实现线程的创建、销毁和调度，成本比内核级线程低；
+     - 无法利用多核并行运行；
+     - 调用系统调用时，将导致其所属进程被中断；
+     - 若系统仅有用户级线程，那么CPU调度以进程为单位，进程内线程的调度则由用户程序控制；
+     - 用户级线程的程序实体是运行在用户态下的程序。
+   - *内核级线程(Kernel-Level Thread,或称为内核支持线程、轻量级进程)*
+     - 线程表位于内核空间；
+     - 由系统内核实现线程的创建、销毁和调度；
+     - 可以利用多核并行运行；
+     - 调用系统调用时，只导该线程被中断；
+     - CPU调度以线程为单位；
+     - 内核级线程的程序实体可以运行在任何状态下的程序。
+   - 混合实现
+     用户级和内核级的多路复用，每个内核级线程对应多个用户级线程。
+
+   Windows是用内核级线程；
+
+    CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
+    因此thread模块是轻量级，而threading模块是对thread模块的封装。
+    Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
+
+
+*** Linux的NPTL 
+    内核2.6以前的调度单元均为进程，内核并没有真正支持线程。而LinuxThread则是通过系统调用 ~clone()~ 创建一份调用程序的拷贝，并且完全共享调用进程的地址空间（而 ~fork()~ 则不能共享调用进程的地址空间），来实现线程的内核级支持（线程实现完全为用户态，内核根本不知道线程的存在）。但很多地方没有遵循POSIX标准，如信号量处理、调度、进程间通信原语等。
+    为改进LinuxThread的内核支持，IBM发起NGTP(Next Generation POSIX Threads)，而RedHat发起NPTL，后来NPTL取胜，从RHEL3起内核2.6都支持NPTL，并且成为GNU C的一部分。
+    NPTL的设计
+    线程在内核里仍然当作一个进程，有NPTL库调用 ~clone()~ 创建进程，并提供唤醒线程的同步原语futex等。
+    NPTL是一个1个内核级线程对应1个用户级线程的线程库，即调用 ~pthread_create()~ 创建线程，底层调用 ~clone()~ 创建新进程。
+    也提供m个用户级线程对应n个内核级线程。
+
+*** GIL(Global Interpreter Lock)
+    多核服务器上，CPython解释器内部通过GIL实现线程安全，让任何时候Python进程内仅有一个线程在执行。（如Java进程内的多个线程可以在多个处理器上并行运行，而CPython则不行），因此CPython不存在缓存一致性的问题。
+    因此Python线程在多核服务器上，运行IO密集型计算性能好，但运行计算密集型则性能下降。
+
+ 多线程环境下，虚拟机执行流程：
+ 1) 设置GIL
+ 2) 切换到某个线程并执行
+ 3) 运行指定的字节码集合
+ 4) 线程主动让出控制(调用time.sleep())
+ 5) 设置线程为休眠状态
+ 6) 解锁GIL
+ 7) 回到步骤1
+
+ 注意：
+ 1) 当调用外部代码（如C/C++扩展函数）时GIL会被锁定，直到调用结束。
+    - 由于期间没有Python字节码被运行，因此不会做线程切换
+ 2) 外部代码也可以主动解锁GIL。
+
+ GIL源码在Python/ceval.c文件中。
+
+*** Python线程模块
+    1) thread 提供基本的线程和锁支持
+       不要使用，当主线退出则子线程在没有进行清理工作时就被强制退出。
+    2) threading 基于thread，提供更高级的线程管理支持
+       1) 基本使用
+          #+BEGIN_EXAMPLE python
+          from threading import (Thread, currentThread, enumerate, activeCount)
+          
+          def func(name, age):
+              print(name, age)
+
+          t1 = Thread(target=func, args=('john', 18))
+          t1.start()
+          t1.join()
+
+          t2 = Thread(target=func, args=('mary', 20))
+          t2.daemon = True
+          t2.start()
+          t2.setName('test') # 设置线程名
+          print(t2.isAlive()) # 返回线程是否活动
+          print(t2.getName()) # 返回线程名
+          t2.join()
+
+          currentThread() # 返回当前线程的Thread实例
+          enumerate() # 返回一个正在运行(启动后、结束前)的线程列表
+          activeCount() # 返回len(enumerate())
+          #+END_EXAMPLE
+       2) 同步锁（Lock）
+          #+BEGIN_EXAMPLE python
+          from threading import Lock, Thread
+          
+          def func(kvs, lock):
+              lock.acquire()
+              kvs['value'] += 1
+              lock.release()
+
+          lock = Lock()
+          kvs = {'value': 0}
+          for i in range(50):
+              ts.append(Thread(target=func, args=(kvs, lock)))
+              ts[-1].start
+
+          for t in ts:
+              t.join()
+          #+END_EXAMPLE
+       3) 递归锁/可重入锁(RLock)
+          - 死锁：两个或以上进程或线程在执行过程中，因争夺资源而造成一种相互等待的情况，若无外力作用，它们都将无法推进下去。
+            #+BEGIN_EXAMPLE python
+            from threading import Lock
+            
+            mutexA = Lock()
+            mutexA.acquire()
+            mutexA.acquire()
+            print(123)
+            mutexA.release()
+            mutexA.release()
+            #+END_EXAMPLE
+          - 递归锁/可重入锁(RLock)
+            对于同一进程或线程多次请求同一资源，可通过递归锁/可重入锁避免死锁问题。
+    3) Queue 让用于创建一个可以用于多个线程间共享数据的队列数据结构
+
 
 * TODO 开发环境
 
@@ -3657,3 +4447,11 @@ https://github.com/dadadel/pyment
   # 从序列中随机提取count个元素组成新的列表
   random.sample(sequence: list|tuple|str, count: int) -> list
   #+END_EXAMPLE
+* TODO 判断变量是否已定义
+  1) ~locals().keys()~ 局部变量?
+  2) ~dir()~ 当前模块的变量?
+  3) ~vars()~ 程序中的变量?
+* 网络编程
+  Socket通信的两种方式:
+  1) 基于网络
+  2) 基于文件

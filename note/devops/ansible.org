@@ -378,6 +378,27 @@ ansible-doc <module_name>
 ansible-doc -l <keyword>
 #+END_EXAMPLE
 
+*** 任务计划注册模块 win_scheduled_task
+#+BEGIN_EXAMPLE yaml
+- name: Register scheduled task.
+  win_scheduled_task:
+    name: web_health_f5_notifier
+    display_name: Web Health F5 Notifier
+    logon_type: password
+    username: Administrator
+    update_password: false
+    password: xxxx
+    wake_to_run: true # 不管用户是否登录都要运行，要配置logon_type:password和username、password设置用于身份验证
+    state: present
+    enable: true
+    actions:
+      - path: cmd.exe
+        arguments: /c web_health_f5_notifier
+    triggers:
+      - type: registration                                                                                                                                                 repetition:
+          interval: PT1M # 每分钟执行一次
+#+END_EXAMPLE
+
 ** 模块返回值
 | 返回值键    | 含义                                                |
 |-------------+-----------------------------------------------------|
@@ -1455,6 +1476,124 @@ ansible-doc -l <keyword>
               assert pkg.is_installed
               assert pkg.version.startswith(version)
           #+END_EXAMPLE
+
+** Reusable Playbook
+   Two ways to write dynamic Playbook.
+   1) includes and imports, allow users to break up large playbooks into smaller files, which can be used across multiple parent playbooks or even multiple times within the same Playbook.
+      1) ~include*~ includes tasks dynamically. (~include_tasks~, ~include_role~, etc.)
+         - Dynamic
+           Dynamic includes are processed during runtime at the point in which that task is encountered. And task options like ~tags~ and conditional statments ~when~ will only apply to the dynamic task as it is evaluated, and will not be copied to child tasks.
+         - Usage
+           When a loop is used with an include, the included tasks or role will be executed once for each item in the loop.
+         - Pitfalls
+           1) Tags which only exist inside a dynamic include will not shown up in ~--list-tags~ output.
+           2) Tags which only exist inside a dynamic include could not be selected by ~--tags~ or skipped by ~--skip-tags~ options.
+           3) Tasks which only exist inside a dynamic include will not shown up in ~--list-tasks~ output.
+           4) Cannot use ~notify~ to trigger a handler name which comes from inside a dynamic include.(but can be triggered by the dynamic include itself.)
+           5) Cannot use ~--start-at-task~ to begin execution at a task inside a dynamic include.
+         - Command
+           1) ~include_tasks~
+           2) ~include_role~
+      2) ~import*~ includes tasks statically. (~import_playbook~, ~import_tasks~, etc.
+         - Static
+           pre-process all static imports during Playbook parsing time. And the parent task options like ~tags~ and ~when~, etc. will be copied to all child tasks contained within the import.
+         - Pitfalls
+           1) Loop cannot be used with an import at all.
+           2) Variables from inventory sources(host/group vars, etc.) cannot be used in static import.
+         - Command
+           1) ~import_playbook~
+              #+BEGIN_EXAMPLE yaml
+              # The following Playbooks would be run in the order they are listed.
+              - import_playbook: webserver.yml
+              - import_playbook: databases.yml
+              #+END_EXAMPLE
+           2) ~import_tasks~
+              1) 示例1
+                 #+BEGIN_EXAMPLE yaml
+                 tasks:
+                   - import_tasks: wordpress.yml # inline variable syntax ~key=value~ is deprecated.
+                     vars:
+                       wp_user: timmy
+                   - import_tasks: wordpress.yml
+                     vars:
+                       wp_user: alice
+                 #+END_EXAMPLE
+              2) 示例2——在 ~roles/<role>/tasks/main.yml~ 中引入同级其他任务
+                 #+BEGIN_EXAMPLE yaml
+                 - name: Added in 2.4, previously you used 'include'.
+                   import_tasks: redhat.yml
+                   when: ansible_facts['os_family']|lower == 'redhat'
+                 - name: Added in 2.4, previously you used 'include'.
+                   import_tasks: debian.yml
+                   when: ansible_facts['os_family']|lower == 'debian'
+                 - yum: 
+                     name: "httpd"
+                     state: present
+                 #+END_EXAMPLE
+           3) ~import_role~
+              1) 在 ~roles/<role>/tasks/main.yml~ 中引入其它role
+                 #+BEGIN_EXAMPLE yaml
+                 - name: Import other role.
+                   import_role:
+                     name: other-role # The name used for role can be a simple name.
+                   vars:
+                     abc: 123
+                 #+END_EXAMPLE
+      3) ~include~ the bare include task command which defined prior ansible 2.4 is now considered deprecated.
+   2) roles, more than just tasks to be pacakged together and can include variables, handlers, or even modules and other plugins.
+      - dynamic include or static import
+        1) The newer role definition style.
+           #+BEGIN_EXAMPLE yaml
+           ---
+           - hosts: webservers
+             - tasks:
+               - import_role:
+                   name: /path/to/my/roles/common # The name used for the role can be a fully qualified path.
+                 vars:
+                   dir: "/opt/a"
+                   port: 1234
+                 tags:
+                   - import
+                   - role
+               - include_role:
+                   name: example2 # The name used for role can be a simple name.
+                 vars:
+                   dir: "/opt/b"
+                   port: 1235
+                 when: ansible_facts['os_family']|lower == 'redhat'
+           #+END_EXAMPLE
+        2) The classic role definition style.
+           #+BEGIN_EXAMPLE yaml
+           ---
+           - hosts: webservers
+             - roles:
+               - role: /path/to/my/roles/common # The name used for the role can be a fully qualified path.
+                 vars:
+                   dir: "/opt/a"
+                   port: 1234
+                 tags:
+                   - import
+                   - role
+               - role: example2 # The name used for role can be a simple name.
+                 vars:
+                   dir: "/opt/b"
+                   port: 1235
+                 when: ansible_facts['os_family']|lower == 'redhat'
+           #+END_EXAMPLE
+      - Role Search Path
+        1) A ~roles/~ directory, relative to the Playbook file.
+        2) By default, in ~/etc/ansible/roles~
+        3) In Ansible 1.4 and later can configure an additional ~roles_path~ to search for roles.
+      - Role Duplication and Execution
+        Ansible will only allow a role to execute once, even if defined multiple times, if the parameters defined on the role are not different for each definition.
+        - Two options to make roles run more than once:
+          1) pass different parameters in each role definition.
+          2) add ~allow_duplicates: true~ to the ~meta/main.yml~ file for the role.
+             #+BEGIN_EXAMPLE yaml
+             ---
+             
+             allow_duplicate: true
+             #+END_EXAMPLE
 
 * TODO 管理Windows服务器
   PowerShell: 以.NET Framework为平台，接收和返回.NET对象

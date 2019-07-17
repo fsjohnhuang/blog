@@ -113,7 +113,6 @@ usermode -a -G <groupA> <user>
 
 
 
-
 ** 用户密码管理  
    1) 2种无交互方式初始化密码的方式
       1) ~echo initial-password | passwd <user> --stdin~
