@@ -330,8 +330,9 @@ Python打包分法的关键
 import io
 import os
 import sys
+from shutil import rmtree
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
 
 # Package meta-data
 NAME = 'mypackage'
@@ -341,7 +342,8 @@ EMAIL = 'me@mail.com'
 AUTHOR = 'fsjohnhuang'
 # Python版本要求，大于等于2.7,不支持3.0和3.1
 REQUIRES_PYTHON = '>=2.7, !=3.0.*, !=3.1.*'
-VERSION = '0.1.0'
+VERSION = '0.1.0+a1'
+PLATFORMS = ['Windows Server 2008 R2'] # PLATFORMS = 'any'
 
 # What packages are required for this module to be executed?
 # 默认从pypi仓库下载依赖包进行安装
@@ -364,6 +366,11 @@ try:
 except FileNotFoundError:
     long_description = DESCRIPTION
 
+try:                                                                                                                                                                   with io.open(os.path.join(here, 'requirements.txt'), encoding='utf-8') as f:
+        REQUIRED = f.read().split('\n')[1:]
+except FileNotFoundError:
+    pass
+
 # Load the package's __version__.py module as a dictionary.
 about = {}
 if not VERSION:
@@ -372,6 +379,44 @@ if not VERSION:
         exec(f.read(), about)
 else:
     about['__version__'] = VERSION
+
+
+class UploadCommand(Command):
+    """Support setup.py upload."""
+
+    description = 'Build and publish the package.'
+    user_options = []
+
+    @staticmethod
+    def status(s):
+        """Prints things in bold."""
+        print('\033[1m{0}\033[0m'.format(s))
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        try:
+            self.status('Removing previous builds…')
+            rmtree(os.path.join(here, 'dist'))
+        except OSError:
+            pass
+
+        self.status('Building Source and Wheel (universal) distribution…')
+        os.system('{0} setup.py sdist bdist_wheel --universal'.format(sys.executable))
+
+        self.status('Uploading the package to PyPI via Twine…')
+        os.system('twine upload dist/*')
+
+        self.status('Pushing git tags…')
+        os.system('git tag v{0}'.format(about['__version__']))
+        os.system('git push --tags')
+
+        sys.exit()
+
 
 setup(
     name=NAME,
@@ -385,21 +430,26 @@ setup(
     maintainer_email=EMAIL,    
     python_requires=REQUIRES_PYTHON,
     url=URL,
+    platforms=PLATFORMS,
+    # 设置模块的所在目录路径，其中目录路径可采用绝对路径或相对路径，相对路径则相对于setup.py所在路径。
+    # 默认情况下，root package模块与setup.py所在路径相同。
+    # packge_dir={'': 'src', 设置root package模块位于src目录下
+    #             ‘oh_my_logging’: 'src/oh_my_logging', 设置oh_my_logging模块位于src/oh_my_logging目录下
+    #             }
+
     # 需要打包的包目录(目录下包含__init__.py)
-    # find_packges函数 默认在与setup.py相同目录下搜索各个包含 __init__.py 的目录作为包
+    # find_packges函数 默认在root package模块所在路径下搜索各个包含 __init__.py 的目录作为包
     packages=find_packages(where='.', include=['*'], exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
 
     # If your package is a single module, use this instead of 'packages':
     # 需要打包的Python 模块(不含文件扩展名.py)列表
     # py_modules=['__init__', 'mypackage'],
 
-    # 若不使用find_packages函数来指定packages参数值，又想指定某目录下的所有包则使用package_dir
-    # 下面表示root package的模块位于src目录下
-    # packge_dir={'': 'src'}
-
     # 安装时会将指定可执行脚本复制到系统PATH路径下
     # scripts=['bar.sh'],
 
+    # 安装CLI工具
+    # 在CLI中输入mycli则会调用mymodule写的cli方法
     # entry_points={
     #     'console_scripts': ['mycli=mymodule:cli'],
     # },
@@ -424,6 +474,10 @@ setup(
     # 值为一组二元组，二元组格式为 (目的安装目录, 源文件)
     # 若目的安装目录为相对目录，则相对于安装目录进行解析
     # data_files=[('./data.yml', './data.yml'),]
+
+    # 打包后是否作为一个zip压缩后的egg文件，还是一个以.egg结尾的目录。
+    # 由于某些工具不支持zip压缩文件，并且压缩后的文件不便调试，所以建议设置为False。
+    zip_safe=False,
 
     license='MIT',
 
@@ -452,38 +506,58 @@ setup(
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy'
     ],
-    # 自定义命令
-    # $ setup.py publish support.
+    # 自定义 python setup.py 命令
+    # 自定义命令要继承setuptools.Command 或 distutils.core.Command，实现run即可
     cmdclass={
         'upload': UploadCommand,
     },
 )
 #+END_EXAMPLE
 
+**** setup.cfg
+     若不使用setup.py则可使用setup.cfg通过ini配置的方式设置
+     #+BEGIN_EXAMPLE
+     [metadata]
+     name=johnsdk
+     version=0.1.1
+     zip_safe=False
+     description=john sdk
+     author=fsjohnhuang
+     author_email=fsjohnhuang@hotmail.com
+     license=MIT Licence
+     platforms=any
+
+     [files]
+     pacakge=find_packages()
+     #+END_EXAMPLE
+
 **** setup命令
 #+BEGIN_EXAMPLE bash
 # 查看帮助
 python setup.py --help-commands
 
-# 编译不打包
+# 编译不打包，编译结果保存在目录./build/下
 python setup.py build
 
-# 构建源码分发包，保存在目录dist下
+# 构建源码分发包，保存在目录./dist/下
 # 默认压缩格式为 Linux下为.tar.gz，Windows下为.zip
 # 还可以修改压缩包的所有者和所属组信息
-python setup.py sdist build --formats=gztar,zip --owner=root --group=root
+python setup.py sdist --formats=gztar,zip --owner=root --group=root
 
 # 编译并打包为二进制分发包，保存在目录dist下
-python setup.py bdist build --universal
+python setup.py bdist --universal
 
 # 编译并打包为RPM分发包，保存在目录dist下
-python setup.py bdist_rpm build
+python setup.py bdist_rpm
 
 # 构建二进制的Egg分发包，保存在目录dist下
-python setup.py bdist_egg build
+python setup.py bdist_egg
 
 # 构建WinNT下的二进制分发包，保存在目录dist下
-python setup.py bdist_wininst build
+python setup.py bdist_wininst
+
+# 构建二进制的Wheel分发包
+python setup.py bdist_wheel --universal
 
 # 将包安装到Python安装目录的lib/site-packages
 python setup.py install
@@ -491,58 +565,45 @@ python setup.py install
 # 在开发阶段
 # 测试安装包的有效性，实际上是在文件系统中创建一个符号链接到包的实际目录，当修改包内容时就能在依赖该包的项目中直接使用，而不用重复安装卸载
 python setup.py develop
+
+# 在PyPi注册项目
+python setup.py register
+# 发布到PyPi
+python setup.py sdist upload
 #+END_EXAMPLE
 
-**** 分发到pypi.python.org
-     1) 打包 ~python setup.py sdist build~
-     2) 分发
-        1) 通过setuptools
-           帐号密码采用明文传输，推荐使用twine
-           #+BEGIN_EXAMPLE bash
-           python setup.py sdist upload
-           #+END_EXAMPLE
-        2) 通过twine
-           #+BEGIN_EXAMPLE bash
-           pip install twine
-
-           twine upload dist/*
-           #+END_EXAMPLE
-
-
-
-
 ***** ~python setup.py sdist~ 详解
-用于构建源码分发包。
-选项：
-1) ~--formats~ 设置压缩格式
-   - 默认值： ~--formats=gztar,zip~ 表示Unix下为 ~.tar.gz~ 而Windows下为 ~.zip~ 。
-   - 可用格式表
-     | Format | Description |
-     |--------+-------------|
-     | zip    | .zip        |
-     | gztar  | .tar.gz     |
-     | bztar  | .tar.bz     |
-     | xztar  | .tar.xz     |
-     | ztar   | .tar.Z      |
-     | tar    | .tar        |
-2) ~--owner~ 设置分发包的所有者
-3) ~--group~ 设置分发包的所属组
-4) ~--no-defaults~ 剔除默认的打包内容规则
-5) ~--no-prune~ 剔除默认的排除内容规则
-6) ~--manifest-only~ 仅从MANIFEST.in生成MANIFEST文件，而不执行构建打包
+ 用于构建源码分发包。
+ 选项：
+ 1) ~--formats~ 设置压缩格式
+    - 默认值： ~--formats=gztar,zip~ 表示Unix下为 ~.tar.gz~ 而Windows下为 ~.zip~ 。
+    - 可用格式表
+      | Format | Description |
+      |--------+-------------|
+      | zip    | .zip        |
+      | gztar  | .tar.gz     |
+      | bztar  | .tar.bz     |
+      | xztar  | .tar.xz     |
+      | ztar   | .tar.Z      |
+      | tar    | .tar        |
+ 2) ~--owner~ 设置分发包的所有者
+ 3) ~--group~ 设置分发包的所属组
+ 4) ~--no-defaults~ 剔除默认的打包内容规则
+ 5) ~--no-prune~ 剔除默认的排除内容规则
+ 6) ~--manifest-only~ 仅从MANIFEST.in生成MANIFEST文件，而不执行构建打包
 
 ****** 默认打包内容规则
-1) 默认打包内容：
-   1) all Python source files implied by the py_modules and packages options.
-   2) all C source files mentioned in the ext_modules or libraries options.
-   3) scripts identified by the scripts option.
-   4) anything that looks like a test script: test/test*.py (currently, the Distutils don’t do anything with test scripts except include them in source distributions, but in the future there will be a standard for testing Python module distributions)
-   5) README.txt (or README), setup.py (or whatever you called your setup script), and setup.cfg.
-   6) all files that matches the package_data metadata.
-   7) all files that matches the data_files metadata.
-2) 默认排除内容：
-   1) all files in the Distutils “build” tree (default build/)
-   2) all files in directories named RCS, CVS, .svn, .hg, .git, .bzr or _darcs
+ 1) 默认打包内容：
+    1) all Python source files implied by the py_modules and packages options.
+    2) all C source files mentioned in the ext_modules or libraries options.
+    3) scripts identified by the scripts option.
+    4) anything that looks like a test script: test/test*.py (currently, the Distutils don’t do anything with test scripts except include them in source distributions, but in the future there will be a standard for testing Python module distributions)
+    5) README.txt (or README), setup.py (or whatever you called your setup script), and setup.cfg.
+    6) all files that matches the package_data metadata.
+    7) all files that matches the data_files metadata.
+ 2) 默认排除内容：
+    1) all files in the Distutils “build” tree (default build/)
+    2) all files in directories named RCS, CVS, .svn, .hg, .git, .bzr or _darcs
    
 ****** 自定义打包内容规则
 通过和setup.py同目录的MANIFEST.in可自定义打包内容规则，MANIFEST.in内每行包含一条文件筛选命令，运行结果为生成MANIFEST文件(临时文件)，MANIFEST内每行为打包的文件路径。
@@ -564,6 +625,58 @@ graft dir4 # 包含目录dir4下的所有文件
 1) 若存在MANIFEST文件，并且首行没有标识该文件由MANIFEST.in生成，则直接使用；
 2) 若存在MANIFEST.in文件，则将该文件和默认打包规则和排除规则合并后生成MANIFEST文件；
 3) 若不存在MANIFEST.in文件，则直接根据默认打包规则和排除规则生成MANIFEST文件。
+
+**** 版本命名
+     #+BEGIN_QUOTE
+     N.N[.N]+[{a|b|c|rc}N[.N]+][.postN][.devN]
+     #+END_QUOTE
+     - ~N.N~ 必选，代表主版本和副版本号
+     - ~[.N]~ 可选，次要版本号，可以有零或多个
+     - ~{a|b|c|rc}~ 可选，阶段代号，a-alpha,b-beta,c-candidate和rc-release condidate
+     - ~N[.N]~ 可选，阶段版本号，主版本和零或多个副版本号
+     - ~.postN~ 可选，发行后更新版本号
+     - ~.devN~ 可选，开发期间的发行版本号
+
+**** 分发PyPI
+     PyPI(Python Package Index)是Python官方维护的第三方包仓库，用于统一存储和管理开发者发布的Python包。
+     1. 先在PyPI注册帐号，获取帐号和密码
+     
+     发布方式：
+     1) 通过 ~setup.py~ 的命令发布
+        1) 创建 =~/.pypirc=
+           #+BEGIN_EXAMPLE
+           [distutils]
+           index-servers = pypi
+
+           [pypi]
+           username: xxx
+           password: xxx
+           #+END_EXAMPLE
+        2) 注册项目
+           #+BEGIN_EXAMPLE bash
+           cd $PROJECT_HOME
+           python setup.py register
+           #+END_EXAMPLE
+        3) 构建源码包并发布
+           #+BEGIN_EXAMPLE bash
+           cd $PROJECT_HOME
+           python setup.py sdist upload
+           #+END_EXAMPLE
+
+     2) 通过 tween 命令发布
+        1) 编译打包
+           #+BEGIN_EXAMPLE bash
+           python setup.py sdist build
+           #+END_EXAMPLE
+        2) 通过twine发布
+           #+BEGIN_EXAMPLE bash
+           pip install twine
+
+           twine upload dist/*
+           #+END_EXAMPLE
+
+**** TODO 依赖安全
+     https://pyup.io
 
 *** distribute(支持Python3.x)
 作为setuptools的一个分支后来又合并会setuptools项目中，而又因为共享命名空间，因此在导入setuptools时 ~import setuptools~ 时实际上也导入了distribute。
@@ -3854,59 +3967,69 @@ if __name__ == '__main__':
      #+END_EXAMPLE
 
 **** 进程池
-     #+BEGIN_EXAMPLE python
-     from multiprocessing import Pool
-
-     pool = Pool(3) # 进程池内置3个进程
-
-     """
-     异步向进程池输入iterable对象，而iterable对象中的元素个数即为并行执行的进程请求数，每个进程以对应元素为入参，调用第一个函数。
-     若请求数大于进程池的进程数则分批执行。
-
-     Args:
-         action(x -> Any): 
-         data(iterable):
-
-     Returns:
-     """
-     res = pool.map(lambda x: print(x), ['a', 'b', 1, 2, 3, 4, 5])
-     res.get() # 返回所有执行结果
-
-
-     """
-     同步提交任务，即会阻塞当前进程直到任务执行完毕（任务中调用time.sleep等都会等待其完成才继续运行主进程）
-
-     Args:
-         action(*args -> Any): 
-         **kwargs:
-             args(tuple): 入参
-
-     Returns:
-         
-     """
-     res = pool.apply(lambda x,y: print(x,y), args=(1,2))
-     res.get() # 阻塞获取结果
-
-     """
-     异步提交任务，即不会阻塞当前进程
-     并且主进程执行完则结束子进程，不等待子进程执行完。
-
-     Args:
-         action(*args -> Any): 
-         **kwargs:
-             args(tuple): 入参
-             callback(Any -> None): 回调函数
-
-     Returns:
-         
-     """
-     pool.apply_async(lambda x,y: print(x,y), args=(1,2))
-     res.get() # 阻塞获取结果
-
-     # 阻塞当前进程直到进程池中所有任务结束才继续运行
-     pool.close() # 指示不能再向进程池发起任务执行请求
-     pool.join()  # 阻塞当前进程直到进程池中所有任务结束才继续运行
-     #+END_EXAMPLE
+     1) ~multiprocess.Pool~ 模块
+        #+BEGIN_EXAMPLE python
+        from multiprocessing import Pool
+   
+        pool = Pool(3) # 进程池内置3个进程
+   
+        """
+        异步向进程池输入iterable对象，而iterable对象中的元素个数即为并行执行的进程请求数，每个进程以对应元素为入参，调用第一个函数。
+        若请求数大于进程池的进程数则分批执行。
+   
+        Args:
+            action(x -> Any): 
+            data(iterable):
+   
+        Returns:
+        """
+        res = pool.map(lambda x: print(x), ['a', 'b', 1, 2, 3, 4, 5])
+        res.get() # 返回所有执行结果
+   
+   
+        """
+        同步提交任务，即会阻塞当前进程直到任务执行完毕（任务中调用time.sleep等都会等待其完成才继续运行主进程）
+   
+        Args:
+            action(*args -> Any): 
+            **kwargs:
+                args(tuple): 入参
+   
+        Returns:
+            
+        """
+        res = pool.apply(lambda x,y: print(x,y), args=(1,2))
+        res.get() # 阻塞获取结果
+   
+        """
+        异步提交任务，即不会阻塞当前进程
+        并且主进程执行完则结束子进程，不等待子进程执行完。
+   
+        Args:
+            action(*args -> Any): 
+            **kwargs:
+                args(tuple): 入参
+                callback(Any -> None): 回调函数
+   
+        Returns:
+            
+        """
+        pool.apply_async(lambda x,y: print(x,y), args=(1,2))
+        res.get() # 阻塞获取结果
+   
+        # 阻塞当前进程直到进程池中所有任务结束才继续运行
+        pool.close() # 指示不能再向进程池发起任务执行请求
+        pool.join()  # 阻塞当前进程直到进程池中所有任务结束才继续运行
+        #+END_EXAMPLE
+     2) ~concurrent.futures.ProcessPoolExecutor~ 模块
+        - 用法和 ~concurrent.futures.ThreadPoolExecutor~ 一致
+        - 底层
+          #+BEGIN_QUOTE
+          ProcessPoolExecutor uses the multiprocessing module, which allows it to side-step the Global Interpreter Lock but also means that only picklable objects can be executed and returned.
+          #+END_QUOTE
+        - 构造函数 ~concurrent.futures.ProcessPoolExecutor(max_workers=None, mp_context=None)~
+          - ~max_workers:int~ If max_workers is None or not given, it will default to the number of processors on the machine.If max_workers is lower or equal to 0, then a ValueError will be raised.
+          - ~mp_context~
 
 ** 多线程
 
@@ -3948,7 +4071,6 @@ if __name__ == '__main__':
     CPython的线程就是C语言的pthread，并通过操作系统调度算法进行调度。
     因此thread模块是轻量级，而threading模块是对thread模块的封装。
     Queue模块是同步的、线程安全的队列类，一般和threading配合使用实现FIFO、LIFO和优先队列等。
-
 
 *** Linux的NPTL 
     内核2.6以前的调度单元均为进程，内核并没有真正支持线程。而LinuxThread则是通过系统调用 ~clone()~ 创建一份调用程序的拷贝，并且完全共享调用进程的地址空间（而 ~fork()~ 则不能共享调用进程的地址空间），来实现线程的内核级支持（线程实现完全为用户态，内核根本不知道线程的存在）。但很多地方没有遵循POSIX标准，如信号量处理、调度、进程间通信原语等。
@@ -4025,20 +4147,206 @@ if __name__ == '__main__':
           #+END_EXAMPLE
        3) 递归锁/可重入锁(RLock)
           - 死锁：两个或以上进程或线程在执行过程中，因争夺资源而造成一种相互等待的情况，若无外力作用，它们都将无法推进下去。
-            #+BEGIN_EXAMPLE python
-            from threading import Lock
+            1) 同一个线程中的死锁
+              #+BEGIN_EXAMPLE python
+              from threading import Lock
             
-            mutexA = Lock()
-            mutexA.acquire()
-            mutexA.acquire()
-            print(123)
-            mutexA.release()
-            mutexA.release()
-            #+END_EXAMPLE
-          - 递归锁/可重入锁(RLock)
-            对于同一进程或线程多次请求同一资源，可通过递归锁/可重入锁避免死锁问题。
-    3) Queue 让用于创建一个可以用于多个线程间共享数据的队列数据结构
+              mutexA = Lock()
+              mutexA.acquire()
+              mutexA.acquire()
+              print(123)
+              mutexA.release()
+              mutexA.release()
+              #+END_EXAMPLE
+            2) 多线程中死锁——科学家吃面
+               #+BEGIN_EXAMPLE python
+               from threading import Thread, Lock
+               noodle_lock = Lock()
+               fork_lock = Lock()
 
+               def eat1(noodle_lock, fork_lock, name):
+                   noodle_lock.acquire()
+                   print('%s 抢到面条' % name)
+                   fork_lock.acquire()
+                   print('%s 抢到叉子' % name)                   
+                   print('%s 吃面' % name)
+                   fork_lock.release()
+                   noodle_lock.release()
+
+               def eat2(noodle_lock, fork_lock, name):
+                   fork_lock.acquire()
+                   print('%s 抢到叉子' % name)                   
+                   noodle_lock.acquire()
+                   print('%s 抢到面条' % name)
+                   print('%s 吃面' % name)
+                   noodle_lock.release()
+                   fork_lock.release()                   
+
+               for name in ('a', 'b', 'c'):
+                   Thread(target=eat1, args=(noodle_lock, fork_lock, name)).start()
+                   Thread(target=eat2, args=(noodle_lock, fork_lock, name)).start()
+               #+END_EXAMPLE
+          - 递归锁/可重入锁(RLock)
+            对于同一进程或线程多次请求同一资源，可通过递归锁/可重入锁避免死锁问题。RLock实例内部维护一个Lock实例和一个counter变量，counter变量用于记录acquire的次数，当调用release时则counter自减，当counter为0时则其它线程才能获取资源。
+            1) 解决单线程死锁
+              #+BEGIN_EXAMPLE python
+              from threading import RLock
+            
+              mutexA = RLock()
+              mutexA.acquire()
+              mutexA.acquire()
+              print(123)
+              mutexA.release()
+              mutexA.release()            
+              #+END_EXAMPLE
+            2) 解决多线程死锁
+               #+BEGIN_EXAMPLE python
+               from threading import Thread, RLock
+               fork_lock, noodle_lock = RLock()
+
+               def eat1(noodle_lock, fork_lock, name):
+                   noodle_lock.acquire()
+                   print('%s 抢到面条' % name)
+                   fork_lock.acquire()
+                   print('%s 抢到叉子' % name)                   
+                   print('%s 吃面' % name)
+                   fork_lock.release()
+                   noodle_lock.release()
+
+               def eat2(noodle_lock, fork_lock, name):
+                   fork_lock.acquire()
+                   print('%s 抢到叉子' % name)                   
+                   noodle_lock.acquire()
+                   print('%s 抢到面条' % name)
+                   print('%s 吃面' % name)
+                   noodle_lock.release()
+                   fork_lock.release()                   
+
+               for name in ('a', 'b', 'c'):
+                   Thread(target=eat1, args=(noodle_lock, fork_lock, name)).start()
+                   Thread(target=eat2, args=(noodle_lock, fork_lock, name)).start()
+               #+END_EXAMPLE
+    3) Queue 让用于创建一个可以用于多个线程间共享数据的队列数据结构
+       1) FIFO队列
+          #+BEGIN_EXAMPLE python
+          import queue
+       
+          """
+          Args:
+              maxsize(int): 默认值为0，即无上限
+          """
+          q = queue.Queue()
+          q.put(1)
+          q.put(2)
+          q.get() # 返回1
+          q.get() # 返回2
+          #+END_EXAMPLE
+       2) FILO队列——栈
+          #+BEGIN_EXAMPLE python
+          import queue
+
+          """
+          Args:
+              maxsize(int): 默认值为0，即无上限
+          """
+          q = queue.LifoQueue()
+          q.put(1)
+          q.put(2)
+          q.get() # 返回2
+          q.get() # 返回1
+          #+END_EXAMPLE
+       3) 优先级对立
+          #+BEGIN_EXAMPLE python
+          import queue
+
+          """
+          Args:
+              maxsize(int): 默认值为0，即无上限
+          """
+          q = queue.PriorityQueue()
+          # 元组第一个元素为优先级，可为数字或其它值(一般为数字)，数字越小优先级越高，优先级越高则优先出队
+          q.put((20, 'a'))
+          q.put((30, 'b'))
+          q.put((10, 'c'))
+          q.get() # (10, 'c')
+          q.get() # (20, 'a')
+          q.get() # (30, 'b')
+          #+END_EXAMPLE
+       4) ~queue.Queue~ 功能和方法与 ~multiprocessing.JoinableQueue~ 一样
+    4) 线程池 ~concurrent.futures.ThreadPoolExecutor~
+       - 基本方法
+         1) 构造函数 ~ThreadPoolExecutor(max_workers=None, thread_name_prefix='')~
+            1) ~max_workers:int~  线程池中线程的最大数目，若没有设置或为None，则为处理器核数*5。
+               #+BEGIN_QUOTE
+               If max_workers is None or not given, it will default to the number of processers on the machine, multiplied by 5, assuming that ThreadPoolExecutor is often used to overlap I/O instead of CPU work and the number of workers should be higher than the number of processers.
+               #+END_QUOTE
+            2) ~thread_name_prefix:str~ 线程池中线程的名称前缀，便于debug。
+         2) ~submit(fn, *args, **kwargs)~ 异步提交任务
+         3) ~map(func, *iterables, timeout=None, chunksize=1)~ 等价于下面的操作
+            #+BEGIN_EXAMPLE
+            for i in iterable:
+                submit(func, i)
+            #+END_EXAMPLE
+         4) ~shutdown(wait=True)~ 相当于进程池的 ~pool.close()+pool.join()~ 操作
+            #+BEGIN_QUOTE
+            wait=True，等待池内所有任务执行完毕回收完资源后才继续；
+            wait=False，立即返回，并不会等待池内的任务执行完毕；
+            但不管wait参数为何值，整个程序都会等到所有任务执行完毕。
+            #+END_QUOTE
+         5) ~result(timeout=None)~ 获取执行结果
+         6) ~add_done_callback(fn)~ 回调函数
+         7) ~done()~ 判断某个任务是否完成
+         8) ~cancel()~ 取消某个任务
+       - 示例1——submit
+         #+BEGIN_EXAMPLE python
+         from concurrent.futures import ThreadPoolExecutor
+
+         
+         def task(a, b):
+             return a + b
+
+         
+         if __name__ == '__main__':
+             pool = ThreadPoolExecutor(max_workers=3)
+             future = pool.submit(task, 1, 2)
+             
+             pool.shutdown()
+             print(future.result()) # 回显3
+         #+END_EXAMPLE
+       - 示例2——map
+         #+BEGIN_EXAMPLE python
+         from concurrent.futures import ThreadPoolExecutor
+
+         
+         def task(a):
+             return a
+
+         
+         if __name__ == '__main__':
+             pool = ThreadPoolExecutor(max_workers=3)
+             future = pool.map(task, (1, 2))
+             
+             pool.shutdown()
+             print(future.result()) # 回显(1,2)         
+         #+END_EXAMPLE
+       - 示例3——callback
+         #+BEGIN_EXAMPLE python
+         from concurrent.futures import ThreadPoolExecutor
+
+         
+         def task(a, b):
+             return a + b
+
+         def print_result(n):
+             print(n)
+         
+         if __name__ == '__main__':
+             pool = ThreadPoolExecutor(max_workers=3)
+             future = pool.submit(task, 1, 2)
+             future.add_done_callback(print_result)
+         #+END_EXAMPLE
+
+** TODO 协程
 
 * TODO 开发环境
 
@@ -4451,7 +4759,93 @@ https://github.com/dadadel/pyment
   1) ~locals().keys()~ 局部变量?
   2) ~dir()~ 当前模块的变量?
   3) ~vars()~ 程序中的变量?
-* 网络编程
+* TODO 网络编程
   Socket通信的两种方式:
   1) 基于网络
   2) 基于文件
+* Picklable/Pickle-able Object
+  Picklable/Pickle-able Object即为可被Python的pickle库序列化的对象。
+  1) 可序列化对象如下(The following types can be pickled)
+     #+BEGIN_QUOTE
+     None, True, False
+     integers, floating point numbers, complex numbers
+     strings, bytes, bytearrays
+     tuples, lists, sets, dictionaries containing only picklable objects
+     functions defined at the top level of a module (using def, not lambda)
+     built-in functions definedat the top level of a module
+     classes that are defined at the top level of a module
+     instances of such classes whose __dict__ or the result of calling __getstate__() is picklable objects.
+     #+END_QUOTE
+  2) 不可序列化的对象包含但不限于：
+     #+BEGIN_QUOTE
+     socket, files, handlers, database connections
+     #+END_QUOTE
+
+** 序列化
+   #+BEGIN_EXAMPLE python
+   import pickle
+
+   data = [1,2,3]
+   
+   """
+   序列化对象为字节对象后返回，不写入文件中。
+
+   Args:
+       data(picklable):
+
+   Returns:
+       bytes: 序列化后的字节对象
+   """
+   p_str = pickle.dumps(data)
+
+   with open('/path/to/dump', 'wb') as f:
+       """
+       序列化对象为字节对象后保存到文件中。
+
+       Args:
+           data(picklable):
+           file(file):
+           protocol(int): 指定pickler使用的协议，支持0,1,2,3。Python3默认为3
+               0. Protocol version 0 is the original “human-readable” protocol and is backwards compatible with earlier versions of Python.
+               1. Protocol version 1 is an old binary format which is also compatible with earlier versions of Python.
+               2. Protocol version 2 was introduced in Python 2.3. It provides much more efficient pickling of new-style classes. Refer to PEP 307 for information about improvements brought by protocol 2.
+               3. Protocol version 3 was added in Python 3.0. It has explicit support for bytes objects and cannot be unpickled by Python 2.x. This is the default protocol, and the recommended protocol when compatibility with other Python 3 versions is required.
+               4. Protocol version 4 was added in Python 3.4. It adds support for very large objects, pickling more kinds of objects, and some data format optimizations. Refer to PEP 3154 for information about improvements brought by protocol 4. 
+       """
+       pickle.dump(data, f)
+   #+END_EXAMPLE
+
+** 反序列化
+   #+BEGIN_EXAMPLE python
+   import pickle
+
+   p_str = b'\x80\x03]q\x00(K\x01K\x02K\x03e.'
+   """
+   从字节对象中读取被封装的对象，并返回
+   
+   Args:
+       bytes_object(bytes):
+       
+   Returns:
+       picklable:
+   """
+   data = pickle.loads(p_str)
+
+
+   with open('/path/to/dump', 'rb') as f:
+        """
+        Args:
+            *files(array<file>):
+            **kwargs:
+                fix_imports(bool): 默认值为True
+                encoding(str): 默认值ASCII
+                errors(str): 默认值strict
+        """
+        data = pickle.load(f)
+   #+END_EXAMPLE
+
+** 序列化和反序列化时可能抛出的异常
+   1) PickleError 序列化或反序列化时遇到问题则抛出
+   2) PicklingError 遇到不可序列化的对象时抛出
+   3) UnPicklingError 遇到不可反序列化的对象时抛出
+

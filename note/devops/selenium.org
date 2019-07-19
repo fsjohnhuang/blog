@@ -1,5 +1,62 @@
 官网：https://www.seleniumhq.org/
 
+* 自动化测试基础
+
+** 测试分类1——根据项目流程阶段
+1) 单元测试
+   针对程序中的单个子程序或具有独立功能的代码段进行测试。
+2) 集成测试
+   基于单元测试，对通过单元模块组装成的系统或子系统进行测试，重点是检查模块间的接口是否正确。
+3) 系统测试
+   针对整个系统进行测试，验证系统是否满足需求规格中的功能、性能的要求。
+4) 验收测试
+   是部署软件前最后一个测试阶段，用于向客户展示系统能够满足客户要求。
+
+** 测试分类2——白盒、黑盒和灰盒测试
+1) 黑盒测试
+   不关心程序内部逻辑结构，针对程序界面和功能进行测试，验证程序是否按照规格说明书的规定正常使用、能否正常接收输入数据并产生正确的输出信息。
+2) 白盒测试
+   按照程序内部逻辑结构测试程序，检验程序每条逻辑路径是否都能按预期要求正确工作。
+3) 灰盒测试
+   介于黑盒测试与白盒测试之间。
+   既关注输出对于输入的正确性，同时也关注内部表现。但不像白盒测试那样详细、完整，只是通过一些表征性的现象、事件、标志来判断内部的运行状态。
+
+** 测试分类3——功能、性能测试
+1) 功能测试
+   1) 逻辑功能测试
+   2) 界面测试
+   3) 易用性测试
+   4) 安装测试
+   5) 兼容性测试
+2) 性能测试
+   1) 时间性能
+      指软件的一个具体的响应时间。
+   2) 空间性能
+      主要指软件运行时所消耗的系统资源，如硬件资源、CPU、内存、网络带宽消耗等。
+
+** 测试分类4——冒烟测试、回归测试、随机测试、探索性测试和安全测试
+1) 冒烟测试
+   指测试小组在正式测试一个新版本之前，先投入较少的人力和时间验证一个软件的主要功能，如果主要功能都没有运行通过，则打回开发组重新开发。从而节省时间和人力投入到不可测的项目中。
+2) 回归测试
+   指修改了旧代码后，重新进行测试以确人修改后没有引入新的错误或导致其他代码产生错误。
+3) 随机测试
+   指测试中的所有输入数据都是随机生成的，其目的是模拟用户的真实操作，并发现一些边缘性的错误。一般放在测试的最后执行。
+4) 探索性测试
+   作为随机测试的升级版，是一种测试思维技术，强调在碰到问题时及时改变测试策略。
+5) 安全测试
+
+** 怎样的项目适合自动化测试
+1) 任务测试明确，不会频繁变动
+2) 每次构建后的测试验证
+3) 比较频繁的回归测试
+4) 软件系统界面稳定，变动少
+5) 需要在多平台上运行的相同测试案例、组合遍历型的测试，大量的重复任务
+6) 软件维护周期长
+7) 项目进度压力不太大
+8) 被测试的软件系统开发较为规范，能够保证系统的可测试性
+9) 具备大量的自动化测试平台
+10) 测试人员具有较强的编程能力
+
 * Selenium工具集
 1) Selenium IDE
    提供浏览器操作的录制和回放功能，和创建自动化测试脚本并导出指定编程语言的版本。
@@ -232,11 +289,139 @@ we.send_keys(Keys.F1)
 we.send_keys(Keys.F12)
 #+END_EXAMPLE
 
+* 操作iframe/frame
+#+BEGIN_EXAMPLE python
+"""
+切换到指定的iframe或frame中
+
+Args:
+    loc(str|WebElement): 字符串时会作为id或name来定位iframe/frame，或直接传递iframe/frame的WebElement对象。
+"""
+driver.switch_to.frame(loc)
+
+"""
+返回上一级iframe/frame中
+"""
+driver.switch_to.parent_content()
+
+"""
+返回最外层的iframe/frame中
+"""
+driver.switch_to.default_content()
+#+END_EXAMPLE
+
+* 操作window
+#+BEGIN_EXAMPLE python
+driver.current_window_handle # 获取当前窗口句柄
+
+driver.window_handles # 获取当前所有打开的窗口句柄
+
+driver.switch_to.window(driver.current_window_handle) # 进入指定的窗口
+
+driver.maximize_window() # 最大化
+
+driver.close() # 关闭当前窗口
+#+END_EXAMPLE
+
+* 操作警告弹出窗
+#+BEGIN_EXAMPLE python
+driver.switch_to_alert() # 获取当前alert/confirm/prompt弹出窗
+
+driver.switch_to_alert().text # 获取当前alert/confirm/prompt弹出窗的提示信息
+driver.switch_to_alert().accept() # 接受现有警告框
+driver.switch_to_alert().dismiss() # 解散现有警告框
+driver.switch_to_alert().send_keys(message) # 向文本框输入信息
+#+END_EXAMPLE
+
+* 上传文件
+** 普通上传——文件作为值放在input标签中，然后通过form提交实现上传
+#+BEGIN_EXAMPLE python
+# 通过send_keys设置文件路径
+driver.find_element_by_name('file').send_keys('d:\\upload_file.txt')
+#+END_EXAMPLE
+
+** 插件上传——通过Flash、JavaScript或Ajax等技术实现上传
+通过外部工具AutoIt进行Windows GUI操作脚本化录制，然后通过 ~os.system~ 调用。
+
+* 操作Cookie
+#+BEGIN_EXAMPLE python
+"""
+获取所有cookie信息
+
+Returns:
+    list<dict>: 所有cookie信息
+
+Examples:
+    每个dict的内容为httpOnly:bool, name:str, secure:bool, expiry:int, value:str, path:str, domain:str.
+"""
+driver.get_cookies()
+
+"""
+根据名称获取cookie信息
+
+Args:
+    name(str):
+
+Returns:
+    dict:
+"""
+driver.get_cookie(name)
+
+"""
+添加cookie
+
+Args:
+    cookie_dict(dict): 必须包含name和value的键值
+
+Examples:
+    driver.add_cookie({'name': 'test', 'value': '123'})
+"""
+driver.add_cookie(cookie_dict)
+
+"""
+删除cookie信息
+
+Args:
+    name(str): cookie的name值
+    optionsString(str): 仅支持path和domain，如path="/"; domain=”www.foo.com“
+"""
+driver.delete_cookie(name, optionsString)
+
+"""
+删除所有cookie信息
+"""
+driver.delete_all_cookies()
+#+END_EXAMPLE
+
 * 执行JavaScript
 #+BEGIN_EXAMPLE python
 el = driver.find_element((By.ID, 'test'))
 driver.execute_script('arguments[0].setAttribute("style", arguments[1]);', el, 'backgroud: green;border: 2px solid red;')
 #+END_EXAMPLE
+
+* 控制HTML5视频播放
+要借助JavaScript控制
+#+BEGIN_EXAMPLE python
+url = driver.execute_script('return arguments[0].currentSrc', video)
+driver.execute_script('arguments[0].play()', video)
+driver.execute_script('arguments[0].pause()', video)
+driver.execute_script('arguments[0].load()', video)
+#+END_EXAMPLE
+
+* 截屏
+#+BEGIN_EXAMPLE python
+# 截图当前窗口，并保存。
+driver.get_screenshot_as_file("/path/to/screenshot.jpg")
+#+END_EXAMPLE
+
+* WebDriver原理
+采用Server-Client架构，我们编写的则为Client端，向Server端发送指令操作浏览器。
+WebDriver的工作流程：
+1) WebDriver启动目标浏览器，并绑定到指定端口。而被启动的浏览器实例则作为WebDriver的Remote Server。
+2) Client端通过CommandExecutor发送HTTPRequest给Remote Server的侦听端口(通信协议：the webdriver wire protocol)
+3) Remote Server需要依赖原生的浏览器组件(如IEDriverServer.exe、chromedriver.exe、geckodriver.exe)来转化浏览器的native调用。
+
+其中若开启logging模块的debug模式，那么就能捕获到Client向Server发送的POST请求，但无法获取Server端的应答。
 
 * 自动化测试模型
   库(Library)，由代码集合成的一个产品，供程序员调用。采用面向对象组织形式的库称为类库，而采用面向过程组织形式的库称为函数库。
@@ -266,6 +451,46 @@ driver.execute_script('arguments[0].setAttribute("style", arguments[1]);', el, '
    将数据更换为关键字，通过图形界面向让用户在其提供的表格上填写工具提供的关键字来以过程式的方式编写测试用例，而Robot Framework是其中的佼佼者。
    相当于一套GUI的DSL，因此还不如直接写脚本。
 
+* Selenium Grid2
+让位于主节点(HUB)的测试用例可以在不同的分支节点(NODE)上运行，从而实现并行在不同的浏览器版本和操作系统组合上测试。
+已经集成到Selenium Server当中，因此需下载Selenium Server(http://www.seleniumhq.org/download/)。
+必须启动一个HUB和至少一个NODE。
+
+1) 测试脚本(脚本位于IP为192.168.127.3上)
+   #+BEGIN_EXAMPLE python
+   from selenium.webdriver import Remote
+   
+   # 定义测试主机和浏览器类型
+   lists = {'http://192.168.127.3:4444/wd/hub': 'chrome',
+            'http://192.167.127.4:5555/wd/hub': 'firefox',
+            'http://192.167.127.4:5555/wd/hub': 'internet explorer',}
+   
+   # 可配合多进程多线程实现并行测试
+   for host, browser in lists:
+       driver = Remote(command_executor=host, # 指定测试主机，默认为http://127.0.0.1:4444/wd/hub
+                       desired_capabilities={'platform': 'ANY',
+                                             'browserName': browser,
+                                             'version': '',
+                                             'javascriptEnabled': True})
+       driver.get('http://www.baidu.com')
+       driver.find_element_by_id('kw').send_keys(browser)
+       driver.close()
+   #+END_EXAMPLE
+2) 启动HUB(假设IP为192.168.127.3)
+   #+BEGIN_EXAMPLE bash
+   # HUB的默认端口号为4444
+   java -jar selenium-server-standalone-2.27.0.jar -role hub -port 4444
+   #+END_EXAMPLE
+3) 启动NODE(假设IP为192.168.127.4)
+   #+BEGIN_EXAMPLE bash
+   # NODE的默认端口号为5555
+   java -jar selenium-server-standalone-2.27.0.jar -role node -port 5555 -hub http://192.168.127.3:4444/grid/register
+   #+END_EXAMPLE
+
+
+
+
+
 * Page Object 设计模式
   作为Selenium的最佳实践之一，由如下优点：
   1) 减少代码的重复
@@ -281,9 +506,36 @@ driver.execute_script('arguments[0].setAttribute("style", arguments[1]);', el, '
          2) 在用户名称输入框输入信息 ~set_username(text)~
   3) 然后在测试用例中调用Page Object的方法编排测试逻辑
 
+* Component Driven 设计模式
+  基于 Page Object 设计模式作扩展，针对大型项目。
+
+** 目录结构
+   #+BEGIN_EXAMPLE yaml
+   project/
+     - reports/
+     - tests/
+         - components/     # 公共组件
+             - __init__.py
+             - menu.py
+             - list.py
+         - pages/          # 页面
+             - __init__.py
+             - main/
+                 - __init__.py # 页面
+                 - list.py     # 私有组件
+         - scenarios/      # 操作场景
+             - __init__.py
+             - login.py
+             - submit_form.py
+         
+         - test_hr.py # 针对场景作测试
+   #+END_EXAMPLE
+
 * TODO WebDriver配置
 
 ** Firefox 
+https://firefox-source-docs.mozilla.org/testing/geckodriver/geckodriver/TraceLogs.html
+
 #+BEGIN_EXAMPLE python
 from selenium import webdriver
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
@@ -301,6 +553,61 @@ driver = webdriver.Firefox(firefox_binary=binary,
                            firefox_options=firefox_options
                            executable_path=driver_path)
 #+END_EXAMPLE
+
+1) 设置默认文件下载路径
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   import os
+   
+   fp = webdriver.FirefoxProfile()
+   # 0表示下载到浏览器默认下载路径，2为下载到指定目录
+   fp.set_preference('browser.download.folderList', 2)
+   # 是否显示开始，True为显示、False为不显示
+   fp.set_preference('browser.download.manager.showWhenStarting', False)
+   # 指定下载目录
+   fp.set_preference('browser.download.dir', os.getcwd())
+   # 指定下载内容的Content-type值
+   fp.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/octet-stream')
+
+   driver = webdriver.Firefox(firefox_profile=fp)
+   #+END_EXAMPLE
+2) 设置无界面操作
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.firefox.options import Options
+   
+   
+   firefox_options = Options()
+   firefox_options.add_argument('--headless')
+   firefox_options.add_argument('--disable-gpu')
+   firefox_options.add_argument('--mute-audio') # without audio
+   driver = webdriver.Firefox(firefox_options=firefox_options)
+   #+END_EXAMPLE
+3) 设置WebDriver路径
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+
+   driver_path = r'C:\Program Files (x86)\Mozilla Firefox\geckodriver.exe'
+   driver = webdriver.Firefox(executable_path=driver_path)
+   #+END_EXAMPLE
+4) 设置浏览器可执行文件路径
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+
+   binary = FirefoxBinary(r'C:\Program Files (x86)\Mozilla Firefox\firefox.exe')
+   driver = webdriver.Firefox(firefox_binary=binary)
+   #+END_EXAMPLE
+5) 其它
+   #+BEGIN_EXAMPLE python
+   from selenium import webdriver
+   from selenium.webdriver.firefox.options import Options
+
+
+   firefox_options = Options()
+   firefox_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36')
+   driver = webdriver.Firefox(firefox_options=firefox_options)
+   #+END_EXAMPLE
 
 ** Chrome
 #+BEGIN_EXAMPLE python
@@ -322,7 +629,73 @@ driver = webdriver.Chrome(chrome_options=chrome_options
                           executable_path=driver_path)
 #+END_EXAMPLE
 
-* TODO BDD框架——Lettuce入门
+** IE
+#+BEGIN_EXAMPLE python
+
+driver = webdriver.Ie()
+#+END_EXAMPLE
+
+* BDD框架——Lettuce入门
+Behavior Driven Development 作为敏捷软件开发技术，主要从用户的需求出发，强调系统行为。在2003年初由Dan North命名。
+BDD框架:
+1) Cucumber(Ruby)
+2) Jdave(Java)
+3) Behat(PHP)
+4) Behave(Python)
+5) Lettuce(Python)
+
+Lettuce允许使用自然语言(英语)描述一个系统的行为，操作步骤如下：
+1) decribe behaviour
+2) define step in python
+3) run and watch it fail
+4) write code to make it pass
+5) run and watch it pass
+
+** 示例
+目录结构：
+#+BEGIN_QUOTE
+tests/
+    - features/
+             - zero.feature
+             - steps.py
+#+END_QUOTE
+
+#+BEGIN_EXAMPLE
+# zero.feature
+Feature: Compute factorial
+   In order to play with Lettuce
+   As beginners
+   We'll implement factorial
+
+Scenario: Factorical of 0
+Given I have the number 0
+When I compute its factorial
+Then I see the number 1
+#+END_EXAMPLE
+
+#+BEGIN_EXAMPLE python
+from lettuce import *
+
+@step('I have the number (\d+)')
+def have_the_number(step, number):
+    world.number = int(number)
+
+@step('I compute its factorial')
+def compute_its_factorial(step):
+    world.number = factorial(world.number)
+
+@step('I see the number (\d+)')
+def check_number(step, expected):
+    expected = int(expected)
+    assert world.number == expected, 'Got %d' % world.number
+
+def factorial(number):
+    number = int(number)
+    if (number == 0) or (nummber == 1):
+        return 1
+    else:
+        return number
+#+END_EXAMPLE
 
 * QA
   1) 启动Firefox时运行报 ~selenium.common.exceptions.WebDriverException: Message: newSession~
