@@ -2162,6 +2162,7 @@ import logging.config
 
 cfg = {
   "version": 1, # 版本 - 被设置为表示模式版本的整数值。目前唯一有效的值是1，但拥有这个键可以使模式发展，同时仍然保持向后兼容性。
+  "disable_existing_loggers": True,
   # 根日志记录器配置
   "root": {
     "handlers": ['console', 'file'],
@@ -2176,9 +2177,12 @@ cfg = {
   }
   "formatters": {
     "simple": {
-      "format": '%(asctime)s %(name)s:%(levelname)s:%(message)s',
+      "format": '%(asctime)s:%(name)s:%(levelname)s:%(message)s',
       "datefmt": '%d-%M-%Y %H:%M:%S'
-    }
+    },
+    "verbose": {
+      "format": '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s',
+    },
   },
   "handlers": {
     "console": {
@@ -2192,7 +2196,16 @@ cfg = {
       "encoding": 'utf-8',
       "level": 'DEBUG',
       "formatter": 'simple'
-    }
+    },
+    "rotating": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "INFO",
+      "formatter": "simple",
+      "filename": "info.log",
+      "maxBytes": 10485760,
+      "backupCount": 20,
+      "encoding": "utf8",
+    },
   },
 }
 
@@ -2466,7 +2479,11 @@ logger.addHandler(handler_stderr)
 #+END_EXAMPLE
 
 ** TODO 多线程/多进程下的并发问题
-   
+** 内置Handler   
+1) ~logging.NullHandler()~ 屏蔽输出。
+2) ~logging.handlers.MemoryHandler(capacity, flushLevel=level,target=target_handler)~ 缓冲日志当缓存满或日志级别大于等于设定时，输出日志记录到目标handler。
+3) ~logging.StreamHandler()~ 默认输出到标准错误，可通过 ~logging.StreamHandler(sys.stdout)~ 设置输出到标准输出。
+
 ** 自定义Handler
    #+BEGIN_EXAMPLE python
    import logging
@@ -2488,6 +2505,121 @@ logger.addHandler(handler_stderr)
    logger.info('hello')
    print(mem_handler.message)
    #+END_EXAMPLE
+
+** 第三方Handler
+1) pyzmq
+   向ZeroMQ发送日志信息。
+
+** 自定义Filter
+Filter可以筛选LogRecord和向LogRecord添加属性
+#+BEGIN_EXAMPLE python
+import logging
+
+class ContextFilter(logging.Filter):
+
+    def filter(self, record):
+        record.ip = '127.0.0.1'
+        return True # 返回True即保留该LogRecord，否则不保留
+
+logging.basicConfig(format='%(ip)s %(message)s')
+logger = logging.getLogger()
+logger.addFilter(ContextFilter())
+logger.info('hello') # 日志输出 127.0.0.1 hello
+#+END_EXAMPLE
+
+** JSON格式化输出
+1) 定义JSON编码器
+   #+BEGIN_EXAMPLE python
+   from __future__ import unicode_literals
+   import json
+
+   try:
+       unicode
+   except:
+       unicode = str
+
+
+   class Encoder(json.JSONEncoder):
+       def default(self, o):
+           if isinstance(o, set):
+               return tuple(o)
+           elif isinstance(o, unicode):
+               return o.encode('unicode_escape'.decode('ascii'))
+           else:
+               return super(Encoder, self).default(o)
+   #+END_EXAMPLE
+2) 自定义LoggerAdapter封装Logger
+   #+BEGIN_EXAMPLE python
+   from logging import LoggerAdapter
+   
+   from .encoder import Encoder
+
+   
+   class JSONLoggerAdapter(LoggerAdapter):
+       # def debug(self, msg, *args, **kwargs):
+       #     msg, kwargs = self.process(msg, kwargs)
+       #     self.logger.debug(msg, *args, **kwargs)
+   
+       def process(self, msg, kwargs):
+           """
+           Returns:
+               (msg: str, kwargs: dict): msg作为新的message, kwargs则为原来的入参
+           """
+           if not isinstance(msg, dist):
+               msg = {'message': msg}
+
+           # 复制上下文
+           for k, v in self.extra:
+               msg[k] = v
+
+           return Encoder().encode(msg), kwargs
+   #+END_EXAMPLE
+3) 使用
+   #+BEGIN_EXAMPLE python
+   logger = logging.getLogger()
+   json_logger = JSONLoggerAdapter(logger, {'extra_conf': 'hello'})
+   json_logger.info({'message': 'yes %s', 'value': 1}, 'no')
+   # 返回 {"message": "yes no", "value": 1, "extra_conf": "hello"}
+   #+END_EXAMPLE
+
+** 自定义Formatter
+自定义仅用一行记录每个日志记录，即使出现异常。
+#+BEGIN_EXAMPLE python
+from logging import Formatter
+
+class LineFormatter(Formatter):
+    def format(self, record):
+        """
+        Args:
+            record(LogRecord):
+    
+        Returns:
+            str:
+        """
+        s = super(LineFormatter, self).format(record)
+        if record.exc_text:
+            s = s.replace('\n', '') + '|'
+
+        return s
+
+    def formatException(self, ei):
+        result = super(LineFormatter, self).formatException(ei)
+        return repr(result)
+
+
+logger = logging.getLogger()
+fh = logging.FileHandler('output.txt', 'w')
+f = LineFormatter('%(message)s|%d/%m/%Y %H:%M:%S')
+fh.setFormatter(f)
+logger.addHandler(fh)
+#+END_EXAMPLE
+
+** TODO LogRecord
+** TODO 缓冲日志
+#+BEGIN_EXAMPLE python
+
+#+END_EXAMPLE
+** TODO 通过context manager临时修改logger配置
 
 ** 源码剖析
    根logger的类型为logging.RootLogger
@@ -2676,14 +2808,183 @@ if __name__ == '__main__':
 #+END_EXAMPLE
 
 ** TODO pytest
+
+*** 安装和简单使用
+    1) 安装
+       #+BEGIN_EXAMPLE bash
+       pip install -U pytest
+       #+END_EXAMPLE
+    2) 简单使用
+       #+BEGIN_EXAMPLE python
+       def revese(string):
+           return string[::-1]
+
+
+       def test_reverse():
+           string = 'abc'
+           asset revese(string) == 'cba'
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE bash
+       pytest
+       #+END_EXAMPLE
+
 *** 测试用例搜索规则
   1) 若没有在命令行设置目录路径 ，则从环境变量testpaths或当前目录开始递归遍历，期间遇到被设置在环境变量norecursedirs的目录路径则不递归遍历其子目录；
   2) 递归遍历期间发现文件名称匹配 ~test_*.py~ 或 ~*_test.py~ 的文件，则读取它们的内容；
   3) 在文件中搜索时规则如下
      1) 函数名匹配 ~test*~ 的函数
      2) 类名匹配 ~Test*~ 类且没有定义 ~__init__~ 方法的方法名匹配 ~test*~ 的方法
+  4) 也支持unittest模式的用例定义
 
-*** 
+*** 断言
+    1) ~assert <expr>~ pytest使用的Python自带的assert关键字，若表达式 ~<expr>~ 返回True则成功，False则用例执行失败。
+    2) 异常抛出
+       #+BEGIN_EXAMPLE python
+       import pytest
+
+       def test_zero_division():
+           # 若抛出ZeroDivisionError异常则用例成功，否则失败
+           # 可通过可选的message设置失败时的提示语
+           # exc_info为实际异常的包装实例，其中较重要的属性为type,value和traceback.
+           with pytest.raises(ZeroDivisionError, 
+                              message='Expecting ZeroDivisionError') as exc_info:
+               1 / 0
+
+           # 若调用堆栈中存在指定字符串则用例正常，否则失败
+           assert 'maxiumn recursion' in str(exc_info.value)
+       #+END_EXAMPLE
+       - ~pytest.raises~ Context-manager
+         Be better for cases where you are testing exceptions your own code is deliberately raising.
+         #+BEGIN_EXAMPLE python
+         """
+         Args:
+            ExpectedException(Exception): 期待抛出的异常
+            func((*args, **kwargs) -> None): 可以接收*args和**kwargs的方法，当期待的异常被抛出时执行
+            **kwargs:
+                message(str): 测试用例失败时的提示语
+                match(raw str): 作为正则表达式，用于匹配exc_info.value内容
+         """
+         pytest.raises(ExpectedException, func, *args, **kwargs)
+         #+END_EXAMPLE
+       - ~pytest.mark.xfail~
+         Be probably better for something like documenting unfixed bugs or bugs in dependencies.
+         #+BEGIN_EXAMPLE python
+         import pytest
+
+         @pytest.makr.xfail(raises=IndexError)
+         def test_func():
+             func()
+         #+END_EXAMPLE
+
+
+
+*** Fixture
+    用于初始化数据和测试对象。
+    使用场景如下：
+    1) 所有用例开始前初始化测试数据或对象
+       #+BEGIN_EXAMPLE python
+       import pytest
+       import json
+
+       class TestUserPassword(object):
+           @pytest.fixture
+           def users(self):
+               with open('./users.dev.json') as f:
+                   return json.loads(f.read())
+
+           def test_user_password(self, users):
+               for user in users:
+                   passwd = user['password']
+                   assert len(passwd) >= 6
+                   
+                   msg = 'user %s has a weak password.' % user['name']
+                   assert passwd != 'password', msg
+                   assert passwd != 'password123', msg
+       #+END_EXAMPLE
+       #+BEGIN_EXAMPLE bash
+       # 直接执行
+       pytest
+       # 执行并显示用到的fixture
+       pytest --fixtures
+       #+END_EXAMPLE
+       - 执行顺序：
+         1) pytest搜索定位test_case方法；
+         2) pytest识别fixture后，执行fixture；
+         3) 将fixture传入test_case并执行test_case。
+    2) 所有用例结束后销毁测试数据或对象
+    3) 每个用例开始前初始化测试数据或对象
+    4) 每个用例结束后销毁测试数据或对象
+    5) 所有module的用例开始前初始化测试数据或对象
+    6) 所有module的用例结束后销毁测试数据或对象
+       #+BEGIN_EXAMPLE python
+       import smtplib
+       import pytest
+
+       @pytest.fixture(scope='module')
+       def smtp():
+           smtp = smtplib.SMTP('smtp.mail.com', 587, timeout=5)
+           yield smtp
+           print('teardown smtp')
+           smtp.close()
+       #+END_EXAMPLE
+
+**** Parametrize Fixture
+任何1条测试数据导致断言不通过后测试用例会停止运行，通过参数化Fixture可实现不停止运行。
+1) 方式1——每次传入单个数据
+   - 语法: ~@pytest.fixture(params=['smtp.gmail.com', 'mail.python.org'])~
+   - ~len(params)~ 为测试用例执行的次数。
+   - 测试用例通过 ~request.param~ 来获取测试数据
+   - 示例:
+     #+BEGIN_EXAMPLE python
+     import smtplib
+     import pytest
+     
+     @pytest.fixture(params=['smtp.gmail.com', 'mail.python.org'])
+     def smtp(request):
+         smtp = smtplib.SMTP(request.param, 587, timeout=5)
+         yield smtp
+         print('finalizing %s' % smtp)
+         smtp.close()
+     #+END_EXAMPLE
+2) 方式2——每次传入多个
+   - 语法: ~@pytest.mark.parametrize('a, b', [(1,2),(3,4)])~
+   - 示例:
+     #+BEGIN_EXAMPLE python
+     import pytest
+     
+     @pytest.mark.parametrize('input, expected', 
+                              [('1+1', 2),
+                               ('3*3', 9)])
+     def test_eval(input, expected):
+         assert eval(input) == expected
+     #+END_EXAMPLE
+
+*** 测试套路
+https://docs.pytest.org/en/latest/example/simple.html
+https://docs.pytest.org/en/latest/example/parametrize.html
+
+*** 并行运行测试用例
+https://pypi.org/project/pytest-xdist/
+1) 安装xdist插件
+   #+BEGIN_EXAMPLE bash
+   pip install pytest-xdist
+   #+END_EXAMPLE
+2) 动态修改命令行入参
+   #+BEGIN_EXAMPLE python
+   import sys
+
+   
+   def pytest_load_initial_conftests(args):
+       if 'xdist' in sys.modules:
+           import multiprocessing
+           
+           num = max(multiprocessing.cpu_count() / 2 , 1)
+           args[:] = ['-n', str(num)] + args
+   #+END_EXAMPLE
+
+
+
+
 
 *** 配置文件pytest.ini
   https://docs.pytest.org/en/latest/customize.html#command-line-options-and-configuration-file-settings
@@ -2691,7 +2992,7 @@ if __name__ == '__main__':
 *** 测试报告
   
 **** junit-xml
-   内置的测试报告功能，只需执行 ~pytest --junit-xml /path/to/report.xml~ 即会将测试结果保存到指定文件中。
+   内置的测试报告功能，只需执行 ~pytest --junit-xml /path/to/report.xml~ 即会将测试结果保存到指定文件中，可供Jenkins读取输出。
    
 **** html
    插件： ~pytest-html~
@@ -4031,6 +4332,61 @@ if __name__ == '__main__':
           - ~max_workers:int~ If max_workers is None or not given, it will default to the number of processors on the machine.If max_workers is lower or equal to 0, then a ValueError will be raised.
           - ~mp_context~
 
+**** 分布式进程
+     通过 ~multiprocessing.managers~ 实现一个服务进程作为调度者，将任务分布到其他多个进程中，全部通过网络通信，从而实现Master/Worker模型。
+
+***** 示例
+      1) Master
+         #+BEGIN_EXAMPLE python
+         import queue
+         from multiprocessing.managers import BaseManager
+
+         class QueueManager(BaseManager):
+             pass
+
+
+         task_queue = queue.Queue()  # 任务队列
+         result_queue = queue.Queue()# 结果队列
+         QueueManager.register('get_task_queue', callable=lambda: task_queue)
+         QueueManager.register('get_result_queue', callable=lambda: result_queue)
+
+         manager = QueueManager(address=('', 5000) # Master监听5000端口
+                                , authkey=b'abc')  # 通信身份凭证
+         manager.start()
+         
+         # Master需通过Manager获取队列来操作，不能直接操作
+         tasks = manager.get_task_queue()
+         results = manager.get_result_queue()
+         for i in range(10):
+             tasks.put(i)
+
+         try:
+             data = result.get(timeout=10) # 阻塞读取
+         except queue.Empty:
+             pass
+
+         manager.shutdown() # 关闭监听
+         #+END_EXAMPLE
+      2) Worker
+         #+BEGIN_EXAMPLE python
+         import queue
+         from multiprocessing.managers import BaseManager
+
+         class QueueManager(BaseManager):
+             pass
+
+         manager = QueueManager(address=('127.0.0.1', 5000) # 连接到Master的5000端口
+                                , authkey=b'abc')  # 通信身份凭证
+         manager.connect()
+         tasks = manager.get_task_queue()
+         results = manager.get_result_queue()
+         try:
+             data = tasks.get(timeout=1)
+             results.put(data+1)
+         except queue.Empty:
+             pass
+         #+END_EXAMPLE
+
 ** 多线程
 
    60年代在OS中能拥有资源和独立运行的基本单元是进程，但由于进程的创建、销毁和切换存在较大的时空开销，因此引入轻量级进程。而对称多处理机(SMP)可满足并行运行，而多进程并行开销也比较大。
@@ -4163,7 +4519,7 @@ if __name__ == '__main__':
                from threading import Thread, Lock
                noodle_lock = Lock()
                fork_lock = Lock()
-
+p
                def eat1(noodle_lock, fork_lock, name):
                    noodle_lock.acquire()
                    print('%s 抢到面条' % name)
@@ -4226,7 +4582,28 @@ if __name__ == '__main__':
                    Thread(target=eat1, args=(noodle_lock, fork_lock, name)).start()
                    Thread(target=eat2, args=(noodle_lock, fork_lock, name)).start()
                #+END_EXAMPLE
-    3) Queue 让用于创建一个可以用于多个线程间共享数据的队列数据结构
+    3) ThreadLocal
+       用于创建线程级别的全局变量。一般用于每个线程绑定一个数据库链接、HTTP请求、用户信息等。
+       #+BEGIN_EXAMPLE python
+       import threading
+
+       # 创建线程级别的全局变量
+       local_dict = threading.local()
+
+       def process(name):
+           print(local_dict.name)
+           local_dict.name = name
+           print(local_dict.name)
+
+       ts = []
+       for name in ['a', 'b']:
+           ts.append(threading.Thread(target=process, args=(name,)))
+           ts[-1].start()
+
+       for t in ts:
+           t.join()
+       #+END_EXAMPLE
+    4) Queue 让用于创建一个可以用于多个线程间共享数据的队列数据结构
        1) FIFO队列
           #+BEGIN_EXAMPLE python
           import queue
@@ -4273,7 +4650,7 @@ if __name__ == '__main__':
           q.get() # (30, 'b')
           #+END_EXAMPLE
        4) ~queue.Queue~ 功能和方法与 ~multiprocessing.JoinableQueue~ 一样
-    4) 线程池 ~concurrent.futures.ThreadPoolExecutor~
+    5) 线程池 ~concurrent.futures.ThreadPoolExecutor~
        - 基本方法
          1) 构造函数 ~ThreadPoolExecutor(max_workers=None, thread_name_prefix='')~
             1) ~max_workers:int~  线程池中线程的最大数目，若没有设置或为None，则为处理器核数*5。
@@ -4346,7 +4723,57 @@ if __name__ == '__main__':
              future.add_done_callback(print_result)
          #+END_EXAMPLE
 
-** TODO 协程
+** 协程(Coroutine, 又称微线程、纤程)
+   协程是一种用户态的轻量级线程，由用户程序控制协程的调度，而不像线程是由内核来控制调度。
+   优点：
+   1) 切换开销小，由用户程序控制保存执行环境后再执行调度，而不是由内核控制保存栈、寄存器等执行环境；
+   2) 单线程内实现并发效果，在IO密集型操作时提供CPU利用率；
+   3) 多个协程任务内修改数据不能加锁。
+   缺点：
+   1) 无法利用多核并行处理能力；
+   2) 一个协程任务中被阻塞，即整个线程都被阻塞；
+   3) 仅适用于IO密集型操作，否则反而降低性能。
+
+   一般采用gevent库来使用协程，内部主要使用Greenlet，它是以C扩展模块形式接入Python的轻量级协程。
+   gevent方法：
+   - ~gevent.spawn(task: function, *args, **kwargs) -> Greenlet~
+     创建协程任务，其中 ~*args~ 和 ~**kwargs~ 为传递给task的参数
+   - ~Greenlet实例.join()~ 阻塞当前线程直到协程结束
+   - ~gevent.joinall((Greenlet实例1, Greenlet实例2))~ 阻塞当前线程直到指定的协程结束
+   - ~Greenlet实例.value~ 获取协程的返回值
+   
+*** 基本用法
+    #+BEGIN_EXAMPLE python
+    # 必须位于文件其它引入之前，用于对time.sleep等IO操作进行打补丁。
+    # 当在协程任务中使用time.sleep等IO操作时会自动通过协程完成任务调度，而不是一直阻塞。
+    from gevent import monkey
+    monkey.patch_all()
+
+    import gevent
+    import threading
+    from time import sleep
+
+    def task1(a):
+        print(threading.current_thread().getName()) # 回显DummyThread-1，表示为假线程即协程
+        sleep(10) # 发生IO即跳转到task2
+        print(a)
+        return a+1
+
+    def task2(b):
+        print(threading.current_thread().getName()) # 回显DummyThread-2，表示为假线程即协程
+        sleep(4) # 发生IO即跳转到task1
+        print(b)
+        return b+1
+
+    gs = []
+    gs.append(gevent.spawn(task1, 1))
+    gs.append(gevent.spawn(task2, 2))
+
+    gevent.joinall(gs)
+    
+    print(gs[0].value) # 2
+    print(gs[1].value) # 3
+    #+END_EXAMPLE
 
 * TODO 开发环境
 
@@ -4760,9 +5187,326 @@ https://github.com/dadadel/pyment
   2) ~dir()~ 当前模块的变量?
   3) ~vars()~ 程序中的变量?
 * TODO 网络编程
-  Socket通信的两种方式:
-  1) 基于网络
-  2) 基于文件
+** 文件描述符(File Descriptor)和句柄(File Handler)
+   fd为一个整数，通过该整数映射到对应的文件。
+   
+** IO模型
+   1) 阻塞IO(Blocking IO)
+      |                | application      |                  | kernel            |                               |
+      |----------------+------------------+------------------+-------------------+-------------------------------|
+      | process        | recvfrom         | - system call -> | no datagram ready |                               |
+      | blocks         |                  |                  | $               $ | wait for data                 |
+      | in call        |                  |                  | datagram ready    |                               |
+      |----------------+------------------+------------------+-------------------+-------------------------------|
+      | to system call |                  |                  | copy datagram     |                               |
+      | `recvfrom`     |                  |                  | $               $ | copy data from kernel to user |
+      |                | process datagram | <- return OK -   | copy complete     |                               |
+      - 说明
+        当用户程序调用系统调用recvfrom，那么kernel就会去准备数据(用户程序被阻塞)，当数据准备好后就将数据从内核拷贝到用户内存(用户程序被阻塞)，然后内核返回结果后用户程序才解除阻塞。
+      - Blocking IO操作
+        - Socket接口的 ~accept,connect,send,recv~ 等接口
+      - Python示例
+        #+BEGIN_EXAMPLE python
+        from socket import *
+
+        # Server
+        srv = socket(AF_INET, SOCK_STREAM)
+        srv.bind(('127.0.0.1', 8080))
+        srv.listen()
+        while True:
+            conn, addr = srv.accept() # 阻塞
+            data = conn.recv(1024)   # 阻塞
+            print(data.decode('utf-8'))
+            conn.send('hello'.encode('utf-8')) # 阻塞
+
+        # Client
+        client = socket(AF_INET, SOCK_STREAM)
+        client.connet(('127.0.0.1', 8080))
+        while True:
+            client.send('hi'.encode('utf-8')) # 阻塞
+            data = client.recv(1024) # 阻塞
+            print(data.decode('utf-8')
+        #+END_EXAMPLE
+   2) 非阻塞IO(Non-blocking IO)
+      |                    | application      |                  | kernel            |                               |
+      |--------------------+------------------+------------------+-------------------+-------------------------------|
+      | process repeatedly | recvfrom         | - system call -> | no datagram ready |                               |
+      | call system call   |                  | <- EWOULDBLOCK - |                   |                               |
+      | `recvfrom`,        | recvfrom         | - system call -> | no datagram ready |                               |
+      | waiting for        |                  | <- EWOULDBLOCK - |                   | wait for data                 |
+      | an                 | recvfrom         | - system call -> | no datagram ready |                               |
+      | OK return          |                  | <- EWOULDBLOCK - |                   |                               |
+      | by polling         | recvfrom         | - system call -> | datagram ready    |                               |
+      |--------------------+------------------+------------------+-------------------+-------------------------------|
+      |                    |                  |                  | copy datagram     |                               |
+      |                    |                  |                  | $               $ | copy data from kernel to user |
+      |                    | process datagram | <- return OK -   | copy complete     |                               |
+      - 说明
+        当用户程序调用系统调用recvfrom，那么kernel就会去准备数据，若为准备好则不阻塞而是返回一个error。然后用户程序轮询执行上述操作，直到准备好数据，那么内核将数据从内核拷贝到用户内存(用户程序被阻塞)，然后返回内核结果。
+      - 缺点
+        1) 循环调用系统调用 ~recvfrom~ 将推高CPU占用率，因此轮询期间一般通过 ~time.sleep~ 延长轮询周期；
+        2) 任务完成的响应时延较大，通过轮询方式无法及时读取数据，降低整体数据的吞吐量。
+      - Python示例
+        #+BEGIN_EXAMPLE python
+        from socket import *
+
+        # Server
+        srv = socket(AF_INET, SOCK_STREAM)
+        srv.bind(('127.0.0.1', 8080))
+        srv.listen()
+        srv.setblocking(Flase) # 设置socket的接口全为非阻塞
+        conns = []
+        del_conns = []
+        while True:
+            try:
+                conn, addr = srv.accept() # 阻塞
+                conns.append(conn)
+            except BlockingIOError:
+                pass
+
+            for conn in conns:
+                try:
+                    data = conn.recv(1024)
+                    if not data:
+                        del_conns.append(conn)
+                    else:
+                        print(data.decode('utf-8'))
+                        conn.send('hello'.encode('utf-8')) # 阻塞
+                except BlockingIOError:
+                    pass
+                except ConnectionResetError:
+                    del_conns.append(conn)
+
+            for conn in del_conns:
+                conns.remove(conn)
+                conn.close()
+
+            del_conns = []
+
+        # Client
+        client = socket(AF_INET, SOCK_STREAM)
+        client.connet(('127.0.0.1', 8080))
+        while True:
+            client.send('hi'.encode('utf-8')) # 阻塞
+            data = client.recv(1024) # 阻塞
+            print(data.decode('utf-8')
+        #+END_EXAMPLE
+   3) 多路复用IO(IO Multiplexing，也称为事件驱动IO/Event Driven IO)
+      |                                                | application       |                      | kernel            |                               |
+      |------------------------------------------------+-------------------+----------------------+-------------------+-------------------------------|
+      | process blocks in call to system call          | select/poll/epoll | - system call ->     | no datagram ready |                               |
+      | select/poll/epoll, waiting for one of possibly |                   |                      | $               $ | wait for data                 |
+      | many sockets to become readable.               |                   | <- return readable - | datagram ready    |                               |
+      |------------------------------------------------+-------------------+----------------------+-------------------+-------------------------------|
+      | process blocks while data                      | recvfrom          | - system call ->     | copy datagram     |                               |
+      | copied into                                    |                   |                      | $           $     | copy data from kernel to user |
+      | application buffer                             | process datagram  | <- return OK -       | copy complete     |                               |
+      - 说明：
+        和阻塞IO一样，但可以通过系统调用select、poll或epoll可以在一个线程中同时监听多个IO操作。
+      - ~select,poll,epoll,kqueue~ 的区别 (https://www.cnblogs.com/George1994/p/6725972.html, https://www.cnblogs.com/Eva-J/articles/8324837.html, https://www.jianshu.com/p/6a6845464770)
+        1) ~select~ 通过轮询方式监听多个IO操作，因此当监听的IO操作多时，效率较低。Windows唯一支持的多路复用IO方式，Unix支持；
+           - C函数签名 ~int select(int nfds, fd_set *readfds, fdset *writefds, fdset *exceptfds, struct timeval *timeout)~
+             - nfds 指定待监听的文件描述的最大值+1，目的是为了限制检测的文件描述符范围
+             - readfds, writefds, exceptfds 让内核监听的读、写和异常文件描述符
+             - fd_set 为存放文件描述符的信息结构体，通过宏修改
+               #+BEGIN_EXAMPLE c
+               // 清空集合
+               void FD_ZERO(fd_set *fdset);
+               // 将文件描述符加入集合中
+               void FD_SET(int fd, fd_set *fdset);
+               // 将某个文件描述符从集合中删除
+               void FD_CLR(int fd, fd_set *fdset);               
+               // 检查集合中指定的文件描述符是否可以读写
+               int FD_ISSET(int fd, fd_set *fdset);
+               #+END_EXAMPLE
+             - timeout 内核等待指定描述符就绪的时间长度
+             - 返回值： -1 失败，0 超时，>0 成功
+           - 执行过程
+             1) 
+           - 缺点
+             1) Linux上一般可监听的文件描述符上限为1024，需要通过修改宏定义或重新编译内核的方式来修改上限；
+             2) 每次调用select时均要将文件描述符集合从用户缓存复制到内核缓存，当文件描述符数量多时消耗较大；
+                使用copy_from_user复制
+             3) 当内核的数据准备好时，需要将就绪的文件描述符从内核缓存复制到用户缓存；
+             4) 内核通过轮询机制检测所有文件描述对应的数据是否到达，消耗大。
+        2) ~poll~ 和 ~select~ 都是通过轮询方式监听多个IO操作，但因采用链表存储方式，因此可监听文件描述符比 ~select~ 多。Unix支持；
+           - C函数签名 ~int poll(struct pollfd *fds, nfds_t nfds, int timeout)~
+             - pollfd 结构体
+               #+BEGIN_EXAMPLE c
+               struct pollfd {
+                   int fd; // 文件描述符
+                   short events; // 请求的事件 (读POLLIN、写和异常)
+                   short revents; // 返回的事件
+               };
+               #+END_EXAMPLE
+             - nfds 指定待监听的文件描述的最大值+1，目的是为了限制检测的文件描述符范围
+             - timeout 内核等待指定描述符就绪的时间长度
+             - 返回值： -1 失败，0 超时，>0 成功
+
+        3) ~epoll~ 采用事件机制而不是轮询机制，每个IO操作的fd都绑定一个回调方法，当fd接收到数据时即调用回调方法，然后通过信号量通知用户进程数据已到。Unix支持；
+           - C函数签名 ~int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)~
+           - 两种模式
+             1) ET模式——立即处理
+                当检测到描述符事件通知应用程序，应用程序立即处理。能减少epoll被重复触发的次数，效率比LT高。
+                - 注意：Socket必须采用非阻塞模式，避免文件描述符在阻塞读或阻塞写时将其他文件描述符的任务饿死。
+             2) LT模式——延迟处理
+                当检测到描述符事件通知应用程序，应用程序不会立即处理，而是会在下次通知应用程序该事件时才处理。
+           - 优点：
+             1) 没有最大并发连接的限制
+             2) 只有活跃可用的fd才会调用callback
+             3) 通过mmap()文件映射内存的方式加速用户和内核间信息传递，减少复制开销(内核和用户空间共享一块内存)
+        4) ~kqueue~ 和 ~epoll~ 基本一样。BSD提供支持；
+        5) ~/dev/poll~ Solaris提供支持。
+      - 优点
+        1) 单线程中监听多个IO操作，CPU等资源占用率较低。
+      - 缺点
+        1) 若网络IO不是很高时，性能不一定比多线程+non-blocking io高。多路复用IO主要为提高能处理的网络IO数量。
+      - 监听过程
+        1) 用户进程通过select/poll/epoll等将IO对象的文件描述符(fd)拷贝到内核空间
+        2) 内核空间的fd接收到数据后，会通过信号量告知用户用户进程数据已到
+        3) 用户进程再调用系统调用recvform，要求内核将数据从内核内存空间复制到用户进程的内存空间，同时内核内存空间的数据被清空等待接收后续fd的数据。
+      - 典型应用
+        1) Java NIO
+        2) Nginx(epoll,poll,select)
+      - 设计的架构模式——Reactor模式
+      - 示例
+        #+BEGIN_EXAMPLE python
+        from socket import *
+        import select # select模块包含select,poll和epoll三种方式
+
+        srv = socket(AF_INET, SOCK_STREAM)
+        srv.bind(('127.0.0.1', 8080))
+        srv.listen()
+        srv.setblocking(False) # 使用多路复用IO时，Socket均设置为non-blocking IO
+        
+        read_lst = [srv] # IO读取操作fd列表
+        while True:
+            r_lst, w_lst, x_lst = select.select(read_lst, [], []) # 阻塞当前线程，直到至少一个监听的IO操作通知数据到了。
+            for r in r_lst:
+                if r is srv:
+                    conn, addr = r.accept()
+                    read_lst.append(conn)
+                else:
+                    try:
+                        data = r.recv(1024) # 将数据从内核复制到用户程序内存空间时是阻塞的
+                        if not data:
+                            r.close()
+                            read_lst.remove(r)
+                        else:
+                            print(data.decode('utf-8'))
+                    except ConnectionResetError:
+                        r.close()
+                        read_lst.remove(r)
+        #+END_EXAMPLE
+   4) 信号驱动IO(Signal Driven IO)
+      |                            | application                |                            | kernel         |                       |
+      |----------------------------+----------------------------+----------------------------+----------------+-----------------------|
+      | process                    | setup SIGIO signal handler | - sigaction system call -> |                | wait                  |
+      |                            |                            | <- return -                |                | for                   |
+      | continues                  |                            |                            |                | data                  |
+      |                            | signal handler             | <- transfer SIGIO -        | datagram ready |                       |
+      |----------------------------+----------------------------+----------------------------+----------------+-----------------------|
+      | process blocked while data | recvfrom                   | - system call ->           | copy datagram  | copy data from kernel |
+      | copied into application    |                            |                            | $           $  | to                    |
+      | buffer                     | process datagram           | <- return OK -             | copy complete  | user                  |
+      - 说明
+        用户程序先向内核注册一个信号处理函数，并在发起IO操作后不阻塞用户进程。当内核数据就绪时会发送一个信号给用户进程，用户进程在信号处理函数中调用IO读取数据，以阻塞的方式将数据从内核缓存复制到用户程序缓存。
+      - 实际开发很少用。
+   5) 异步IO(Asynchronouse IO)
+      |           | application                     |                                           | kernel            |             |
+      |-----------+---------------------------------+-------------------------------------------+-------------------+-------------|
+      |           | aio_read                        | - system call ->                          | no datagram ready | wait        |
+      | process   |                                 | <- return -                               | $               $ | for         |
+      |           |                                 |                                           | $               $ | data        |
+      | continues |                                 |                                           | datagram ready    |             |
+      |-----------+---------------------------------+-------------------------------------------+-------------------+-------------|
+      |           |                                 |                                           | copy datagram     | copy data   |
+      | executing |                                 |                                           | $           $     | from kernel |
+      |           | signal handler process datagram | <- deliver signal specified in aio_read - | copy complete     | to          |
+      |           |                                 |                                           |                   | user        |
+      - Linux2.6版本才引入
+      - 说明
+        用户程序调用系统调用aio_read后，通知kernel准备数据和将数据从内核复制到用户程序内存，而不等待内核执行完成就马上返回。当内核把数据复制到用户程序内存后就通过信号量通知用户程序可以使用数据，因此IO两个阶段都不会出现阻塞的情况。
+      - 典型应用
+        1) Java7 AIO
+      - 设计的架构模式——Proactor模式
+      - Python没有提供支持，而是由C实现，其中出名的异步网络框架为Twisted。
+        #+BEGIN_EXAMPLE python
+        
+        #+END_EXAMPLE
+
+   IO涉及两个阶段：
+   1) 等待数据到达，然后通过设备驱动读取数据到内核空间缓冲区中(Waiting for the data to be ready)
+      - 用户空间(级别号为3的虚拟内存空间保护) <---> 内核空间
+      - 用户空间组成
+        1) User Applications
+        2) GNU C Library (glibc)
+   2) 将数据从内核缓存区拷贝到用户进程的缓冲区中(Copying the data from kernel to the process)
+      - 内核空间(级别号为0的虚拟内存空间保护) <---> 设备空间
+      - 内核空间组成
+        1) System Call Interface
+        2) Process Management
+        3) Virtual File System(VFS)
+        4) Memory Management
+        5) Network Stack
+        6) Arch/Device Drivers(和Hardware Platform通信)
+           内核会为每个设备驱动预留缓存区，发起IO操作后，内核会检查缓冲区是否有数据，有则复制到用户缓冲区，无则调用设备驱动读取数据。
+
+   
+
+   上述5种IO模型均是在这两个阶段有所不同来作区分的。
+
+   POSIX(Portable Operating System Interface for Computing System)对synchronous IO和asynchronous IO的定义：
+   1) A synchronous I/O operation cause the requesting process to be blocked until the I/O operation completes;
+   2) An asynchronous I/O operation does not cause the requesting process to be blocked.
+
+*** Python的多路复用IO模块selectors
+    自动选择适合当前操作系统平台的多路复用IO。
+    #+BEGIN_EXAMPLE python
+    from socket import *
+    import selectors
+
+    sel = selectors.DefaultSelector()
+    
+    srv = socket(AF_INET, SOCK_STREAM)
+    srv.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    srv.bind(('127.0.0.1', 8080))
+    srv.listen()
+    srv.setblocking(False)
+    
+    def accept(srv, mask):
+        conn, addr = srv.accept()
+        sel.register(conn, selectors.EVENT_READ, read) # 将fd添加到监听列表
+
+    def read(conn, mask):
+        try:
+            data = conn.recv(1024)
+            if not data:
+                sel.unregister(conn)
+                conn.close()
+            else:
+                print(data.decode('utf-8'))
+        except ConnectionResetError:
+            sel.unregister(conn)
+            conn.close()
+
+
+    sel.register(srv, selectors.EVENT_READ, accept) # 将fd添加到监听列表
+    
+    while True:
+        events = sel.select() # 监听所有fd
+        for obj, mask in events:
+            callback = obj.data  # 获取注册时fd对应的回调函数
+            callback(obj.fileobj # 获取fd自身
+                     , mask)
+    #+END_EXAMPLE
+
+** TCP三次握手、四次挥手
+   
+
+    Socket通信的两种方式:
+    1) 基于网络
+    2) 基于文件
 * Picklable/Pickle-able Object
   Picklable/Pickle-able Object即为可被Python的pickle库序列化的对象。
   1) 可序列化对象如下(The following types can be pickled)
@@ -4849,3 +5593,49 @@ https://github.com/dadadel/pyment
    2) PicklingError 遇到不可序列化的对象时抛出
    3) UnPicklingError 遇到不可反序列化的对象时抛出
 
+* is和==的区别
+  1) ~is~ 是用于判断两个变量是否为同一个，等价与
+     #+BEGIN_EXAMPLE python
+     a is b
+     id(a) == id(b) # 其中id为获取对象的内存地址
+     #+END_EXAMPLE
+  2) ~==~ 是判断引用的值是否相等
+  3) 注意：
+     对于 ~[-5, 256]~ 范围内的int，Python会创建一个小型的整形池。因此
+     #+BEGIN_EXAMPLE python
+     a = 1
+     b = 1
+     a is b # True
+     a == b # True
+
+     c = 2.0
+     d = 2.0
+     c is d # False
+     c == d # True
+     #+END_EXAMPLE
+* TODO 文件IO
+** 内存缓存操作
+   1) StringIO，在内存中读写str
+      #+BEGIN_EXAMPLE python
+      from io import StringIO
+
+      fd1 = StringIO()
+      num = fd1.write('test') # 写入字符串，并返回写入的字符数量
+      fd1.getvalue() # 返回内容，但不清空
+      # 由于fd1起初为空，因此read,readlines均返回空值
+
+      fd2 = StringIO('abc\n111')
+      fd2.readlines() # 返回 ['abc', '111']
+      #+END_EXAMPLE
+   2) ByteIO，在内存中读写二进制数据(bytes)
+      #+BEGIN_EXAMPLE python
+      from io import ByteIO
+
+      fd1 = ByteIO()
+      num = fd1.write('test'.encode('utf-8')) # 写入字符串，并返回写入的字符数量
+      fd1.getvalue() # 返回内容，但不清空
+      # 由于fd1起初为空，因此read,readlines均返回空值
+
+      fd2 = StringIO(b'abc\n111')
+      fd2.readlines() # 返回 [b'abc', b'111']      
+      #+END_EXAMPLE
