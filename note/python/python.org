@@ -3037,7 +3037,24 @@ https://pypi.org/project/pytest-xdist/
         doctest.testfile('doctest_test.txt') # 测试某文件中的测试用例。
     #+END_EXAMPLE
 
-* str和unicode
+* str, unicode和bytes
+  unicode类型为字符型数据；bytes为字节型数据。
+  而Python2中str等价于bytes；Python3中str等价于unicode。
+
+** Python3的bytes和str
+   str类型为unicode编码字符串，bytes类型为二进制数据。
+   两者不能进行隐式转换，必须采用显式转换。
+   #+begin_src
+   # str类型转bytes类型
+   str_var = "hello world"
+   bytes_var = str_var.encode("utf-8")
+  
+   # bytes类型转str类型
+   bytes_var = b"\xe2\xac20"
+   str_var = bytes_var.decode("utf-8")
+   #+end_src
+   str类型是文本抽象表示，即对文本的操作（分割、切片、拼接和搜索）均不用关心底层（如一个字符要多少个字节表示等）。
+
 
 ** 类型不同导致正则匹配失败
 #+BEGIN_EXAMPLE python
@@ -3163,7 +3180,7 @@ signal.alarm(5)
 ~os.kill~ 和 ~os.killpg~ 都可向其他进程发送信号量。
 
 * TODO 并发编程
-
+  
 ** 操作系统简史
 1) 手工操作
    没有操作系统的概念，必须逐个用户通过打孔卡片完成输入，然后等待CPU计算处理后，再将结果输出到卡片/纸条等媒介．
@@ -5051,20 +5068,6 @@ https://github.com/dadadel/pyment
       print(f'key: {k}, value: {v}')
   #+END_EXAMPLE
 
-* Python3的bytes和str
-  str类型为unicode编码字符串，bytes类型为二进制数据。
-  两者不能进行隐式转换，必须采用显式转换。
-  #+begin_src
-  # str类型转bytes类型
-  str_var = "hello world"
-  bytes_var = str_var.encode("utf-8")
-  
-  # bytes类型转str类型
-  bytes_var = b"\xe2\xac20"
-  str_var = bytes_var.decode("utf-8")
-  #+end_src
-  str类型是文本抽象表示，即对文本的操作（分割、切片、拼接和搜索）均不用关心底层（如一个字符要多少个字节表示等）。
-
 * 延迟执行
 
 ** 单线程阻塞调用，通过 ~sched.scheduler~
@@ -5187,6 +5190,20 @@ https://github.com/dadadel/pyment
   2) ~dir()~ 当前模块的变量?
   3) ~vars()~ 程序中的变量?
 * TODO 网络编程
+    Socket通信的两种方式:
+    1) 基于网络
+    2) 基于文件
+
+    应用与其占用的端口信息保存在/etc/services下
+
+** MTU(Maximun Transmission Unit)
+   指网络上传送的最大数据包，单位为字节。大部分网络设备的MTU为1500byte，如果本机的MTU比网关的MTU大，那么数据到达网关后会被拆分为多个数据包，从而增大丢包率和降低网络速度。
+
+** Socket的历史
+BSD(Berkeley Software Distribution) Operating System 于1983年发布，被称为 Berkeley Socket)
+Internet Socket: 基于网络的Socket，也称为 BSD Socket。
+Unix Domain Socket: 基于Unix系文件的Socket，仅能用于在相同机器上进程间通信。
+
 ** 文件描述符(File Descriptor)和句柄(File Handler)
    fd为一个整数，通过该整数映射到对应的文件。
    
@@ -5474,27 +5491,49 @@ https://github.com/dadadel/pyment
     srv.listen()
     srv.setblocking(False)
     
-    def accept(srv, mask):
+    def accept(srv):
         conn, addr = srv.accept()
-        sel.register(conn, selectors.EVENT_READ, read) # 将fd添加到监听列表
+        events = selectors.EVENT_READ|selectors.EVENT_WRITE # 监听可读和可写事件
+        sel.register(conn, events, service_connection) # 将fd添加到监听列表
 
-    def read(conn, mask):
-        try:
-            data = conn.recv(1024)
-            if not data:
+    def service_connection(conn, mask):
+        if mask & selectors.EVENT_READ:
+            # ready to read.
+            try:
+                data = conn.recv(1024)
+                if not data:
+                    sel.unregister(conn)
+                    conn.close()
+                else:
+                    print(data.decode('utf-8'))
+            except ConnectionResetError:
                 sel.unregister(conn)
                 conn.close()
-            else:
-                print(data.decode('utf-8'))
-        except ConnectionResetError:
-            sel.unregister(conn)
-            conn.close()
 
+        if mask & selectors.EVENT_WRITE:       
+           # ready to write.
+           msg = 'hello'
+           sent = 0
+           while sent < len(msg): 
+               sent += conn.send(msg)
 
     sel.register(srv, selectors.EVENT_READ, accept) # 将fd添加到监听列表
     
     while True:
-        events = sel.select() # 监听所有fd
+        """
+        阻塞当前线程并监听所有fd。
+        
+        Args:
+            **kwargs:
+                timeout(int): 阻塞超时，默认为None表示一直阻塞直到有响应
+
+        Returns:
+            list(tuple(key: SelectorKey, events)):
+                key is a SelectorKey namedtuple that contains a fileobj attribute which representing socket object, and a data attribute which as parameter passed by function register as the last one.
+                events is an event mask of the operations that are ready (i.e. selectors.EVENT_READ, selectors.EVENT_WRITE)
+                         
+        """
+        events = sel.select(timeout=None)
         for obj, mask in events:
             callback = obj.data  # 获取注册时fd对应的回调函数
             callback(obj.fileobj # 获取fd自身
@@ -5502,11 +5541,459 @@ https://github.com/dadadel/pyment
     #+END_EXAMPLE
 
 ** TCP三次握手、四次挥手
-   
+   |        | Client              |                           | Server            |
+   |--------+---------------------+---------------------------+-------------------|
+   | 建连接 | SYN_SENT(connect()) | - SYN seq=x ->            | LISTEN(listen())  |
+   | 三次   | ESTABLISHED         | <- SYN seq=y,ACK=x+1 -    | SYN_RCVD          |
+   | 握手   |                     | - ACK=y+1 ->              | ESTABLISHED       |
+   |--------+---------------------+---------------------------+-------------------|
+   | 数据   | (write())           | - seq=x+1, ACK=y+1        | (read())          |
+   | 传输   |                     | <- ACK x+2                |                   |
+   |--------+---------------------+---------------------------+-------------------|
+   | 短连接 | FIN_WAIT_1          | - FIN seq=x+2, ACK=y+1 -> | CLOSE_WAIT        |
+   | 四次   | FIN_WAIT_2          | <- ACK=x+3 -              | LAST_ACK(close()) |
+   | 握手   | TIME_TIME           | <- FIN seq=y+1            |                   |
+   |        |                     | - ACK=y+2 ->              |                   |
 
-    Socket通信的两种方式:
-    1) 基于网络
-    2) 基于文件
+** Socket API
+   #+BEGIN_EXAMPLE python
+   from socket import *
+
+   """
+   根据host, port 和 传输层协议解析IPv4和IPv6版本的socket入参
+   
+   Examples:
+       返回值
+       [(<AddressFamily.AF_INET6: 10>, <SocketType.SOCK_STREAM: 1>, 6, '', ('2606:2800:220:1:248:1893:25c8:1946', 80, 0, 0))
+        ,(<AddressFamily.AF_INET: 2>, <SocketType.SOCK_STREAM: 1>, 6, '', ('93.184.216.34', 80))]
+   """
+   getaddrinfo(host, port, proto=IPPROTO_TCP)
+
+   """
+   获取本机域名
+   """
+   gethostname()
+   
+   """
+   根据域名返回IP
+   """
+   gethostbyname(hostname)
+
+   """
+   根据IP获取域名、IP等信息
+   """
+   gethostbyaddr(ip)
+   
+   """
+   Args:
+       address_family: IPv4 -> AF_INET
+                       IPv6 -> AF_INET6
+                       Unix Domain Socket -> AF_
+       socket_type: TCP -> SOCK_STREAM
+                    UDP -> SOCK_
+
+   Returns:
+       socket_object
+   """
+   sk = socket(address_family, socket_type)
+   
+   """
+   Avoid bind() exception: OSError: [Error 48] Address already in use.
+   
+   If a server actively closed a connection, it will remain in the TIME_WAIT state for two minutes or more, depending on the operating system.
+   If you try to start the server again before the TIME_WAIT state expires, you'll get an OSError exception of Addres already in use.
+   This is a safeguard to make sure that any delayed packets in the network aren't delivered to the wrong application.
+   """
+   sk.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+
+   """
+   Connect to the server from client.
+   
+   The values passed to bind() depend on the address family of the socket.   
+   While address family is AF_INET,
+
+   Args:
+       tuple(host:str, port:int): The address and port of server.
+           hosts:str
+               1) The value of host could be one of hostname, IP address or empty string.
+               2) The IP Address 127.0.0.1 is the standard IPv4 address for the loopback interface,
+                  so only processes on the host will be able to connect to the server.
+               3) 0.0.0.0 or empty string means the server will accept connections on all available IPv4 interfaces.
+               4) While using hostname, Python would use the first IP address returned from DNS.
+
+           port:int
+               1) should be an integer from 1-65535(0 is reserved).
+   """
+   sk.connect((host, port))
+   
+   """
+   The functionality is as the same as connect. But instead of raising BlockingIOError immediately, returns an error indicator, errno.EINPROGRESS.
+   """
+   sk.conncet_ex((host, port))
+
+   """
+   Configure the server side.
+   The values passed to bind() depend on the address family of the socket.
+   While address family is AF_INET,
+
+   Args:
+       tuple(host:str, port:int): 
+           hosts:str
+               1) The value of host could be one of hostname, IP address or empty string.
+               2) The IP Address 127.0.0.1 or ::1(IPv6) is the standard IPv4 address for the loopback interface(lo0),
+                  so only processes on the host will be able to connect to the server.
+                  Some operating systems would skip the network protocol layers when processes communicate in loopback interface that would make it a bit faster.
+               3) 0.0.0.0 or empty string means the server will accept connections on all available IPv4 interfaces.
+               4) While using hostname, Python would use the first IP address returned from DNS.
+
+           port:int
+               1) should be an integer from 1-65535(0 is reserved).
+   """
+   sk.bind((host, port))
+
+   """
+   Enable a server to accept connections.
+
+   Args:
+       backlog(int): It specifies the number of unaccepted connections that the system will allow before refusing new connections.
+                     The maximun number is system dependent. i.e. On Linux the maximun number is set in file /proc/sys/net/core/somaxconn.
+   """
+   sk.listen(backlog)
+
+   """
+   Block or raise BlockingIOError while call functions accept etc.
+
+   Args:
+       block(bool): True -> block
+                    False -> raise BlockingIOError
+   """
+   sk.setblocking(block)
+
+   """
+   Block and wait for an incoming connection.
+
+   Args:
+   Returns:
+       tuple(conn: socket_object, addr: tuple:
+         socket_object represents client connection.
+         addr is the host and port of client.
+             1) tuple(host, port) for IPv4
+             2) tuple(host, port, flowinfo, scopeid) for IPv6
+   """
+   conn, addr = sk.accept()
+
+   """
+   Receive data from client.
+
+   Args:
+       bufsize(int): The maximun amount of data(byte) could be received from client.
+     
+   Returns:
+       bytes: If it was an empty bytes object(b''), means the client closed the connection.
+   """
+   data = conn.recv(bufsize)
+
+   """
+   Block or raise BlockingIOError while call functions connect, recv etc.
+
+   Args:
+       block(bool): True -> block
+                    False -> raise BlockingIOError
+   """
+   conn.setblocking(block)
+
+   """
+   Args:
+       data(bytes)
+   
+   Returns:
+       int: The number of bytes sent, which may be less than the size of the data passed in.
+       If only some of the data was transimitted, the application/you needs to attempt delivery of the remaining data.
+   """
+   conn.send(data: bytes)
+   """
+   Args:
+       data(bytes)
+
+   Returns:
+       None: Continues to send data from bytes until either all data has been sent or an error occurs.
+             None is returned on success.
+   """
+   conn.sendall(data: bytes)
+   #+END_EXAMPLE
+
+** 两种基本数据传输方式(Data Transport)
+   1) TCP(Transmission Control Protocol)
+      - 特点
+        1) Base connection
+        2) Byte stream oriented
+        3) Reliable, packets dropped in the network are detected and retransmitted by the sender.(no need to worry about packet loss)
+        4) In-order data devilery, data is read by your application in the order it was written by the sender.
+      - 注意：
+        1) 不能发送空消息，若发送空消息需要服务端和客户端用户程序作特殊处理，防止两端阻塞。
+      - 示例
+        #+BEGIN_EXAMPLE python
+        from socket import *
+
+        # server
+        HOST = '127.0.0.1'
+        PORT = 1080
+        BACKLOG = 5
+        with socket(AF_INET, SOCK_STREAM) as srv:
+            srv.bind((HOST, PORT))
+            srv.listen(BACKLOG)
+            
+            while True:
+                conn, addr = srv.accept()
+                with conn:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+                    print(data.decode('utf-8'))
+                    conn.sendall(b'OK')
+
+        # client
+        with socket(AF_INET, SOCK_STREAM) as client:
+            client.connect((HOST, PORT))
+            client.sendall(b'Hello')
+            data = client.recv(1024)
+            print(data.decode('utf-8'))
+        #+END_EXAMPLE
+   2) UDP(User Datagram Protocol)
+      - 特点
+        1) Connectionless
+        2) Discrete packet/message oriented
+        3) Unreliable, packet loss would occur.
+        4) Out-of-order data devilery
+      - 注意：
+        1) 可以直接发送空消息；
+        2) 消息长度有限制；
+        3) 一次读取不全整个消息包，那么剩余部分就会被丢弃。
+      - 示例
+        #+BEGIN_EXAMPLE python
+        from socket import *
+        s = socket(AF_INET, SOCK_DGRAM)
+        s.bind(('', 8080))
+
+        while True:
+            data, addr = s.recvfrom(maxsize)
+            s.sendto(b'data', addr)
+        #+END_EXAMPLE
+
+** Unix Domain Sockets
+   #+BEGIN_EXAMPLE python
+   from socket import *
+   s = socket(AF_UNIX, SOCK_STREAM)
+   # s = socket(AF_UNIX, SOCK_DGRAM)和前一种方式无差异
+
+   s.bind('/path/to') # server binding
+   s.connect('/path/to') # client connection
+   #+END_EXAMPLE
+
+** Raw Socket
+   直接拦截原始的网络包(raw network packets)，依赖操作系统，并且运行时需要root权限。
+   #+BEGIN_EXAMPLE python
+   from socket import *
+   
+   s = socket(AF_PACKET, SOCK_DGRAM)
+   s.bind(('eth0', 0x0800)) # sniff IP packets
+
+   while True:
+       msg, addr = s.recvfrom(4096) # get a packet
+   #+END_EXAMPLE
+
+** 查看网络连接状态
+   1) netstat
+      #+BEGIN_EXAMPLE bash
+      netstat -an
+      #+END_EXAMPLE
+      #+BEGIN_EXAMPLE
+      Active Internet connections (including servers)
+      Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)
+      tcp4       0      0  127.0.0.1.65432        *.*                    LISTEN
+      tcp4       0      0  *.65431                *.*                    LISTEN
+      #+END_EXAMPLE
+      Local Address为 ~127.0.0.1.65432~ 表示监听来自本地进程的请求，为 ~*.65431~ 表示监听所有网络接口的请求。
+      Recv-Q 表示位于内核网络缓存区中未读取的字节数量，当服务端的内核网络缓存区(network buffer)满了时客户端再向服务端发送数据则在客户端报Resource temporarily unavailable的异常，并且客户端的网络缓冲也会由于数据发不出而被塞满。
+      Send-Q 表示位于内核网络缓冲区中未发送的字节数量。
+   2) lsof(list open file)
+      #+BEGIN_EXAMPLE bash
+      lsof -i -n
+      #+END_EXAMPLE      
+      #+BEGIN_EXAMPLE
+      COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+      vino-serv  2928 john   13u  IPv6  29084      0t0  TCP *:5900 (LISTEN)
+      vino-serv  2928 john   14u  IPv4  29085      0t0  TCP *:5900 (LISTEN)
+      chrome    25756 john   79u  IPv4 407337      0t0  UDP 127.0.0.1:59873->127.0.1.1:domain 
+      chrome    25756 john  135u  IPv4 405993      0t0  TCP 10.73.175.139:36132->203.208.40.122:https (ESTABLISHED)
+      #+END_EXAMPLE
+
+** TCP的粘包问题
+   原因：
+   1) 由于TCP是面向字节流，所以没有明确的数据边界；
+   2) 当发送端缓冲区的长度大于网卡的MTU时，TCP会将数据拆分为多个数据包发送出去。这样对于大数据量而言，也无法通过包作为消息边界；
+   3) Nagle算法
+      将多次间隔较小且数据量小的数据，合并为一个大的数据块再进行封包。这样接收端就无法通过包来作为消息边界。
+   
+   基于上述原因，必须由用户程序自行解决粘包问题。
+   
+*** 解决方式-先通过struct以固定长度的消息传输实际内容长度
+    步骤：
+    1) 先通过模块struct将实际内容长度编码为固定长度的内容，发送给接收端；
+    2) 接收端通过模块strcut解码得到后续发送过来的实际内容长度，然后确定消息边界来读取消息。
+    
+    
+    #+BEGIN_EXAMPLE python
+    from socket import *
+    import struct
+
+
+    HOST = '127.0.0.1'
+    PORT = 8080
+
+
+    # client
+    with socket(AF_INET, SOCK_STREAM) as client:
+        client.connect((HOST, PORT))
+        payload = b'hello world'
+        payload_length = len(payload)
+        header = struct.pack('i', payload_length)
+        client.send(header)
+
+        total_sent = 0
+        while total_sent < payload_length:
+            sent = client.send(payload[total_sent:])
+            if sent == 0:
+               raise RuntimeError('socket connection broken')
+
+            total_sent += sent
+
+    # server
+    BUFSIZE = 1024
+    with socket(AF_INET, SOCK_STREAM) as server:
+        server.bind((HOST, PORT))
+        server.listen()
+
+        conn, addr = server.accept()
+        with conn:
+            header = conn.recv(4)
+            body_length = struct.unpack('i', header)
+            chunks = []
+            bytes_recd = 0
+            while bytes_recd < body_length:
+                chunk = conn.recv(min(BUFSIZE, body_length - read))
+                if not chunck:
+                   raise RuntimeError('socket connection broken')
+
+                chunks.append(chunk)
+                bytes_recd += len(chunk)
+
+            print(b''.join(chunks))
+    #+END_EXAMPLE
+
+**** struct模块详解
+     由于Python没有专门处理字节的数据类型，因为bytes也是字符串的一种，所以str既能表示字符串也能表示字节数组。因此要将其他类型和字节数组间转换则十分麻烦。
+     #+BEGIN_EXAMPLE python
+     n = 10240099
+     # chr将内容进行unicode编码
+     b1 = chr((n & 0xff000000) >> 24)
+     b2 = chr((n & 0xff0000) >> 16)
+     b3 = chr((n & 0xff00) >> 8)
+     b4 = chr((n & 0xff))
+     s = b1 + b2 + b3 + b4
+     #+END_EXAMPLE
+     而通过struct模块则可以很方便的完成转换
+     #+BEGIN_EXAMPLE python
+     import struct
+     
+     n = 10240099
+     s = struct.pack('>I', n)
+     #+END_EXAMPLE
+
+    ~struct.pack~ 和 ~struct.unpack~ 第一个参数的组成
+    1) 字节顺序，可选项，默认值根据 ~sys.byteorder~ 而定
+       1) ~>~ 表示big-endian
+       2) ~<~ 表示little-endian
+    2) 转换类型
+       1) 转换表
+          | Format | C Type             | Python Type        | Standard size |
+          |--------+--------------------+--------------------+---------------|
+          | x      | pad byte           | no value           |               |
+          | c      | char               | string of length 1 |             1 |
+          | b      | signed char        | integer            |             1 |
+          | B      | unsigned char      | integer            |             1 |
+          | ?      | _Bool              | bool               |             1 |
+          | h      | short              | integer            |             2 |
+          | H      | unsigned short     | integer            |             2 |
+          | i      | int                | integer            |             4 |
+          | I      | unsigned int       | integer            |             4 |
+          | l      | long               | integer            |             4 |
+          | L      | unsigned long      | integer            |             4 |
+          | q      | long long          | integer            |             8 |
+          | Q      | unsinged long long | integer            |             8 |
+          | f      | float              | float              |             4 |
+          | d      | double             | float              |             8 |
+          | s      | char[]             | string             |               |
+          | p      | char[]             | string             |               |
+          | P      | void *             | integer            |               |
+       2) 可用多个来表示多种类型的组合
+          #+BEGIN_EXAMPLE python
+          import struct
+          
+          s = struct.pack('>cI', b'1', 123)
+          data = struct.unpack('>cI', s)
+          #+END_EXAMPLE
+   
+** 字节顺序(byte order/byte endianness)问题
+   有些CPU采用big-endiance，而有些CPU则采用little-endiance，因此涉及多字节数据时(如4byte的整型)，则需要考虑编码解码的字节顺序。
+   1) big-endiance/MSB(Most Significant Bit) 高位优先，低字节数据存放在内存高地址处，高字节数据存放在内存低地址处。
+   2) little-endiance/LSB(Lest Significant Bit) 低位优先，低字节数据存放在内存低地址处，高字节数据存放在内存高地址处。
+
+   UTF-8采用8bit编码，因此不存在字节顺序问题。即使存在则在客户端和服务端两边约定字节顺序，并以约定的字节顺序编码和解码数据即可。
+   通过 ~sys.byteorder~ 获取本机的字节顺序。
+   TCP/IP指定采用big-endiance的byte order作为network order，用于底层网络协议栈，如IP地址和端口号等。
+   Python的socket模块提供以下方法，用于将整型从network order转换为本机的byte order.
+   #+BEGIN_EXAMPLE python
+   """
+   Convert 32-bit positive integers from network to host byte order.
+   """
+   socket.ntohl(x)
+   """
+   Convert 16-bit positive integers from network to host byte order.
+   """
+   socket.ntohs(x)
+
+   """
+   Convert 32-bit positive integers from host to network byte order.
+   """
+   socket.htonl(x)
+   """
+   Convert 16-bit positive integers from host to network byte order.
+   """
+   socket.htons(x)
+   #+END_EXAMPLE
+
+** IP分类
+   1) A类
+   2) B类
+   3) C类
+   4) D类
+
+** 端口分类
+   1) Well-known 1~1024
+      - 21 FTP
+      - 22 SSH
+      - 23 Telnet
+      - 25 SMTP
+      - 80 HTTP
+      - 110 POP3
+      - 119 NNTP(News)
+      - 443 HTTPS
+   2) Other 1024~65535
+
+** TODO 分析工具-Wireshark
+   network protocol analyzer and traffic capture application. terminal, text-based version named Tshark.
+   
 * Picklable/Pickle-able Object
   Picklable/Pickle-able Object即为可被Python的pickle库序列化的对象。
   1) 可序列化对象如下(The following types can be pickled)
@@ -5639,3 +6126,11 @@ https://github.com/dadadel/pyment
       fd2 = StringIO(b'abc\n111')
       fd2.readlines() # 返回 [b'abc', b'111']      
       #+END_EXAMPLE
+* TODO types模块
+  #+BEGIN_EXAMPLE python
+  data = types.SimpleNamespace(addr=('127.0.0.1', 1080), inb=b'', outb=b'')
+  #+END_EXAMPLE
+* TODO Unicode和UTF-8
+  UTF-8是Unicode的一种编码方式，常作为网络传输的字符编码方式。
+  其他BOM(byte order mark)，数据起始字节指定字节顺序的编码方式也常作为网络传输的字符编码方式。
+* TODO FFI

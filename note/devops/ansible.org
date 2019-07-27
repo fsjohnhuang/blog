@@ -575,12 +575,31 @@ ansible-doc -l <keyword>
    #+END_EXAMPLE
 
 * TODO 自定义插件
+https://docs.ansible.com/ansible/latest/dev_guide/developing_plugins.html
 
 ** Callback插件
 
 ** Lookup插件
 
 ** Jinja2 Filter插件
+插件存放在与目录roles同级目录filter_plugins下
+#+BEGIN_EXAMPLE python
+#!/usr/bin/python
+__metaclass__ = type
+
+
+class FilterModule(object):
+    def filters(self):
+        # 注册filter
+        return {
+            'a_filter': self.a_filter,
+            'another_filter': self.b_filter
+        }
+
+    def a_filter(self, a_variable):
+        a_new_variable = a_variable + ' CRAZY NEW FILTER'
+        return a_new_variable
+#+END_EXAMPLE
 
 * Playbook 
   Playbook采用[[https://yaml.org/spec/1.2/spec.html#Syntax][YAML]]进行编写。
@@ -796,6 +815,10 @@ ansible-doc -l <keyword>
     ~inventory_hostname~ Ansible当前执行任务的定义在inventory清单中的主机名，若定义为server1.test.com，则返回server1.test.com
     ~inventory_hostname_shortname~ 若inventory_hostname返回server1.test.com，那么inventory_hostname_shortname则返回server1
     ~hostvars~ 获取某台主机的facts信息，通过 ~hostvars[inventory_hostname]~ 获取当前执行任务的facts信息
+    获取当前主机的IP：
+    1. ~{{ inventory_hostname }}~
+    2. ~hostvars[inventory_hostname]['ansible_facts']['ip_addresses'][0]~
+     
     ~group_names~ 获取当前执行任务的主机所属的主机组的主机名列表
     ~groups~ 所有主机组的字典，如 ~groups.web~ 获取 ~[web]~ 这组主机组的所有主机facts信息
     #+BEGIN_EXAMPLE ini

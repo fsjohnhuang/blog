@@ -234,8 +234,10 @@
   cd <dir> && git pull
   # 更新所有submodule内容
   git submodule foreach git pull
-  # 下载带submodule的仓库方式1
+
+  # 下载仓库，将帐号密码附加到URL中，git clone http://<user>:<pass>@<repo>
   git clone <repo> <dir>
+  # 下载带submodule的仓库方式1
   cd <dir> && git submodule init && git submodule update --recursive
   # 下载带submodule的仓库方式2
   git clone <repo> <dir> --recursive
@@ -303,6 +305,34 @@ git clone --bare <repo-uri> <repo>
 * TODO QA
   1) fast-forward
   2) rebase
+  3) ~解决报错：error: The requested URL returned error: 401 Unauthorized while accessing~
+     若git版本为1.7.1则升级git到2.x.x即可。
+     1) 卸载CentOS6.5自带的git1.7.1
+        #+BEGIN_EXAMPLE bash
+        yum remove git
+        #+END_EXAMPLE
+     2) 安装依赖
+        #+BEGIN_EXAMPLE bash
+        yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel asciidoc
+        yum install  gcc perl-ExtUtils-MakeMaker 
+        wget http://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.14.tar.gz
+        tar zxvf libiconv-1.14.tar.gz 
+        cd libiconv-1.14
+        ./configure --prefix=/usr/local/libiconv
+        make && make install
+        #+END_EXAMPLE
+     3) 安装git
+        #+BEGIN_EXAMPLE bash
+        wget https://github.com/git/git/archive/v2.2.1.tar.gz
+        tar zxvf v2.2.1.tar.gz
+        cd git-2.2.1
+        make configure
+        ./configure --prefix=/usr/local/git --with-iconv=/usr/local/libiconv
+        make all doc
+        make install install-doc install-html
+        echo "export PATH=$PATH:/usr/local/git/bin" >> /etc/bashrc
+        source /etc/bashrc
+        #+END_EXAMPLE
 
 * 工作流
   
