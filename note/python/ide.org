@@ -163,3 +163,81 @@ Locust负载测试工具
 Selenium Web自动化测试
 
 docker-py提供docker支持
+
+* Emacs
+
+** 配置文件
+   默认加载 =~/.emacs.d/init.el= ，但可通过 ~emacs -q --load /path/to/init.el~ 来指定加载配置文件。
+
+** 在指定目录下搜索匹配文件的内容
+   ~M-x rgrep~
+
+** Elpy
+   1) Automatic Indentation
+      - isort，格式化 ~import~ 和 ~from...import~ 等导入语句
+      	#+begin_src bash
+	pip install --user isort
+	#+end_src
+	#+begin_src elisp
+	(defvar myPackages
+	  '(elpy
+	    py-isort))	
+	(require 'py-isort)
+	(add-hook 'before-save-hook 'py-isort-before-save)
+	#+end_src
+   2) Syntax Highlighting
+   3) Auto-Completing
+      - Jedi，负责让Emacs和后端Python服务通信，获取提示框的内容
+      	#+begin_src bash
+	pip install --user jedi
+	#+end_src
+      - Rope，负责tab键代码补全
+      	#+begin_src bash
+	# Python2.x
+	pip install --user rope
+	# Python3
+	pip install --user rope_py3k	
+	#+end_src      	
+   4) Syntax Checking
+      - flymake，Elpy默认的语法检查工具
+      - flycheck，提供实时语法检查但对于有问题的语句不会通过下划线提示
+      	#+begin_src elisp
+     	(defvar myPackages
+	      '(elpy
+     	    flycheck))
+     	(when (require 'flycheck nil t)
+	      (setq elpy-modules (delq 'elpy-module-flymake elpy-modules))
+     	  (add-hook 'elpy-mode-hook flycheck-mode))
+    	#+end_src
+      	#+begin_src bash
+        pip install pylint # pycompile flake8 mypy
+    	#+end_src
+   5) Python REPL Integration
+      - ipython集成
+      	#+begin_src elisp
+	(setq python-shell-interpreter "ipython"
+	      python-shell-interpreter-args "-i --simple-prompt")
+	#+end_src
+   6) Style
+      - pep8，Python标准代码风格
+      	#+begin_src bash
+	pip install --user autopep8
+	#+end_src      	      	
+      	#+begin_src elisp
+	(defvar myPackages
+	  '(elpy
+	    py-autopep8))
+	; enable autopep8 formatting on save
+	;; ignoring:
+	;; - E501 - Try to make lines fit within --max-line-length characters.
+	;; - W293 - Remove trailing whitespace on blank line.
+	;; - W391 - Remove trailing blank lines.
+	;; - W690 - Fix various deprecated code (via lib2to3).
+	(require 'py-autopep8)
+	(setq py-autopep8-options '("--ignore=E501,W293,W391,W690"))
+	(add-hook 'python-mode-hook 'py-autopep8-enable-on-save)
+	#+end_src	
+   7) Virtual Environment Support, and
+   8) Much more!
+
+** Mgit

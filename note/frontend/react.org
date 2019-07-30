@@ -1,0 +1,490 @@
+* 学习路线
+  - React
+    1) basic knowledge
+    2) css in js
+    3) react-router
+    4) redux
+    5) axios
+    6) i18n
+    7) tool chain: webpack,babel,npm,npx,nvm,devtools
+    8) animation
+    9) ssr
+    10) immutable
+    11) vdom+diff+patch
+    12) app with antd
+    13) customize component
+        1) table(dynamic columns, fixed header, freeze columns, on-fly edit)
+        2) tree(drag and drop)
+        3) numeric input
+        4) form https://jaredpalmer.com/formik/
+  - security
+  - http, https
+
+* 手脚架
+  github: https://github.com/facebook/create-react-app
+  #+begin_src bash
+  # create a new project
+  npx create-react-app my-app
+
+  # update build tooling
+  npm install react-script@lastest
+  #+end_src
+
+* JSX
+  1. JSX本身为表达式
+  2. JSX将在编译期编译为 ~React.createElement~ 等方法
+     #+begin_example js
+     import React from "react"
+
+     const element = (
+       <h1 className="greeting">
+         Hello!
+       </h1>
+     )
+
+     /* 编译后得到
+      * const element = React.createElement(
+      *                 "h1",
+      *                 {className: "greeting"},
+      *                 "Hello!")
+      */
+
+     /* React.createElement 返回形如以下格式的 React Element
+      * { type: "h1",
+      *   props: {
+      *     className: "greeting",
+      *     children: "Hello!"
+      *   }
+      * }
+      */
+     #+end_example
+
+  #+begin_src js
+  name = "john"
+
+  // 单行JSX不用括号包裹
+  el1 = <h1>Hello, {name + " huang"}</h1>
+
+  // 多行JSX需要括号包裹
+  el2 = (
+    <h1>
+      Hello, {name + " huang"}
+    </h1>
+  )
+
+  // 两种设置属性的方式
+  // 静态属性：双引号包裹值
+  // 动态属性：花括号包裹JavaScript表达式
+  // 注意：JSX中的属性命名采用camelCase，如class变为className，tabindex变为tabIndex
+  el3 = <div tabIndex="0" name={name + " huang"}></div>
+
+  // 若没有子元素，可以直接以/>结尾
+  el4 = <img src={user.avatarUrl} />
+
+  // 可以包含子元素
+  el5 = (
+    <div>
+       <h1>Hello!</h1>
+    </div>
+  )
+  #+end_src
+
+* Component
+
+** Function Component
+   #+begin_example js
+   /* @param props
+    * @return React Element
+    */
+   function Welcome(props){
+     return <h1>Hello, {props.name}</h1>
+   }
+
+   const el = <Welcome name="john" />
+   ReactDOM.render(
+     el,
+     document.getElementById("root")
+   )
+   #+end_example
+
+** Class Component
+   #+begin_example js
+   class Welcome extends React.Component {
+     constructor(props){
+       super(props)
+       this.state = {date: new Date()}
+     }
+
+     // 生命周期函数，挂载到页面时触发
+     componentDidMount(){
+       this.timerID = setInterval(
+         () => this.setState({date: new Date()})
+         1000
+       )
+     }
+
+     // 生命周期函数，即将从页面卸载时触发
+     componentWillUnmount(){
+       clearInterval(this.timerID)
+     }
+
+     render(){
+       return (
+         <div>
+           <h1>Hello, {this.props.name}</h1>
+           <div>datetime: {this.state.date.toLocalTimeString()}</div>
+         </div>
+       )
+     }
+   }
+
+   const el = <Welcome name="john" />
+   ReactDOM.render(
+     el,
+     document.getElementById("root")
+   )
+   #+end_example
+
+* Props and States
+  1) Props 必须为只读状态，不能被修改。
+  2) States 存储组件内部状态，只能通过 ~setState~ 异步更新
+     1) 不依赖现在的值来更新state
+        #+begin_example js
+        this.setState({name: "abc"})
+        #+end_example
+     2) 依赖现在的值来更新state
+        #+begin_example js
+        this.setState((state, props) => {
+          return {name: state.name + props.name}
+        })
+        #+end_example
+     3) 分别更新部分state，React会合并更新操作
+        #+begin_example js
+        constructor(props){
+          super(props)
+          this.state = {
+            posts: [],
+            comments: []
+          }
+        }
+
+        componentDidMount(){
+          this.setState({posts: [1]})
+          this.setState({comments: [2]})
+        }
+        #+end_example
+* Event Handler
+
+** Function Component的方式
+   #+begin_example js
+   function ActionLink(props){
+     /* @param e {SyntheticEvent} - React根据W3C spec规定编写Event类，已兼容所有浏览器。
+      * @return null - 返回false不会导致浏览器默认事件处理函数不执行，需要显式调用preventDefault才行。
+      */
+     const handleClick = e => {
+       e.preventDefault()
+       console.log("Click")
+     }
+
+     return <a href="#" onClick={handleClick}>Click Me</a>
+   }
+   #+end_example
+
+** Class Component的方式
+   #+begin_example js
+   // 方式1
+   class ActionLink1 extends React.Component{
+     constructor(props){
+       super(props)
+       this.handleClick = this.handleClick.bind(this, "preset argument")
+       this.state = {name: "john"}
+     }
+
+     handleClick(preset, e){
+       e.preventDefault()
+       console.log("Click by " + this.state.name)
+     }
+
+     render(){
+       return <a href="#" onClick={this.handleClick}>Click Me</a>
+     }
+   }
+
+   // 方式2
+   class ActionLink2 extends React.Component{
+     constructor(props){
+       super(props)
+       this.state = {name: "john"}
+     }
+
+     // 新语法：public class fields，会自动绑定this为当前实例
+     handleClick = (e) => {
+       e.preventDefault()
+       console.log("Click by " + this.state.name)
+     }
+
+     render(){
+       return <a href="#" onClick={this.handleClick}>Click Me</a>
+     }
+   }
+
+   // 方式3
+   class ActionLink1 extends React.Component{
+     constructor(props){
+       super(props)
+       this.state = {name: "john"}
+     }
+
+     handleClick(e, other_arg){
+       e.preventDefault()
+       console.log("Click by " + this.state.name)
+     }
+
+     render(){
+       return <a href="#" onClick={(e) => this.handleClick(e, "other argument")}>Click Me</a>
+     }
+   }
+   #+end_example
+** 注意
+   1) 原生的onchange事件是控件失焦后，发现控件内容有变化才触发；React中的onChange事件，则控件内容发生变化即触发。
+
+* 根据条件不渲染组件
+  只需返回null即可。
+
+** Function Component
+   #+begin_example js
+   function Welcome(props){
+     if (props.warn){
+       return null
+     }
+
+     return <h1>Hello</h1>
+   }
+   #+end_example
+
+** Class Component
+   #+begin_example js
+   class Welcome extends React.Component{
+     render(){
+       if (this.props.warn){
+         return null
+       }
+
+       return <h1>Hello</h1>
+     }
+   }
+   #+end_example
+* TODO 列表中的key属性
+  对于根据数组生成的元素列表，需要通过设置该数组唯一的key来让React识别元素的修改、新增和删除。
+  注意：
+  1) key是设置在通过循环数组生成的元素列表的元素上；
+  2) key的值为数组内唯一，而不是全局唯一。
+
+** 为什么需要key
+   https://reactjs.org/docs/reconciliation.html#recursing-on-children
+
+* Form
+
+** Controlled Components
+   元素的值由React管理，用户修改输入内容时必须修改React Element的状态然后由React控制组件的变化。
+   注意：若设置为null后，元素的内容就根据用户输入变化，而不受React管控。
+   #+begin_example js
+   class LoginForm extends React.Component {
+     constructor(props){
+       super(props)
+       this.state = {account: "",
+                     password: ""}
+       this.handleAccountChange = this.handleAccountChange.bind(this)
+       this.handlePasswordChange = this.handlePasswordChange.bind(this)
+     }
+
+     handleAccountChange(e){
+       this.setState({account: e.target.value})
+     }
+
+     handlePasswordChange(e){
+       this.setState({password: e.target.value})
+     }
+
+     handleSubmit(e){
+       e.preventDefault()
+       console.log(this.state.account)
+       console.log(this.state.password)
+     }
+
+     render(){
+       return (
+         <form onSubmit={this.handleSubmit}>
+           <label>
+             Account: <input type="text" value={this.state.account} onChange={this.handleAccountChange} />
+           </label>
+           <label>
+             Password: <input type="password" value={this.state.password} onChange={this.handleSubmit} />
+           </label>
+           <input type="submit" value="submit" />
+         </form>
+       )
+     }
+   }
+   #+end_example
+
+*** Textarea
+    通过属性value设置元素内容，不能通过innerText的方式。
+    #+begin_example js
+    <textarea value={this.state.value} onChange={this.handleChange}/>
+    #+end_example
+
+*** Select
+    通过属性select元素的value代替option中通过selected标记选中项。
+    当启用multiple时，可向value传递数组选中多个项目。
+    #+begin_example js
+    <select value={this.state.value} onChange={this.handleChange} multiple={true}>
+      <option value="1">No1</option>
+      <option value="2">No2</option>
+    </select>
+    #+end_example
+
+** Uncontrolled Components
+   元素的值由原生HTML控件管理，React不参与。
+
+*** 通过ref引用控件来获取值
+    #+begin_example js
+    class NameForm extends React.Component{
+      constructor(props){
+        super(props)
+        this.handleSubmit = this.handleSubmit.bind(this)
+        this.input = React.createRef()
+      }
+
+      handleSubmit(e){
+        e.preventDefault()
+        console.log(this.input.current.value)
+      }
+
+      render(){
+        return (
+          <form onSubmit={this.handleSubmit}>
+            <input type="text" ref={this.input} />
+            <input type="submit" value="submit" />
+          </form>
+        )
+      }
+    }
+    #+end_example
+
+*** 由React设置默认值，但不控制后续控件内容的变化
+    1) ~input[type="checkbox"], input[type="radio"]~ 通过 ~defaultChecked~ 设置
+    2) ~input[type="text"], textarea, select~ 通过 ~defaultValue~ 设置
+
+    #+begin_example js
+    class NameForm extends React.Component{
+      constructor(props){
+        super(props)
+        this.handleSubmit = this.handleSubmit.bind(this)
+        this.input = React.createRef()
+      }
+
+      handleSubmit(e){
+        e.preventDefault()
+        console.log(this.input.current.value)
+      }
+
+      render(){
+        return (
+          <form onSubmit={this.handleSubmit}>
+            <input type="text" ref={this.input} defaultValue={this.props.defaultValue} />
+            <input type="submit" value="submit" />
+          </form>
+        )
+      }
+    }
+    #+end_example
+
+*** File
+    由于 ~input[type="file"]~ 为只读控件，必须通过File API来操作，因此File控件必须为Uncontrolled Component。
+    #+begin_example js
+    class MyForm extends React.Component{
+      constructor(props){
+        super(props)
+        this.handleSubmit = this.handleSubmit.bind(this)
+        this.file = React.createRef()
+      }
+
+      handleSubmit(e){
+        e.preventDefault()
+        console.log(this.file.current.files[0].name)
+      }
+
+      render(){
+        return (
+          <form onSubmit={this.handleSubmit}>
+            <input type="file" ref={this.file} />
+            <input type="submit" value="submit" />
+          </form>
+        )
+      }
+    }
+    #+end_example
+* Fragment
+  React规定JSX表达式最多只能返回一个等层React Element，就是说不能返回一组React Element列表。因此通常会外层添加一个容器。
+  #+begin_example js
+  const el = (
+    <div>
+      <h1>Hello!</h1>
+      <h2>Guys</h2>
+    </div>
+  )
+  #+end_example
+  但是有些情况下多出来的容器会导致UI变形，因此可通过 ~<React.Fragment>~ 作为容器，在渲染时会被移除。
+  #+begin_example js
+  const el = (
+    <React.Fragment>
+      <h1>Hello!</h1>
+      <h2>Guys</h2>
+    </React.Fragment>
+  )
+  #+end_example
+  缩写
+  #+begin_example js
+  const el = (
+    <>
+      <h1>Hello!</h1>
+      <h2>Guys</h2>
+    </>
+  )
+  #+end_example
+
+** 根据数组内容生成Fragment列表也需要设置key属性
+  #+begin_example js
+  const els = [1,2,3].map(item => (
+      <React.Fragment key={item}>
+        <h1>Hello!{item}</h1>
+        <h2>Guys</h2>
+      </React.Fragment>
+    )
+  )
+  #+end_example
+* TODO Forwarding Ref
+  用于向外暴露组件的内部元素(DOM Element或React Element)，只能用在Function Component上
+  #+begin_example js
+  const FancyButton = React.forwardRef((props, ref) => (
+    <button ref={ref}>
+      {props.children}
+    </button>
+  ))
+
+  const ref = React.createRef()
+  const el = (
+    <FancyButton ref={ref}>
+      <h1>Hello!</h1>
+    </FancyButton>
+  )
+
+  // ref.current 指向<button></button>元素
+  #+end_example
+  注意：属性 ~ref~ 不能通过 ~props~ 传递，必须通过 ~React.forwardRef~ 创建函数并作为第二个参数．
+
+** HOC中使用Forwarding Ref
+   #+begin_example js
+
+   #+end_example
