@@ -30,7 +30,7 @@ ansible-config # 查看、编辑ansible.cfg
 
 ansible-test # Ansible Playbook的本地测试框架，内部使用Docker构建测试环境。用处不大
 
-ansible-connection    ansible-inventory   ansible-pull 
+ansible-connection    ansible-inventory   ansible-pull
 #+END_EXAMPLE
 
 ansible-vault
@@ -131,7 +131,7 @@ Inventory清单路径：
 [hosts]
 fsjohnhuan[g:j].com
 
-# 通过:children可实现分组内包含其他分组 
+# 通过:children可实现分组内包含其他分组
 [common:children]
 windows
 linux
@@ -215,7 +215,7 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
     只需将配置项inventory指向一个可执行脚本即可，而脚本仅需支持两个选项
     - ~--list~ 或 ~-l~ ，显示所有主机以及主机组的信息（JSON格式）
     - ~--host <host>~ 或 ~-H <host>~ ，返回这个台主机的所有信息(包括认证信息、主机变量等)也是JSON格式
-    
+
     示例
     #+BEGIN_EXAMPLE python
     #!/usr/bin/env python
@@ -223,7 +223,7 @@ ansible <pattern_goes_here> -m <module_name> -a <arguments>
     import sys
     import argparse
     import json
-    
+
     def list():
         r = {}
         h = ['172.17.16.10' + str(i) for i in xrange(0,2)]
@@ -369,7 +369,7 @@ ansible all -m win_command -a 'whoami'
 ansible all -m script -a 'foo.ps1'
 
 # ??????
-ansible all -m slurp 
+ansible all -m slurp
 
 # 查看模块的帮助文档
 ansible-doc <module_name>
@@ -490,7 +490,7 @@ ansible-doc -l <keyword>
    from ansible.module_utils.basic import (
        AnsibleModule,
    )
-   
+
    module = AnsibleModule(
        argument_spec = dict(
            str1 = dict(default=None, type="str", required=True),
@@ -501,7 +501,7 @@ ansible-doc -l <keyword>
        ),
        supports_check_mode = True # 开启模块的check支持，表示该模块已经经过严格的测试，当执行ansible-playbook --check时列入检查范围，否则会被跳过检查。
    )
-   
+
    str1 = module.params["str1"]
    str2 = module.params["str2"]
 
@@ -543,7 +543,7 @@ ansible-doc -l <keyword>
    EXAMPLES = """
    - info: enable=yes
    """
-   
+
    import sys
    import shlex
    try:
@@ -601,13 +601,13 @@ class FilterModule(object):
         return a_new_variable
 #+END_EXAMPLE
 
-* Playbook 
+* Playbook
   Playbook采用[[https://yaml.org/spec/1.2/spec.html#Syntax][YAML]]进行编写。
   组织规则：
   1) 一个Playbook可以包含1~N个Play，每个Play是一个完整的部署任务。每个Play定义对某组管理节点执行操作；
   2) 一个Play可以包含1~N个Task，每个Task完成一件事；
   3) 一个Play可以包含1~N个Role，每个Role是对某组Task所需的内容（handlers/templates/等）进行组织。
-     
+
 ** Playbook语法示例
    #+BEGIN_EXAMPLE yaml
    --- # 首行表示该文件为YAML文件
@@ -642,7 +642,7 @@ class FilterModule(object):
      roles:
          - role: docker
            version: 1.5.0
-           when: ansible_system == 'Linux' 
+           when: ansible_system == 'Linux'
      # 运行Playbook任务
      tasks:
          - name: Install Nginx Package
@@ -650,7 +650,7 @@ class FilterModule(object):
            yum: name=nginx state=present
          - name: Copy Nginx.conf
            tags: [nginx, config]
-           template: 
+           template:
                src: ./nginx.conf.j2
                dest: /etc/nginx/nginx.conf
                owner: root
@@ -660,7 +660,7 @@ class FilterModule(object):
            # 触发handler
            notify:
                - Restart Nginx Service
-        
+
          # 对于shell和command模块而而言，它们根据所执行命令的return code决定任务是否执行成功
          # 对于不关心return code的命令而言，可采用如下两种方式保证任务执行成功
          - name: run this command and ignore the result
@@ -720,7 +720,7 @@ class FilterModule(object):
               yum: name=httpd state=latest
 
             - name: 2. write the apache config file
-              template: 
+              template:
                   src: /srv/httpd.conf.j2
                   dest: /etc/httpd.conf
               notify:
@@ -818,7 +818,7 @@ class FilterModule(object):
     获取当前主机的IP：
     1. ~{{ inventory_hostname }}~
     2. ~hostvars[inventory_hostname]['ansible_facts']['ip_addresses'][0]~
-     
+
     ~group_names~ 获取当前执行任务的主机所属的主机组的主机名列表
     ~groups~ 所有主机组的字典，如 ~groups.web~ 获取 ~[web]~ 这组主机组的所有主机facts信息
     #+BEGIN_EXAMPLE ini
@@ -844,7 +844,7 @@ class FilterModule(object):
 
 **** 返回值意思
      ansible_fqdn 127.0.0.1的域名
-    
+
 **** 两种方式优化
      1) 在playbook的每个play中添加 ~gather_facts: no~, 禁止收集Facts变量
      2) Ansible1.8+可缓存Facts变量
@@ -876,12 +876,18 @@ class FilterModule(object):
      self._cache[key] = json.loads(value.decode('utf-8'))
      #+END_SRC
 
+*** group_vars技巧
+    1) group_vars/all.yml 用于存放全局适用的变量
+    2) group_vars/windows.yml 用于存放位于windows分组的变量
+    3) group_vars/dbserver/ 下存放多个yml文件，存放dbserver分组的变量
+       目录下的文件以文件名字母排序顺序加载，后面重名的变量会覆盖前面的变量．
+
 ** 条件判断
    通过 ~when~ 语句实现if语句，其中的逻辑运算由Jinja2提供。
    #+BEGIN_EXAMPLE yaml
    ---
    # 测试字符串
-   vars: 
+   vars:
       url: abc
       a: [1,2,3]
       b: [2,3]
@@ -924,13 +930,13 @@ class FilterModule(object):
         when: result | changed
 
       - debug: msg="succeeded in Ansible >=2.1"
-        when: result | succeeded 
+        when: result | succeeded
 
       - debug: msg="succeeded"
-        when: result | success 
+        when: result | success
 
       - debug: msg="skipped"
-        when: result | skipped 
+        when: result | skipped
    #+END_EXAMPLE
 
 ** 循环结构
@@ -975,12 +981,12 @@ class FilterModule(object):
             mary:
                 name: mary
                 age: 20
-    tasks:   
+    tasks:
         - shell: "echo {{item.key}}--{{item.value.age}}"
           with_dict: user
     # 回显 john--18、mary--20
     #+END_EXAMPLE
-    
+
 *** 文件匹配Loops
     #+BEGIN_EXAMPLE yaml
     ---
@@ -994,9 +1000,9 @@ class FilterModule(object):
     #+BEGIN_EXAMPLE yaml
     ---
     - shell: "echo {{item.key}}--{{item.value.age}}"
-      with_random_choice: 
+      with_random_choice:
           - {name: "a", age: 1}
-          - {name: "b", age: 2}      
+          - {name: "b", age: 2}
     #+END_EXAMPLE
 
 *** 条件判断Loops
@@ -1038,7 +1044,7 @@ class FilterModule(object):
 ** 块结构
    Block块将多个action组装成块，可根据不同条件执行一组action。
    #+BEGIN_EXAMPLE yaml
-   --- 
+   ---
    - hosts: test
      tasks:
          - block:
@@ -1051,7 +1057,7 @@ class FilterModule(object):
 
            vars:
              service-name: boo
-             
+
            when: ansible_distribution == 'CentOS'
            rescue:
                - debug: msg="I caught an error"
@@ -1096,7 +1102,7 @@ class FilterModule(object):
 
 ** 读取动态变量
    通过lookups插件实现，并且读取操作均在被控节点上执行。
-   
+
 *** lookups file
     通过Python的codecs.open打开文件，并将文件内容作为结果返回给变量。
     #+BEGIN_EXAMPLE yaml
@@ -1157,7 +1163,7 @@ class FilterModule(object):
     #+BEGIN_EXAMPLE yaml
     ---
     vars:
-      content: "{{ lookup('env', 'HOME') }}"  
+      content: "{{ lookup('env', 'HOME') }}"
     #+END_EXAMPLE
 
 ** 错误处理和状态转换
@@ -1427,7 +1433,7 @@ class FilterModule(object):
        #!/user/bin/evn python
        # -*- coding: utf-8 -*-
        # file: ./test/test_host.py
-       
+
        # 入参host就是被测试主机
        def test_passwd_file(host):
            passwd = host.file('/etc/passwd')
@@ -1481,7 +1487,7 @@ class FilterModule(object):
        4) 直接调用testinfra API
           #+BEGIN_EXAMPLE python
           import testinfra
-          
+
           host = testinfra.get_host('paramiko://root@host')
           #+END_EXAMPLE
        5) 通过
@@ -1549,7 +1555,7 @@ class FilterModule(object):
                  - name: Added in 2.4, previously you used 'include'.
                    import_tasks: debian.yml
                    when: ansible_facts['os_family']|lower == 'debian'
-                 - yum: 
+                 - yum:
                      name: "httpd"
                      state: present
                  #+END_EXAMPLE
@@ -1614,7 +1620,7 @@ class FilterModule(object):
           2) add ~allow_duplicates: true~ to the ~meta/main.yml~ file for the role.
              #+BEGIN_EXAMPLE yaml
              ---
-             
+
              allow_duplicate: true
              #+END_EXAMPLE
 
@@ -1640,7 +1646,7 @@ class FilterModule(object):
          EXAMPLE.COM = {
            kdc = ad.example.com
          }
-         
+
          [domain_realm]
          .example.com = EXAMPLE.COM
          #+END_EXAMPLE
@@ -1691,8 +1697,8 @@ class FilterModule(object):
    2) 管理端已经配置完成，但在控制端执行 ~ansible all -m win_ping~ 返回如下内容
    #+BEGIN_QUOTE
    UNREACHABLE! => {
-   "changed": false, 
-   "msg": "plaintext: HTTPConnectionPool(host='10.16.40.165', port=5985): Max retries exceeded with url: /wsman (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x7fd995aaa910>, 'Connection to 10.16.40.165 timed out. (connect timeout=30)'))", 
+   "changed": false,
+   "msg": "plaintext: HTTPConnectionPool(host='10.16.40.165', port=5985): Max retries exceeded with url: /wsman (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x7fd995aaa910>, 'Connection to 10.16.40.165 timed out. (connect timeout=30)'))",
    "unreachable": true
    }
    #+END_QUOTE
@@ -1776,7 +1782,7 @@ class FilterModule(object):
 *** TODO Connect from Linux to Windows by PowerShell
     https://github.com/PowerShell/psl-omi-provider
     https://www.freebuf.com/articles/system/195166.html
-   
+
 * Ansible-Galaxy
   #+BEGIN_EXAMPLE
   # 初始化一个role的目录结构
@@ -1828,7 +1834,7 @@ class FilterModule(object):
    - 已经集成到Ansible2.x，只要在ansible.cfg中加入 ~callback_whitelist = profile_tasks~ 即可
 
 * TODO 安全
-  
+
 ** ansible-vault
    用于加密配置文件。
    #+BEGIN_EXAMPLE bash
@@ -1855,7 +1861,7 @@ class FilterModule(object):
    #+BEGIN_EXAMPLE
    host_key_checking=False
    #+END_EXAMPLE
-   
+
 * 实例-IIS
   #+BEGIN_EXAMPLE yaml
   ---
@@ -1869,7 +1875,7 @@ class FilterModule(object):
           restart: no
           include_sub_features: yes
           include_management_tools: no
-      - name: Copy local web index file to {{inventory_hostname}} 
+      - name: Copy local web index file to {{inventory_hostname}}
         win_copy:
           src: index.html
           dest: c:\inetpub\wwwroot\index.html
@@ -1928,7 +1934,7 @@ class FilterModule(object):
 ** TODO 热键绑定
    - 配置文件验证，通过 ~--check~ 和 ~--diff~ 来对比生成后的文件是否符合要求
    - 发布到开发环境
-   
+
 ** REPL
    使用multi-term打开模拟终端，然后输入ansible-console即可
 * TODO 最佳实践
@@ -1941,7 +1947,7 @@ class FilterModule(object):
 
 ** 文档
    #+BEGIN_QUOTE
-   Documentation is a love letter that you write to your future self. 
+   Documentation is a love letter that you write to your future self.
    -- Damian Conway
    #+END_QUOTE
    #+BEGIN_QUOTE
@@ -1981,6 +1987,4 @@ class FilterModule(object):
 ** 版本控制库管理Playbook
 
 ** 通过Ansible Vault保护帐号密码等敏感信息
-   虽然可以通过 ~ansible-vault~ 对group_vars、host_vars、include_vars和var_files加密，但当执行 ~ansible -v~ 时未加密信息依然会输出到stdout和日志中，这时我们可以通过在任务中设置 ~no_log: true~ 屏蔽日志输出。 
-
-
+   虽然可以通过 ~ansible-vault~ 对group_vars、host_vars、include_vars和var_files加密，但当执行 ~ansible -v~ 时未加密信息依然会输出到stdout和日志中，这时我们可以通过在任务中设置 ~no_log: true~ 屏蔽日志输出。
