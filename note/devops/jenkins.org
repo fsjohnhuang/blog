@@ -25,7 +25,7 @@
 * 安装配置Jenkins
 
 ** 安装
-*** 通过Java Web Start方式 
+*** 通过Java Web Start方式
    Java Web Start（JNLP，Java Network Launch Protocol）是一种通过URL链接运行Java桌面应用的发布技术，当应用发生更新时只需服务器版本，那么用户在下次通过Java Web Start运行应用时就会运行最新版的应用。
    运行过程：
    1) 下载JNLP文件
@@ -144,7 +144,7 @@ Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ
 
 Jenkins会自动收集每个触发构建的SCM提交附带的用户信息，我们可以在People界面看到而且还可以看到他们触发了哪些构建和构建过程信息。（但这些用户不一定配置为可登录Jenkins系统的）
 
-** 验证方式——Security Realm 
+** 验证方式——Security Realm
 1) Jenkins’ own user database（Jenkins内置用户数据库）
    - 适合小团队，原来没有身份验证系统的团队
    - 提供注册功能(sign up)
@@ -503,7 +503,7 @@ Apache JMeter是开源的性能测试工具，而LoadRunner则为商业收费工
 
 *注意：*  当Slave中的环境变量发生变化，需重启Slave服务才能生效。
 
-*** QA 
+*** QA
 1) 若在64bit Windows Slave上执行构建，报 ~java.lang.NoClassDefFoundError: Could not initialize class hudson.slaves.SlaveComputer~ ，请按如下操作检查:
    1) You should have 32 bit JRE Installed
    2) It should be default JRE - you go to configure Java and change the settings if you have 64 bit and 32 bit both change the default to 32 bit path.
@@ -747,7 +747,7 @@ QA:
      1) 元数据由 ~[0-9a-zA-Z-]~ 组成；
      2) 多个元数据间通过句号 ~.~ 分隔；
      3) 元数据不影响版本号的优先顺序。
-   - 示例： ~1.0.0+exp.sha.123~, ~1.0.1-alpha.2+201803211324~, ~1.2.1-rc+201803211312.REC321~ 
+   - 示例： ~1.0.0+exp.sha.123~, ~1.0.1-alpha.2+201803211324~, ~1.2.1-rc+201803211312.REC321~
 
 *** 优先级(precedence)
 规则：
@@ -779,7 +779,6 @@ QA:
 - 另外通过插件EnvInject可从工作空间读取配置文件的方式获取环境变量。
 
 * TODO 插件开发
-
 * TODO 实例-.NET构建流程
 操作系统：Server Core for Windows Server 2012 R2
 MSBuild：https://www.microsoft.com/zh-cn/download/details.aspx?id=40760
@@ -789,11 +788,9 @@ Jenkins插件：MSBuild Plugin
 
 *** GitLab Plugin
 1. 在GitLab/User Settings/Account获取Private token
-2. 在Jenkins/Manage Jenkins/Configure System/ 
+2. 在Jenkins/Manage Jenkins/Configure System/
    1. 配置gitlab URL(external_url)
    2. 新增Kind为GitLab API token的Credential
-
-
 
 
 * 集成Git
@@ -840,7 +837,6 @@ sudo ssh-add ~/.ssh/id_rsa
 
 
 
-
 * QA
 ** 代理异常
 通过shell运行ansible-playbook时报如下异常
@@ -859,4 +855,3 @@ UNREACHABLE! => {"changed": false, "msg": "plaintext: HTTPConnectionPool(host='1
   - Jenkins X
     Cloud Native Jenkins, 用于发布基于Kubernetes的应用。
   - Spinnaker
-    

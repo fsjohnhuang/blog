@@ -1,0 +1,30 @@
+* 常规命令
+#+begin_example bash
+# 安装package.json中的包
+npm --proxy=http://<proxy_ip> --registry=https://registry.npm.taobao.org install
+#+end_example
+
+
+* 网络代理配置
+1) 全局配置
+   #+begin_example bash
+   # 设置http和https的网络代理
+   npm config set proxy=http://[username:password@]<proxy_ip>
+
+   # 设置http的网络代理
+   npm config set http-proxy=http://[username:password@]<proxy_ip>
+
+   # 设置https的网络代理
+   npm config set https-proxy=http:///[username:password@]<proxy_ip>
+
+   # 取消代理
+   npm config delete proxy
+   npm config delete http-proxy
+   npm config delete https-proxy
+   #+end_example
+2) 当前操作配置网络代理
+   #+begin_example bash
+   npm --proxy=http://<proxy_ip> <command>
+   npm --http-proxy=http://<proxy_ip> <command>
+   npm --https-proxy=http://<proxy_ip> <command>
+   #+end_example

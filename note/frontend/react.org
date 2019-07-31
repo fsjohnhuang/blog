@@ -17,6 +17,7 @@
         2) tree(drag and drop)
         3) numeric input
         4) form https://jaredpalmer.com/formik/
+           1) yup
         5) datetime picker
         6) layout
         7) dialog
@@ -752,6 +753,8 @@
    #+end_example
 
 * Higher-Order Component
+  一般用于对已有组件进行增强，不影响UI显示。
+
   若只想从顶层向最底层元素传递变量，那么HOC则优于Context API。
   1) 问题代码
      #+begin_example js
@@ -850,7 +853,314 @@
 ** 事件和异步代码引发的异常
    由于Error Boundaries用于捕获导致组件渲染异常的问题，而事件和异步代码的异常在组件渲染阶段并不响应组件进行渲染，因此需要采用JS的 ~try/catch~ 处理。
 
-* TODO Lifecycle
-* Integrating with other libraries
+* Lifecycle
+
+** 创建时
+   | 阶段                                | 生命周期函数             |
+   |-------------------------------------+--------------------------|
+   | "Render阶段"                        | constructor              |
+   | 纯净且没有副作用，可能会被React     | getDerivedStateFromProps |
+   | 暂停、中止或重新启动                | render                   |
+   |-------------------------------------+--------------------------|
+   | "Commit阶段"                        | React更新DOM和refs       |
+   | 可以使用DOM，运行副作用，安排更新。 | componentDidMount        |
+
+** 更新时
+   | 阶段                                                 | 生命周期函数1            | 生命周期函数2            |
+   |------------------------------------------------------+--------------------------+--------------------------|
+   |                                                      | (New Props)   setState() | forceUpdate()            |
+   |------------------------------------------------------+--------------------------+--------------------------|
+   | "Render阶段"                                         | getDerivedStateFromProps | getDerivedStateFromProps |
+   | 纯净且没有副作用，可能会被React                      | shouldComponentUpdate    |                          |
+   | 暂停、中止或重新启动                                 | render                   | render                   |
+   |------------------------------------------------------+--------------------------+--------------------------|
+   | "Pre-commit阶段"还没实际地更新DOM状态，但可以读取DOM | getSnapshotBeforeUpdate  | getSnapshotBeforeUpdate  |
+   |------------------------------------------------------+--------------------------+--------------------------|
+   | "Commit阶段"                                         | React更新DOM和refs       | React更新DOM和refs       |
+   | 已经更新了DOM，可以使用DOM，运行副作用，安排更新。   | componentDidUpdate       | componentDidUpdate       |
+
+** 卸载时
+   | 阶段                                                            | 生命周期函数         |
+   |-----------------------------------------------------------------+----------------------|
+   | "Commit阶段" 已经更新了DOM，可以使用DOM，运行副作用，安排更新。 | componentWillUnmount |
+
+
+** 生命周期函数详解
+   1) constructor
+      1) 用于初始化内部状态，很少用
+      2) 唯一可以直接修改state的地方
+   2) getDerivedStateFromProps
+      React 16.3 引入的新的生命周期函数，用于根据外部属性生成内部状态并作为函数返回值返回，然后会将返回值自动合并到组件的状态上。
+      1) 用于替代之前的componentWillReceiveProps
+      2) 使用条件
+         1) 无条件地更新状态
+         2) 当props和state不匹配时更新state
+      3) 尽量不使用：维护两者状态一致性会增加复杂度
+         1) 直接在render中使用通过计算props的值更容易保持一致性，而不是另外设置到state上。
+      4) 每次render都会调用到
+      5) 典型场景：表单控件获取默认值
+   3) render
+      组件唯一必须定义的生命周期函数，用于定义DOM结构的地方。
+   4) componentDidMount
+      在这里发起异步请求等IO操作
+   5) shouldComponentUpdate
+      用于自定义某些操作是否需要更新UI，以便作性能优化。返回true为更新UI，false为不更新UI且中止当前流程。
+      1) 在页面render之前调用，state已更新，DOM未更新但可访问
+      2) 典型场景：获取render之前的DOM状态
+   6) getSnapshotBeforeUpdate
+      React 16.3 引入的新的生命周期函数
+   7) componentDidUpdate
+      #+begin_example js
+      /* @param {object} prevProps - 之前的props
+       * @param {object} prevState - 之前的state
+       * @param {any} dataFromGetSnapshortBeforeUpdate - getSnapshotBeforeUpdate函数的返回值
+       */
+      componentDidUpdate(prevProps, prevState, dataFromGetSnapshortBeforeUpdate)
+      #+end_example
+      1) 典型场景：页面需要更新props变化重新获取数据
+   8) componentWillUnmount
+      用于释放资源
+
+* TODO Integrating with other libraries
 ** Integrating with DOM Manipulation Plugins
-* TODO Portals
+   由于React并不知道DOM变化，而是自身维护一份Virtual DOM并映射到DOM中。若外界直接修改DOM，那么React再次通过Virtual DOM映射DOM时将蒙圈。
+   因此当在React中使用其他DOM操作库时
+   1) DOM操作的元素和React管理的元素要分离
+   2) React初始化元素原始状态后，将控制权交给DOM操作，并在生命周期函数 ~componentWillUnmount~ 中执行DOM操作库的事件清理和其他善后工作
+      #+begin_example js
+      class MyComponent extends React.Component{
+        componentDidMount(){
+          this.$el = $(this.el)
+          this.$el.component()
+          this.$el.on("click", function(evt){})
+        }
+
+        componentWillUnmount(){
+          this.$el.component("destroy")
+          this.$el.off("click")
+        }
+
+        render(){
+          return <div ref={el => this.el = el}></div>
+        }
+      }
+      #+end_example
+
+*** TODO 自定义Select
+
+* Portals
+  提供一种方式在当前元素之外渲染子元素。适合Dialog, Tooltips等组件开发。
+  #+begin_example js
+  /*
+   * @param {ReactElement|DOMString|ReactFragment} child - 待渲染的子元素
+   * @param {DOMElement} container - 渲染用的容器
+   */
+  ReactDOM.createPortal(child, container)
+  #+end_example
+
+** Event Bubbling Through Portals
+   虽然DOM结构上通过Portal渲染的子元素不在当前元素其下，但在React内部维护的Virtual DOM Tree中，该元素依然为当前元素的子元素，因此如Context和Event冒泡等依然和常规的一致。
+   #+begin_example js
+   import React from "react"
+   import ReactDOM from "react-dom"
+
+   const modalRoot = document.getElementById("modal-rootp")
+   class Modal extends React.Component {
+     constructor(props){
+       super(props)
+       this.el = document.createElement("div")
+     }
+
+     componentDidMount(){
+       // 这里是先将子元素渲染到detached DOM element上，然后在加入到render tree中，为的是方便后续移除
+       // 若需要用到autoFocus属性，或在这里获取渲染后的尺寸，那么必须在render函数中将子元素直接渲染到位于render tree中的DOM element。
+       modalRoot.appendChild(this.el)
+     }
+
+     componentWillUnmount(){
+       modalRoot.removeChild(this.el)
+     }
+
+     render(){
+       return ReactDOM.createPortal(this.props.children
+                                    , this.el)
+     }
+   }
+
+   const Parent = props => {
+     const handleClick = evt => console.log(evt)
+
+     return (
+       <div onClick={handleClick}>
+         <Modal>{this.props.children}</Modal>
+       </div>
+     )
+   }
+
+   const App = props => (
+     <Parent>
+       <button type="button" value="click"/>
+     </Parent>
+   )
+
+
+   ReactDOM.render(<App/>, document.getElementById("root"))
+   #+end_example;
+* Refs and the DOM
+  ref用于在render函数中引用DOM Element和React Element。
+  常用使用场景：
+  1) Managing focus, text selection, or media playback;
+  2) Triggering imperative animations;
+  3) Integerating with third-party DOM libraries.
+
+  一般场景下使用声明式比指令式更好，如使用isOpen属性控制组件行为，而不是使用open和close函数。
+
+** 使用方式1 ~React.createRef~
+   React 16.3 引入的新特性。
+   1) 创建(Function Component无法创建Ref)
+      #+begin_example js
+      class MyComponent extends React.Component {
+        constructor(props){
+          super(props)
+          this.myRef = React.createRef()
+        }
+
+        render(){
+          return <div ref={this.myRef}></div>
+        }
+      }
+      #+end_example
+   2) 访问
+      #+begin_example js
+      /* 1. 若ref指向HTML Element，则current指向的为DOM Element
+       * 2. 若ref指向Class Component，则current指向Class Component实例
+       */
+      const node = this.myRef.current
+      #+end_example
+   3) ref指向HTML Element
+      1) 在 ~componentDidMount~ 和 ~componentDidUpdate~ 前设置ref的值为HTML Element
+      2) 在 ~componentWillUnmount~ 前设置ref的值为null
+      3) 实例
+         #+begin_example js
+         class TextInput extends React.Component {
+           constructor(props){
+             super(props)
+             this.textInput = React.createRef()
+             this.focusTextInput = this.focusTextInput.bind(this)
+           }
+
+           focusTextInput(evt){
+             this.textInput.current.focus()
+           }
+
+           render(){
+             return (
+               <div>
+                 <input type="text" ref={this.textInput} />
+                 <input type="button" value="focus" onClick={this.focusTextInput} />
+               </div>
+             )
+           }
+         }
+         #+end_example
+   4) ref指向Class Component
+      #+begin_example js
+      class Parent extends React.Component {
+        constructor(props){
+          super(props)
+          this.textInput = React.createRef()
+        }
+
+        componentDidMount(){
+          this.textInput.current.focusTextInput()
+        }
+
+        render(){
+          return <TextInput ref={this.textInput} />
+        }
+      }
+      #+end_example
+   5) ref指向Function Component是无效的，因为Function Component是不会生成实例的
+      #+begin_example js
+      const TextInput = props => <input type="text" />
+      class Parent extends React.Component {
+        constructor(props){
+          super(props)
+          this.textInput = React.createRef()
+        }
+
+        render(){
+          // 无效的
+          return <TextInput ref={this.textInput} />
+        }
+      }
+      #+end_example
+
+** 使用方式2 Callback Refs
+   1) 创建
+      1) 在 ~componentDidMount~ 和 ~componentDidUpdate~ 前设置ref的值为HTML Element
+      2) 在 ~componentWillUnmount~ 前设置ref的值为null
+      3) 实例
+         #+begin_example js
+         class TextInput extends React.Component {
+           constructor(props){
+             super(props)
+             this.textInput = null
+             this.focusTextInput = this.focusTextInput.bind(this)
+             this.getTextInputRef = ref => {this.textInput = ref}
+           }
+
+           focusTextInput(evt){
+             if (this.textInput){
+               this.textInput.current.focus()
+             }
+           }
+
+           render(){
+             return (
+               <div>
+                 // 注意若使用inline function的形式 <input type="text" ref={ref => {this.textInput = ref}} />
+                 // 那么这个inline function会被调用两次，导致this.textInput会先初始化为null，在设置为元素。
+                 // 原因是每次调用render函数时都会生成新的inline function实例，而React会传递null来清空原有ref再设置新值。
+                 <input type="text" ref={this.getTextInputRef} />
+                 <input type="button" value="focus" onClick={this.focusTextInput} />
+               </div>
+             )
+           }
+         }
+         #+end_example
+   2) 实现forwarding ref效果
+      #+begin_example js
+      const Child = props => <input type="text" ref={props.inputRef} />
+      const Parent = props => {
+        let refs = {}
+        const getInputRef = ref => {
+          refs.inputRef = ref
+        }
+
+        return <Child inputRef={getInputRef} />
+      }
+      #+end_example
+* TODO Render Props
+  通过prop传递function来在多个组件间共享代码。
+  React-Router 和 Downshift 都使用该技术实习。
+
+* 设计模式——函数作为子组件
+  用于由组件使用者控制如何动态显示组件的内容；若以元素作为子组件则无法灵活控制动态显示，因为调用时已经决定只能显示传入的子元素。
+  #+begin_example js
+  class MyComponent extends React.Component {
+    render(){
+      return (
+        <div>
+          {this.props.children("Hello!")}
+        </div>
+      )
+    }
+  }
+
+  const el = (
+    <MyComponent>
+      {name => <div>{name}</div>}
+    </MyComponent>
+  )
+  #+end_example

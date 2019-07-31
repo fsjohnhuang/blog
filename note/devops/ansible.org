@@ -878,9 +878,14 @@ class FilterModule(object):
 
 *** group_vars技巧
     1) group_vars/all.yml 用于存放全局适用的变量
-    2) group_vars/windows.yml 用于存放位于windows分组的变量
-    3) group_vars/dbserver/ 下存放多个yml文件，存放dbserver分组的变量
+    2) group_vars/ungrouped.yml 用于存放全局未分组主机的变量
+    3) group_vars/windows.yml 用于存放位于windows分组的变量
+    4) group_vars/dbserver/ 下存放多个yml文件，存放dbserver分组的变量
        目录下的文件以文件名字母排序顺序加载，后面重名的变量会覆盖前面的变量．
+    5) group_vars和host_vars要么在和playbook同级目录下，要么在inventory同级目录下，否则无法读取。
+       1) 若两者都有则和playbook同级目录下的覆盖inventory同级目录下的
+       2) ansible-playbook是playbook同级目录下的优先
+       3) ansible和ansible-console是inventory同级目录下的优先
 
 ** 条件判断
    通过 ~when~ 语句实现if语句，其中的逻辑运算由Jinja2提供。

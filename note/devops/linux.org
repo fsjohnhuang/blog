@@ -86,7 +86,7 @@ tail -f <filepath>
         #+BEGIN_EXAMPLE bash
         #!/bin/bash
         # file: test.sh
-        
+
         echo "\$$#"      # test.sh first last 回显 $2
 
         eval echo "\$$#" # test.sh first last 回显 last
@@ -113,7 +113,7 @@ usermode -a -G <groupA> <user>
 
 
 
-** 用户密码管理  
+** 用户密码管理
    1) 2种无交互方式初始化密码的方式
       1) ~echo initial-password | passwd <user> --stdin~
       2) ~chpasswd <user>:<passwd>~
@@ -146,7 +146,7 @@ usermode -a -G <groupA> <user>
     ## Syntax:
     ##   Need password:
     ##     USER_FLAG HOST_FLAG=(RUNAS_FLAG) COMMAND_FLAG
-    ##   
+    ##
     ##   Don't need password
     ##     USER_FLAG HOST_FLAG=(RUNAS_FLAG) NOPASSWORD: COMMAND_FLAG
     ##
@@ -202,7 +202,7 @@ usermode -a -G <groupA> <user>
 
 *** 实例
     1) 允许普通用户apps具体/etc/init.d/nagios脚本重启的权限
-       #+BEGIN_EXAMPLE 
+       #+BEGIN_EXAMPLE
        apps ALL= NOPASSWD: /etc/init.d/nagios restart
        #+END_EXAMPLE
     2) 允许普通用户apps具体root的所有权限
@@ -230,7 +230,7 @@ usermode -a -G <groupA> <user>
        # 解锁root
        sudo passwd -u root
        #+END_EXAMPLE
-   
+
 * 设置代理
 
 ** 服务端tinyproxy设置
@@ -307,7 +307,7 @@ Allow 18.90.12.145
     mget <pattern>
     # 删除文件
     delete <pattern>
-    
+
     # 在本地上执行命令
     # ls
     !dir
@@ -349,7 +349,7 @@ Allow 18.90.12.145
           ssh-keygen -t rsa -C "xxx@xxx.com"
           # 传输公钥到服务端的~/.ssh/authorized_keys文件中
           ssh-copy-id -i ~/.ssh/id_rsa.pub <user>@<remote_server_ip>
-          #+END_EXAMPLE 
+          #+END_EXAMPLE
        2) 客户端发起连接请求，并将客户端公钥一并发到服务端
           客户端第一次登录服务端时，服务端会发送 *公钥指纹* 让用户确认将要连接的服务器是否有效(防止伪装)，若输入yes确认继续访问则会将给服务端的公钥保存到客户端的 =~/.ssh/known_hosts= 文件中，后续登录相同服务器时会作为依据和服务端的公钥进行验证，若验证失败则有可能是服务端被伪装了。但可通过修改客户端的 ~/etc/ssh/ssh_config~ 禁用这验证过程：
           #+BEGIN_EXAMPLE
@@ -375,15 +375,15 @@ Allow 18.90.12.145
        #+BEGIN_EXAMPLE
        # Port 22 sshd服务端口号
        # ListenAddress 0.0.0.0 服务器一般有多张网卡，这里用于指定sshd服务绑定到哪张网卡(监听哪张网卡的请求)，默认0.0.0.0为绑定到所有网卡上。可以通过多条配置绑定多个网卡。
-       
+
        PermitRootLogin yes # 允许root用户远程登录
-   
+
        PasswordAuthentication yes # 允许使用基于密码/口令校验的登录方式
        PermitEmptyPasswords no # 允许空密码
-   
+
        RSAAuthentication yes
        PubkeyAuthentication yes # 允许基于密钥校验的登录方式
-   
+
        # AllowUsers myuser jerry 仅允许myuser和jerry远程登录该服务器
        # DenyUsers root foo 不允许root和foo远程登录该服务器
        #+END_EXAMPLE
@@ -439,7 +439,7 @@ Allow 18.90.12.145
     使用场景：
     1) 无需重复输入密码：用ssh-add添加密钥时，如果私钥有密钥，那么仅需输入一次密码，后续使用时不用再输入密码。
     2) 客户端A已经和服务端B、服务端C建立基于密钥登录机制，通过客户端A远程访问服务端B，在服务端B再远程访问服务端C时，依然要通过口令来验证登录。通过ssh-agent则可以使用免密访问登录。
-      
+
     使用：
     1) 启动ssh-agent
        #+BEGIN_EXAMPLE bash
@@ -458,7 +458,7 @@ Allow 18.90.12.145
 
 *** sshpass
     通过非交互方式实现基于口令的SSH协议的远程登录验证（即在命令行中输入口令），支持SSH协议下的所有命令，如ssh、scp和sftp。
-    
+
     实例：
     #+BEGIN_EXAMPLE bash
     # 从环境变量SSPPASS中获取登录密码
@@ -476,11 +476,10 @@ Allow 18.90.12.145
        1) 前提条件：若没有将向服务端发送过public key，而是采用密码方式验证。
           - 解决方法：可能是没有启用PasswordAuthentication
             1) 修改/etc/ssh/sshd_config
-               #+BEGIN_EXAMPLE 
+               #+BEGIN_EXAMPLE
                PasswordAuthentication yes
                #+END_EXAMPLE
             2) 重启sshd
                #+BEGIN_EXAMPLE bash
                systemctl restart sshd
                #+END_EXAMPLE
-               
