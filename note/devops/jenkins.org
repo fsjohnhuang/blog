@@ -1,3 +1,10 @@
+* 路线
+  1) GitLab
+  2) jira
+  3) Jenkins
+  4) Ansible
+  5) Zabbix
+
 * 持续集成作用
 1) 自动监控代码质量和代码覆盖率度量
 2) 降低技术债务和减少维护成本
@@ -113,7 +120,7 @@ Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ
 * 通知
 通知策略分为：被动策略(拉/pull)和主动策略(push)
 
-** 被动策略
+** TODO 被动策略
 1) 邮件通知
    - 作用：当Jenkins任务构建失败、不稳定和恢复正常时会通过邮件通知管理员。
    - 步骤
@@ -792,7 +799,6 @@ Jenkins插件：MSBuild Plugin
    1. 配置gitlab URL(external_url)
    2. 新增Kind为GitLab API token的Credential
 
-
 * 集成Git
 插件：Git Parameter Plug-In
 
@@ -834,7 +840,6 @@ sudo ssh-agent bash
 # 将密钥加入到ssh-agent的高速缓存中
 sudo ssh-add ~/.ssh/id_rsa
 #+END_EXAMPLE
-
 
 
 * QA

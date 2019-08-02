@@ -2,11 +2,16 @@
   - React
     1) basic knowledge
     2) css in js
+       1) Styled Components
+       2) Radium
+       3) Emotion
+       4) JSS
+       5) Aphrodite
     3) react-router
     4) redux
     5) axios
     6) i18n
-    7) tool chain: webpack,babel,npm,npx,nvm,devtools
+    7) tool chain: webpack,babel,npm,npx,nvm,devtools,eslint
     8) animation
     9) ssr
     10) immutable
@@ -25,15 +30,31 @@
   - http, https
   - memory leak debug
 
-* 手脚架
-  github: https://github.com/facebook/create-react-app
-  #+begin_src bash
-  # create a new project
-  npx create-react-app my-app
+* TODO 手脚架
+1) Create React App
+   - github: https://github.com/facebook/create-react-app
+   - 入门级的脚手架工具，适用于学习和简单的应用开发
+   - 使用方式
+     #+begin_src bash
+     # create a new project
+     npx create-react-app my-app
 
-  # update build tooling
-  npm install react-script@lastest
-  #+end_src
+     # update build tooling
+     npm install react-script@lastest
+     #+end_src
+2) Codesnadbox
+   - https://codesandbox.io
+   - 在线的开发平台
+3) Rekit
+   - 基于Create React App添加Redux,React Router,Less/Scss,Feature Oriented Architecture,Dedicated IDE的功能
+   - 适用于大型项目
+
+* TODO Webpack打包和部署
+打包注意事项：
+1) 设置Nodejs环境为production
+2) 禁用开发专用代码，如logger
+3) 设置应用根路径
+   package.json的home路径下，要和部署后的访问路径一致。
 
 * JSX
   1. JSX本身为表达式
@@ -853,7 +874,7 @@
 ** 事件和异步代码引发的异常
    由于Error Boundaries用于捕获导致组件渲染异常的问题，而事件和异步代码的异常在组件渲染阶段并不响应组件进行渲染，因此需要采用JS的 ~try/catch~ 处理。
 
-* Lifecycle
+* TODO Lifecycle
 
 ** 创建时
    | 阶段                                | 生命周期函数             |
@@ -885,7 +906,7 @@
    | "Commit阶段" 已经更新了DOM，可以使用DOM，运行副作用，安排更新。 | componentWillUnmount |
 
 
-** 生命周期函数详解
+** TODO 生命周期函数详解
    1) constructor
       1) 用于初始化内部状态，很少用
       2) 唯一可以直接修改state的地方
@@ -1141,26 +1162,800 @@
         return <Child inputRef={getInputRef} />
       }
       #+end_example
-* TODO Render Props
-  通过prop传递function来在多个组件间共享代码。
-  React-Router 和 Downshift 都使用该技术实习。
+* Render Props
+作为一种设计模式——函数作为子组件，通过prop传递function来在多个组件间共享代码。从而实现由组件使用者控制如何动态显示组件的内容；若以元素作为子组件则无法灵活控制动态显示，因为调用时已经决定只能显示传入的子元素。
+React-Router, Downshift 和 React-Motion 都使用该技术实习。
+#+begin_example js
+class MyComponent extends React.Component {
+  render(){
+    return (
+      <div>
+        {this.props.children("Hello!")}
+      </div>
+    )
+  }
+}
 
-* 设计模式——函数作为子组件
-  用于由组件使用者控制如何动态显示组件的内容；若以元素作为子组件则无法灵活控制动态显示，因为调用时已经决定只能显示传入的子元素。
-  #+begin_example js
-  class MyComponent extends React.Component {
-    render(){
-      return (
-        <div>
-          {this.props.children("Hello!")}
-        </div>
-      )
-    }
+const el = (
+  <MyComponent>
+    {name => <div>{name}</div>}
+  </MyComponent>
+)
+#+end_example
+
+** 示例——分享鼠标当前位置
+#+begin_example js
+class Mouse extends React.Component {
+  constructor(props){
+    super(props)
+    this.state = {x: 0, y: 0}
+    this.handleMouseMove = this.handleMouseMove.bind(this)
   }
 
-  const el = (
-    <MyComponent>
-      {name => <div>{name}</div>}
-    </MyComponent>
-  )
+  handleMouseMove(evt){
+    this.setState({x: evt.clientX, y: evt.clientY})
+  }
+
+  render(){
+    return (
+      <div onMouseMove={this.handleMouseMove}>
+        {this.props.children(this.state)}
+      </div>
+    )
+  }
+}
+
+const Cat = props => <div>x: {props.x}; y: {props.y}</div>
+
+const mouseTracker = Component => (
+  <Mouse>
+    {({x, y}) => <Component x={x} y={y} />}
+  </Mouse>
+)
+
+// 直接使用Render Props
+const CatTracker = props => (
+  <Mouse>
+    {({x, y}) => <Cat x={x} y={y} />}
+  </Mouse>
+)
+// 使用HOC+Render Props
+const CatTracker2 = mouseTracker(Cat)
+#+end_example
+
+** 提供Render Props的组件即成React.PureComponent的注意点
+问题代码：
+#+begin_example js
+class Mouse extends React.PureComponet{
+  constructor(props){
+    super(props)
+    this.state = {x: 0, y: 0}
+    this.handleMouseMove = this.handleMouseMove.bind(this)
+  }
+
+  handleMouseMove(evt){
+    this.setState({x: evt.clientX, y: evt.clientY})
+  }
+
+  render(){
+    return (
+      <div>
+        {this.props.children(this.state)}
+      </div>
+    )
+  }
+}
+
+const CatTracker = props => (
+  <Mouse>
+    {({x, y}) => <div>x: {x}, y: {y}</div>}
+  </Mouse>
+)
+#+end_example
+由于CatTracker向Mouse的render props赋予inline fucntion，因此每次调用CatTracker的render时都会创建新的inline function实例，导致PureComponent无效。
+因此要修改为向Mouse的render props赋予一个方法实例
+#+begin_example js
+function renderCat({x, y}){
+  return <div>x: {x}, y: {y}</div>
+}
+const CatTracker = props => <Mouse>{renderCat}</Mouse>
+#+end_example
+* TODO React.PureComponent
+* TODO HOOKS
+* Strict Mode
+  作为工具用于发现潜在问题，和Fragment一样不会影响UI状态，而是提供对其子元素额外的检查和警告。
+  并且仅影响开发环境，并不会影响生产环境。
+
+  使用方式
+  #+begin_example js
+  function App(){
+    return (
+      <div>
+        <Header/>
+        <React.StrictMode>
+          <div>
+            <ComponentOne />
+            <ComponentTwo />
+          </div>
+        </React.StrictMode>
+        <Footer/>
+      </div>
+    )
+  }
   #+end_example
+
+  作用：
+  1) Identify components with unsafe lifecycle
+     由于部分历史生命周期函数(如 ~componentWillMount~)在异步应用中会引发问题，通过 ~<React.StrictMode>~ 包裹第三方组件可发现其是否仍然使用存在问题的生命周期函数。
+  2) Warning about legacy string ref API usage
+     可以使用 callback ref 或 createRef 替代 string ref。
+  3) Warning about deprecated findDOMNode usage
+     可以使用 forwarding ref 替代 findDOMNode。
+  4) Detecting unexpected side effects
+     React的工作过程可分为Render阶段和Commit阶段(先忽视Pre-commit阶段)，Render阶段用于确定变更范围，Commit阶段用于执行变更。其中Commit阶段执行速度很快，但Render阶段有可能执行很慢，导致阻塞UI线程。因此React将推出异步Render阶段，即会多次调用Render阶段的生命周期函数，因此需要Render阶段的生命周期函数是可多次执行且幂等的。
+     - Render阶段的生命周期函数
+       - constructor
+       - componentWillMount
+       - componentWillReceiveProps
+       - componentWillUpdate
+       - getDerivedStateFromProps
+       - shouldComponentUpdate
+       - render
+       - setState with updater function as the first argument
+     - Strict Mode会调用两次以下生命周期函数，从而确定它们的幂等性
+       - constructor
+       - render
+       - setState with updater function as the first argument
+       - getDerivedStateFromProps
+  5) Detecting legacy context API
+
+* TODO redux
+redux-logger在开发环境使用的中间件，需要通过环境变量来控制在哪个环境打包进去。
+状态管理框架，基于flex架构。
+整个应用的所有组件的状态都保存在一个store中。
+
+特性：
+1) Single Source of Truth
+2) 可预测性
+   state+action=new state
+3) 纯函数更新store
+
+** 核心概念
+1) Store
+   #+begin_example js
+   /* 创建Store实例
+    * @param {function} reducer - 纯函数
+    * @return {Store}
+    */
+   const store = createStore(reducer)
+
+   /* 从Store实例中获取当前状态
+    */
+   store.getState()
+   /* 将一个action(如点击某按钮)分发给某个reducer
+    */
+   store.dispatch(action)
+   /* 订阅Store实例中状态的变化，变化发生时回调listener方法
+    */
+   store.subscribe(listener)
+   #+end_example
+2) Action
+   用于描述行为
+   #+begin_example js
+   {
+     type: ADD_TODO,
+     text: "Build my first Redux app"
+   }
+   #+end_example
+3) Reducer
+   用于接收action并根据action更新state
+   #+begin_example js
+   function todoApp(state=initialState, action){
+     switch(action.type){
+       case ADD_TODO:
+         return Object.assign({}, state, {
+           todos: [
+             ...state.todos,
+             {
+               text: action.text,
+               completed: false
+             }
+           ]
+         })
+       default:
+         return state
+     }
+   }
+   #+end_example
+   - 注意：
+     1) 通过dispatch分发的action，该store中的所有reducer都能接收到，因此需要reducer自行选择执行。
+** 数据更新流程
+| View | Action         | Store      |
+|------+----------------+------------|
+|      | - dispatch ->  | Dispatcher |
+|      |                | $       $  |
+|      |                | Reducer    |
+|      |                | $       $  |
+|      | <- subscribe - | State      |
+** 工具函数
+1) combineReducers
+   将多个reducer合并为单个reducer
+   #+begin_example js
+   import {combindReducers} from "redux"
+   function todos(state = [], action){
+     switch(action.type){
+       case "ADD_TODO":
+         return state.concat([action.text])
+       default:
+         return state
+     }
+   }
+
+   function counter(state = 0, action){
+     switch(action.type){
+       case "INCREMENT":
+         return state + 1
+       case "DECREMENT":
+         return state - 1
+       default:
+         return state
+     }
+   }
+
+   const reducer = combineReducers({
+     todos,
+     counter
+   })
+   #+end_example
+2) bindActionCreators
+   - 构建action函数和分发action时会分为以下两步
+     #+begin_example js
+     /* Action Creater
+      * @param {any} payload - action承载的内容
+      * @return {action}
+      */
+     function addTodo(payload){
+       return {type: "ADD_TODO",
+               payload: payload}
+     }
+
+     store = createStore(reducer)
+
+     // 1. 产生action
+     // 2. 分发action
+     store.dispatch(addTodo("Hello!"))
+     #+end_example
+   - 通过bindActionCreators可将上述两步合并
+     #+begin_example js
+     /* Action Creater
+      * @param {any} payload - action承载的内容
+      * @return {action}
+      */
+     function addTodo(payload){
+       return {type: "ADD_TODO",
+               payload: payload}
+     }
+
+     store = createStore(reducer)
+
+     // 生成一个包含产生action和分发action的函数
+     {addTodo} = bindActionCreators({addTodo: addTodo}, store.dispatch.bind(store))
+
+     // 使用时一步完成产生action和分发action的函数
+     addTodo("Hello!")
+     #+end_example
+** 集成React
+   需要通过中间件react-redux集成。
+
+*** 工作原理
+    | 原组件的props | 高阶组件 | --> | Actions  |
+    |               | (通过    |     | $     $  |
+    |               | connect  |     | reducers |
+    |               | 封装     |     | $     $  |
+    | 原组件的props | 原组件)  | <-- | Store    |
+
+*** 示例-计数器
+    #+begin_example js
+    import {createStore, bindActionCreators} from "redux"
+    import {Provider, connect} from "react-redux"
+
+    // redux
+    const counter = (state = {count: 0}, action) => {
+      switch(action.type){
+        case "INCREMENT":
+          return {count: state.count + 1}
+        case "DECREMENT":
+          return {count: state.count - 1}
+        default:
+          return state
+      }
+    }
+
+    store = createStore(counter)
+
+    let increment = () => {type: "INCREMENT"}
+    let decrement = () => {type: "DECREMENT"}
+
+    // react component
+    class Counter extends React.Component {
+      render(){
+        const {count, increment, decrement} = this.props
+        return (
+          <div>
+            <button onClick={decrement}>-</button>
+            <span>{count}</span>
+            <button onClick={increment}>+</button>
+          </div>
+        )
+      }
+    }
+
+    // 通过connect连接
+    /* 从Store中提取state作为传给component的props
+     * @param state - store.getState()的返回值
+     */
+    const mapStateToProps = state => {count: state.count}
+    /* 生成包含action creator和dispatch两步的函数作为传给component的props
+     */
+    const mapDispatchToProps = dispatch => bindActionCreators({increment, decrement}, dispatch)
+    // 生成高阶组件
+    const ConnectedCounter = connect(mapStateToProps, mapDispatchToProps)(Counter)
+
+    // 使用
+    const App = props => (
+      <Provider store={store}> // 作为整个系统的根节点
+        <ConnectedCounter />
+      </Provider>
+    )
+    #+end_example
+** TODO 异步Action
+   1) 工作原理
+      在Action和Dispatcher之间添加一个Middleware层，用于拦截异步Action和转发异步Action的内产生的Action给Dispatcher。
+   2) 中间件 redux-thunk
+   3) 使用示例
+      #+begin_example js
+      // 定义异步Action Creator
+      function getList(){
+        // 异步Action
+        // 入参dispatch为Middleware传入，用于转发异步Action内产生的Action给Dispatcher
+        // 必须返回Promise对象
+        return dispatch => {
+          dispatch({type: "BEGIN"})
+
+          const promise = new Promise((resolve, reject) => {
+            const doRequest = axios.get("....")
+            doRequest.then(res => {
+              dispatch({type: "SUCCESS", data: res.data})
+              resolve(res)
+            }, err => {
+              dispatch({type: "FAIL", data: {error: err}})
+              reject(err)
+            })
+          })
+          return promise
+        }
+      }
+
+      function reducer(state = {}, action){
+        swith(action.type):
+          case "BEGIN":
+            return {
+              ...state,
+              fetchListPending: true,
+              fetchListError: false
+            }
+          case "SUCCESS":
+            return {
+              ...state,
+              data: action.data
+              fetchListPending: false,
+              fetchListError: false
+            }
+          case "FAIL":
+            return {
+              ...state,
+              fetchListPending: false,
+              fetchListError: true
+            }
+          default state:
+            return state
+      }
+      #+end_example
+** Action和Reducer的组织方式
+   原则：
+   1) 一个Action和其对应的Reducer放在同一个文件，文件名为Action名；
+   2) 另外提供一个包含所有Action引用的文件，和一个包含所有Reducer引用的文件。
+
+
+   - 目录结构：
+     #+begin_example
+     project/
+       - actions/
+           - add-todo.js
+           - delete-todo.js
+       - actions.js
+       - reducers.js
+       - constants.js
+     #+end_example
+   - actions/add-todo.js
+     #+begin_example js
+     import {ADD_TODO} from "../constants.js"
+
+     export const addTodo = (payload) => {type: ADD_TODO, payload}
+     export const addTodoReducer = (state, action) => {
+       switch(action.type){
+         case ADD_TODO:
+           return {
+             ...state,
+             todo: state.todo.concat(action.payload)
+           }
+         default:
+           return state
+       }
+     }
+     #+end_example
+   - actions/delete-todo.js
+     #+begin_example js
+     import {DELETE_TODO} from "../constants.js"
+
+     export const deleteTodo = (payload) => {type: DELETET_TODO, payload}
+     export const deleteTodoReducer = (state, action) => {
+       switch(action.type){
+         case DELETET_TODO:
+           return {
+             ...state,
+             todo: state.todo.filter(item => item != action.payload)
+           }
+         default:
+           return state
+       }
+     }
+     #+end_example
+   - actions.js
+     #+begin_example js
+     export {addTodo} from "./actions/add-tod"
+     export {deleteTodo} from "./actions/delete-tod"
+     #+end_example
+   - reducers.js
+     #+begin_example js
+     import combineReducers from "redux"
+     export {addTodoReducer} from "./actions/add-todo"
+     export {deleteTodoReducer} from "./actions/delete-todo"
+
+     export default combineReducers({addTodoReducer, deleteTodoReducer})
+     #+end_example
+** TODO 不可变数据
+   1) 原生写法
+      #+begin_example js
+      const state = {filter: "completed", todos: ["Learn React"]}
+
+      const newState = {
+        ...state,
+        todos: [
+          ...state.todos,
+          "Learn Redux"
+        ]
+      }
+
+      const newState2 = Object.assign({}, state, { todos: [
+        ...state.todos,
+        "Learn Redux"
+      ]})
+      #+end_example
+   2) Immutable.js
+* TODO React Router
+** 基本使用和三种路由方式
+   #+begin_example js
+   import React from "react"
+   import {render} from "react-dom"
+   import {
+     BrowserRouter as Router, // HTML5的URL路由
+     // HashRouter as Router,    Hash路由
+     Route,
+     Link
+   } from "react-router-dom"
+   // import {MemoryRouter as Router} from "react-router" 内存路由，一般SSR中使用
+
+
+   const Home = props => <h1>Home</h1>
+   const Hello = props => <h1>Hello</h1>
+   const About = props => <h1>About Us</h1>
+
+   export default App = props => (
+     <Router>
+       <ul>
+         {props.routes.map(({path, text})=>(
+           <li key={path}>
+             <Link to={path}>{text}</Link>
+           </li>
+         ))}
+       </ul>
+       <div>
+         {props.routes.map(({path, component})=>(
+           <Route path={path} component={component} />
+         ))}
+       </div>
+     </Router>
+   )
+
+   const routes = [
+     {path: "/home", text: "Home", component: Home},
+     {path: "/hello", text: "Hello", component: Hello},
+     {path: "/about", text: "About", component: About}
+   ]
+   render(App(routes), document.getElementById("root"))
+   #+end_example
+** TODO 基于路由的Lazy Load
+** 核心API
+   1) ~<Link>~ 普通链接，不会触发浏览器刷新
+      #+begin_example js
+      <Link to="/home">Home</Link>
+      #+end_example
+   2) ~<NavLink>~ 类似Link但会添加当前选中状态
+      #+begin_example js
+      <NavLink to="/home" selectedClassName="selected">Home</NavLink>
+      #+end_example
+   3) ~<Prompt>~ 路由切换时，若满足条件则提示用户是否离开当前页面
+      #+begin_example js
+      import {Prompt} from "react-router"
+
+      <Prompt
+        when={formIsHalfFilledOut}
+        message="Are you sure you want to leave?"
+      />
+      #+end_example
+   4) ~<Redirect>~ 重定向当前页面，如登录判断
+      #+begin_example js
+      import {Route, Redirect} from "react-router"
+
+      <Route exact path="/" render={()=>(
+        loggedIn ? (
+          <Redirect to="/dashboard" />
+        ) : (
+          <LoginPage />
+        )
+      )} />
+      #+end_example
+   5) ~<Route>~ 路由配置的核心标记，路径匹配时显示对应组件
+      #+begin_example js
+      import {Route} from "react-router"
+
+      // 默认采用贪婪匹配，而添加exact则表示采用精准匹配
+      // 若为<Route path="/" component={Home}/> 则所有路由都会让Home组件生效。
+      // 并且路由匹配并不是排他的，只要匹配多个路由都会生效。
+      // 可通过:name的方式定义从路由获取参数，作为props传递给组件。
+      <Route exact path="/" component={Home}/>
+      <Route path="/news" component={News}/>
+      <Route path="/user/:id" component={User}/>
+      #+end_example
+   6) ~<Switch>~ 只显示第一个匹配的路由
+      #+begin_example js
+      import {Switch, Route} from “react-router"
+
+      <Switch>
+        <Route exact path="/" component={Home} />
+        <Route path="/news" component={News} />
+        <Route path="/user/:id" component={User} />
+        <Route component={NoMatch} />
+      </Switch>
+      #+end_example
+** 通过URL传递参数
+   路由参数匹配库：https://github.com/pillarjs/path-to-regexp
+
+   #+begin_example js
+   import {Route, Link} from "react-router"
+
+   const Topic = props => (
+     <div>
+       {props.match.params.id}
+     </div>
+   )
+
+   <Link to="/topic/2">Topic/2</Link>
+   <Route path="/topic/:id" component={Topic} />
+   #+end_example
+** 嵌套路由
+   每个React组件都可以为路由容器。
+   #+begin_example js
+   import {Route, Link} from "react-router"
+   import {BrowserRouter as Router} from "react-router-dom"
+
+   const Page = pros => (
+     <div>{`id: ${props.match.params.id}; subid: ${props.match.params.subid}`}</div>
+   )
+
+   const SubCategory = props => (
+     <div>
+       {
+         (props.match.params.id == 1)
+         ? <Link to="/category/1/sub/1">S11</Link>
+         : <Link to="/category/2/sub/1">S21</Link>
+       }
+
+       <Route path="/category/:id/sub/:subid" component={Page}/>
+     </div>
+   )
+
+   const App = props => (
+     <div>
+       <Link to="/category/1">C1</Link>
+       <Link to="/category/2">C1</Link>
+       <Route path="/category/:id" component={SubCategory}/>
+     </div>
+   )
+   #+end_example
+** 管理路由授权
+   要求：
+   1) 区分受保护路由和公开路由
+   2) 访问未授权路由时重定向到登录页面
+
+* TODO UI组件库
+** Ant.Design
+   面向企业级应用的UI库。
+
+** Material UI
+   基于Google Material UI设计风格的UI库，面向终端用户。
+* TODO Next.js创建同构应用
+  约定：
+  1) 页面是pages目录下的一个组件
+  2) static目录放置静态文件
+  3) page具有特殊静态方法 ~getInitialProps~
+  4) components目录放置标准的React组件
+  5) 每个page会单独打包
+
+** 示例
+   #+begin_example yaml
+   components/
+   node_modules/
+   pages/
+    - user/
+    - about.js
+    - index.js
+   static/
+    - nextjs.jpg
+   package.json
+   #+end_example
+
+   index.js
+   #+begin_example js
+   // 和react-router的Link一样为前端路由不刷页面
+   import Link from "next-link"
+
+   export default () => (
+     <div>
+       <img src="/static/next.js.jpg" />
+       <nav>
+         <Link href="/about"><a>About</a></Link>
+       </nav>
+     </div>
+   )
+   #+end_example
+** 核心API
+   1) Link标记
+      #+begin_example js
+      import Link from "next/link"
+
+      /* 前端路由不会引发浏览器刷新页面
+       * @param {DOMString} href - URL
+       * @param {boolean} prefetch - 默认情况下是切换时加载页面资源，但可以通过prefetch属性让页面空闲时就加载资源
+       * @param {boolean} replace - 浏览器的History中用最新的URL替换原有URL
+       */
+      <Link href="/about">About</Link>
+      #+end_example
+   2) 动态加载
+      #+begin_example js
+      import dynamic from "next/dynamic"
+
+      // 动态加载../components/hello2的组件
+      const DynamicComponentWithCustomLoading = dynamic(
+        import("../components/hello2"),
+        {
+          loading: () => <p>...</p>
+        }
+      )
+
+      export default () => (
+        <div>
+          <Header />
+          <DynamicComponentWithCustomLoading />
+        </div>
+      )
+      #+end_example
+* TODO 单元测试
+  React让前端单元测试变得简单：
+  1) React应用很少需要访问浏览器API
+  2) 虚拟DOM可以在NodeJS环境中运行和测试
+  3) Redux隔离了状态管理，很好地分离了UI层和数据层，因此可以进行纯数据层单元测试
+
+** 测试工具
+   1) Jest: Facebook开源的JS单元测试框架
+   2) JS DOM: 浏览器环境的NodeJS模拟
+      #+begin_example js
+      const JSDOM = require("jsdom").JSDOM
+
+      global.window = new JSDOM("<!DOCTYPE html><div id="react-root"></div>").window
+      global.document = window.document
+      global.navigator = window.navigator
+      global.HTMLElement = window.HTMLElement
+      #+end_example
+   3) Enzyme: React组件渲染和测试
+   4) nock: 模拟HTTP请求
+      #+begin_example js
+      // 后续所有发向这个URL的请求都会返回500
+      nock("http://xxx")
+        .get("/r/react.js")
+        .reply(500, null)
+      #+end_example
+   5) sinon: 函数模式和调用跟踪
+   6) istanbul: 单元测试覆盖率
+* TODO 开发调试工具
+  1) ESLint 语法检查和代码一致性
+     - 使用.eslintrc进行规则配置
+     - 一般使用airbnb的代码风格规则
+       #+begin_example bash
+       npm install eslint-config-arebnb --dev-save
+       #+end_example
+  2) Prettier 用于格式化代码
+     - 使用.prettierrc进行规则配置
+  3) React DevTool
+  4) Redux DevTool
+* 架构
+** 理想架构
+   - 易于开发
+     1) 开发工具完善度
+     2) 生态圈是否繁荣
+     3) 社区是否活跃
+   - 易于维护
+     1) 代码是否容易理解，一致的
+     2) 文档是否健全
+   - 易于构建
+     1) 使用通用技术和架构
+     2) 构建工具的选择
+   - 易于测试
+   - 易于扩展
+     1) 新增功能是否容易
+     2) 新功能是否会显著增加系统复杂度
+
+** 按领域模型(feature)拆分复杂度
+按领域模型(feature)组织代码，降低耦合度
+将 action, reducer 和 routing 按 feature 分类归类组织。
+目录结构
+#+begin_example yaml
+src/
+  - features/
+      - common/  # 共用组件
+          - redux/ # action,reducer统一放在这里
+              - reducers.js
+              - actions.js
+              - add-todo.js
+              - del-todo.js
+          - component1.js # 组件，组件内不直接加载样式，避免样式的重复加载和打包
+          - component1.less # 组件对应的样式
+          - index.js # 加载所有组件的入口
+          - style.less # 加载所有样式的入口
+          - constants.js # 常量
+      - home/ # 领域，其下结构和common一样
+#+end_example
+* TODO 拖放的实现
+  强大的第三方库：react-beautiful-dnd
+* TODO 性能优化
+** 常见的性能问题场景
+   1) 键盘输入
+   2) 鼠标移动
+
+** 按需加载
+   使用Webpack的import API，让Webpack从这里单独打包。
+   使用react-loadable库实现React异步加载，提供加载期间的loading状态的展现，和加载失败的降级显示。
+
+** 使用Reselect避免重复计算
+   其实就是Memorize
+* TODO Micro Task 和 Macro Task
+** Macro Task
+   setTimeout, setInterval, requestAnimationFrame 发起的异步任务将被放置 Macro Task Queue。
+   Macro Task Queue 可以存在多个。
+   Macro Task Queue 的第一个任务就是入口JavaScript程序。
+
+** Micro Task
+   Promise, process.nextTick 发起的异步任务将被放置 Micro Task Queue
+   Micro Task Queue 仅能存在一个。
+   执行规律为：每个事件循环先执行完 Micro Task Queue 中所有任务，然后再执行 Macro Task Queue 的一个任务。
