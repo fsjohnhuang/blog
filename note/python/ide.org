@@ -125,7 +125,7 @@ pipenv --py
     1) 依赖源
     2) 生产和开发依赖包名称
     3) 虚拟环境Python版本信息
-    
+
     Pipfile.lock除了包含Pipfile中包含的信息外，还包含
     1) 当前使用的生产和开发依赖包的具体版本号
     2) 依赖包自身依赖的所有依赖包以及它们的版本号
@@ -178,13 +178,13 @@ docker-py提供docker支持
       	#+begin_src bash
 	pip install --user isort
 	#+end_src
-	#+begin_src elisp
-	(defvar myPackages
-	  '(elpy
-	    py-isort))	
-	(require 'py-isort)
-	(add-hook 'before-save-hook 'py-isort-before-save)
-	#+end_src
+	  #+begin_src elisp
+	  (defvar myPackages
+	    '(elpy
+	      py-isort))
+	  (require 'py-isort)
+	  (add-hook 'before-save-hook 'py-isort-before-save)
+	  #+end_src
    2) Syntax Highlighting
    3) Auto-Completing
       - Jedi，负责让Emacs和后端Python服务通信，获取提示框的内容
@@ -196,8 +196,8 @@ docker-py提供docker支持
 	# Python2.x
 	pip install --user rope
 	# Python3
-	pip install --user rope_py3k	
-	#+end_src      	
+	pip install --user rope_py3k
+	#+end_src
    4) Syntax Checking
       - flymake，Elpy默认的语法检查工具
       - flycheck，提供实时语法检查但对于有问题的语句不会通过下划线提示
@@ -212,6 +212,11 @@ docker-py提供docker支持
       	#+begin_src bash
         pip install pylint # pycompile flake8 mypy
     	#+end_src
+        - 功能
+          1) ~C-c ! v~ 或 ~M-x flycheck-verify-setup~ 显示flycheck与后端语法检查工具的绑定情况
+          2) ~C-c ! l~ 显示详细的语法问题缓冲区
+          3) ~C-c ! n~ 光标跳转到下一个语法异常位置
+          4) ~C-c ! p~ 光标跳转到上一个语法异常位置
    5) Python REPL Integration
       - ipython集成
       	#+begin_src elisp
@@ -222,7 +227,7 @@ docker-py提供docker支持
       - pep8，Python标准代码风格
       	#+begin_src bash
 	pip install --user autopep8
-	#+end_src      	      	
+	#+end_src
       	#+begin_src elisp
 	(defvar myPackages
 	  '(elpy
@@ -236,7 +241,7 @@ docker-py提供docker支持
 	(require 'py-autopep8)
 	(setq py-autopep8-options '("--ignore=E501,W293,W391,W690"))
 	(add-hook 'python-mode-hook 'py-autopep8-enable-on-save)
-	#+end_src	
+	#+end_src
    7) Virtual Environment Support, and
    8) Much more!
 
