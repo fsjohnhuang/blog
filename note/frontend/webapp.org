@@ -1,0 +1,3 @@
+* TODO REM方案
+1) 手淘的lib-flexible库在页面渲染时根据设备的宽高计算根元素的font-size值，从而修改页面其他元素的尺寸。
+2) hotcss.js会根据手机型号计算dpr的值，然后在html根标签中注入一个font-size值。

@@ -1,0 +1,3 @@
+* TODO import
+* TODO dynamic import
+https://github.com/tc39/proposal-dynamic-import

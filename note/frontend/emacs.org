@@ -116,34 +116,99 @@
        ad-do-it))
    #+end_example
 * JS自动补全
-YouCompleteMe，server端为ycmd，前端插件由emacs的complete完成。
-1) 安装JavaScript自动完成
+https://github.com/ananthakumaran/tide
+tide前端+tsserver后端(微软给VSCode开发的JavaScript和TypeScript智能补全后端)
+1) 安装tsserver后端
    #+begin_example bash
-   npm install tern -g
+   # 全局安装typescript会自动安装tsserver
+   npm install typescript -g
+   # 局部安装jquery，防止tsserver找不到JQuery的$
+   npm intall jquery --save
    #+end_example
-2) 安装server端ycmd
-   #+begin_example bash
-   git clone https://github.com/Valloric/ycmd
-   cd ~/ycmd/
-   ./build.py --tern-completer
-   #+end_example
-3) 安装emacs插件
-   ycmd, company-ycmd, company
-4) emacs配置
+2) 安装emacs插件
+   company,tide
+3) emacs配置
    #+begin_example elisp
    ;; 配置python程序路径和ycmd程序路径
-   (set-variable 'ycmd-server-command '("/usr/local/bin/python" (expand-file-name "~/ycmd/ycmd")))
    (setq company-tooltip-limit 10) ;; 提示条目上限
    (setq company-idle-delay 0.5) ;;
    (setq company-echo-delay 0.3) ;; 提示响应延时
+   ;; aligns annotation to the right hand side
+   (setq company-tooltip-align-annotations t)
    (setq company-begin-commands '(self-insert-command))
    (setq company-require-match nil)
-
-   (company-ycmd-setup)
-
    (add-hook 'after-init-hook 'global-company-mode)
+
+   ;; 注意tide配合js2-mode时会出现输入卡顿的问题，因此需要搭配js-mode使用
+   (add-hook 'js-mode-hook
+     (lambda ()
+       (tide-setup) ;; 初始化tide
+       ;; 当tsserver服务没有启动时自动重新启动
+       (unless (tide-current-server)
+         (tide-restart-server))))
    #+end_example
+4) 在项目下创建jsconfig.json，并设置如下配置：
+   #+begin_example
+   {
+     "compilerOptions": {
+       "target": "es2017",
+       "allowSyntheticDefaultImports": true,
+       "noEmit": true,
+       "checkJs": true,
+       "jsx": "react",
+       "lib": [ "dom", "es2017" ]
+     }
+   }
+   #+end_example
+* JSX自动补全
+  emacs配置
+  #+begin_example elisp
+  (require 'web-mode)
+  (add-to-list 'auto-mode-alist '("\\.jsx\\'" . web-mode))
+  (add-hook 'web-mode-hook
+            (lambda ()
+              (when (string-equal "jsx" (file-name-extension buffer-file-name))
+                (setup-tide-mode))))
+  ;; configure jsx-tide checker to run after your default jsx checker
+  (flycheck-add-mode 'javascript-eslint 'web-mode)
+  (flycheck-add-next-checker 'javascript-eslint 'jsx-tide 'append)
+  #+end_example
+
 * TypeScript自动补全
+typescript-mode + tide
+1) emacs配置
+#+begin_example elisp
+(add-hook 'before-save-hook 'tide-format-before-save)
+   (add-hook 'typescript-mode-hook
+     (lambda ()
+       (tide-setup) ;; 初始化tide
+       ;; 当tsserver服务没有启动时自动重新启动
+       (unless (tide-current-server)
+         (tide-restart-server))))
+#+end_example
+2) 在项目下创建tsconfig.json，并设置如下配置
+#+begin_example js
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true,
+    "checkJs": true,
+    "jsx": "react",
+    "lib": [ "dom", "es2017" ]
+  }
+}
+#+end_example
+3) tsconfig.json同级目录下创建tsfmt.json
+#+begin_example
+{
+  "indentSize": 4,
+  "tabSize": 4,
+  "insertSpaceAfterOpeningAndBeforeClosingTemplateStringBraces": false,
+  "placeOpenBraceOnNewLineForFunctions": false,
+  "placeOpenBraceOnNewLineForControlBlocks": false
+}
+#+end_example
 * CSS/Less/SCSS语法检查、高亮和排版
 * CSS自动补全
   emacs内置的company-css作为company的后端
@@ -165,3 +230,44 @@ YouCompleteMe，server端为ycmd，前端插件由emacs的complete完成。
                  (cond ((equal web-mode-content-type "html")
                         (my/web-mode-setup)))))
      #+end_example
+* QA
+  1) 检查某checker在flycheck下是否有效checker
+     #+begin_example elisp
+     M-: (flycheck-valid-checker-p 'typescript-tslint)
+     ;; 返回t则有效，nil则无效
+     #+end_example
+  2) 获取flycheck版本
+     #+begin_example elisp
+     (get 'typescript-tslint 'flycheck-generic-checker-version)
+     #+end_example
+* lsp-mode
+  https://emacs-china.org/t/tide-javascript/7068/14
+  LSP(Language Server Protocol)是微软主导开发的编程语言语法补全和代码分析框架，各种遵循LSP的后端都可以在VSCode、Sublime、VIM、Emacs等上使用。
+  lsp-mode则为Emacs上的LSP前端，很好地支持C++、Python、Ruby、Golang、Haskell、OCaml、Rust、PHP、JavaScript等。
+  而JavaScript的默认后端为javascript-typescript-langserver。
+  使用lsp-mode+tsserver的方式
+  #+begin_example elisp
+  ;; Install:
+  ;;
+  ;; npm install -g typescript
+  ;; npm install -g typescript-language-server
+  ;;
+  ;; Fixed error "[tsserver] /bin/sh: /usr/local/Cellar/node/10.5.0_1/bin/npm: No such file or directory" :
+  ;;
+  ;; sudo ln -s /usr/local/bin/npm /usr/local/Cellar/node/10.5.0_1/bin/npm
+  ;;
+  (add-hook 'js-mode-hook #'lsp-typescript-enable)
+  (add-hook 'typescript-mode-hook #'lsp-typescript-enable) ;; for typescript support
+  (add-hook 'js3-mode-hook #'lsp-typescript-enable) ;; for js3-mode support
+  (add-hook 'rjsx-mode #'lsp-typescript-enable) ;; for rjsx-mode support
+
+  (defun lsp-company-transformer (candidates)
+    (let ((completion-ignore-case t))
+      (all-completions (company-grab-symbol) candidates)))
+
+  (defun lsp-js-hook nil
+    (make-local-variable 'company-transformers)
+    (push 'lsp-company-transformer company-transformers))
+
+  (add-hook 'js-mode-hook 'lsp-js-hook)
+  #+end_example
