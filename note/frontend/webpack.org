@@ -74,7 +74,7 @@
         ]
       }
       #+end_example
-* Loaders
+* TODO Loaders
   Webpack内置支持JS和JSON两种文件类型，其他文件类型则要通过其他Loaders转化为有效模块，并添加到依赖图中。
   Loader本身为一个函数，输入为源文件或上一个Loader的处理结果，返回值为Loader的处理结果。
 ** 特点
@@ -128,13 +128,13 @@
       ]
       #+end_example
       1) Pitch Loader均没有返回值
-         | Pitch Loader  | loader1 | -> | loader2 | -> | loader3 | -> | resource |
-         |---------------+---------+----+---------+----+---------+----+----------|
-         | Normal Loader | loader1 | <- | loader2 | <- | loader3 | <- | resouce  |
-      2) 某个Pitch Loader均有返回值
-         | Pitch Loader  | loader1 | -> | loader2(有返回值) |
+         | Pitch Loader  | pitch loader1 | -> | pitch loader2 | -> | pitch loader3 | -> | resource |
+         |---------------+---------------+----+---------------+----+---------------+----+----------|
+         | Normal Loader | loader1       | <- | loader2       | <- | loader3       | <- | resouce  |
+      2) 某个Pitch Loader有返回值
+         | Pitch Loader  | pitch loader1 | -> | pitch loader2(有返回值) |
          |---------------+---------+----+-------------------|
-         | Normal Loader | loader1 | <- | loader2(有返回值) |
+         | Normal Loader | loader1 | <- | pitch loader2(有返回值) |
 
 ** 常用Loader
    1) babel-loader，转换ES6/7等JS新特性
@@ -507,6 +507,106 @@
          module.exports = loader
          #+end_example
    3) file-loader
+      将文件复制到output目录下，并返回一个md5的文件名。
+      #+begin_example js
+      const loaderUtils = require("loader-utils")
+
+      function loader(binary){
+        const filename = loaderUtils.interpolateName(this,
+                                                     "[hash].[ext]",
+                                                     {content: binary})
+        this.emitFile(filename, binary)
+
+        return `module.exports = "${filename}"`
+      }
+      loader.raw = true // 以二进制形式读取文件内容
+
+      module.exports = loader
+      #+end_example
+   4) url-loader
+      #+begin_example js
+      const loaderUtils = require("loader-utils")
+      const mime = require("mime")
+
+      function loader(binary){
+        const {limit} = loaderUtils.getOptions(this)
+        if (limit && limit > binary.length) {
+          return `module.exports = "data:${mime.getType(this.resoucePath)};base64,${binary.toString("base64")}"`
+        }
+        else{
+          return require("./file-loader").call(this, binary)
+        }
+       }
+      loader.raw = true // 以二进制形式读取文件内容
+
+      module.exports = loader
+      #+end_example
+   5) less-loader,css-loader,style-loader
+      #+begin_example js
+      // ./less-loader.js
+      const less = require("less")
+
+      function loader(source){
+        let css
+        less.render(source, function(err, result){
+          css = result.css
+        })
+
+        return css
+      }
+
+      module.exports = loader
+      #+end_example
+      #+begin_example js
+      // ./css-loader.js
+      const reg = /url\((.+?)\(/g
+
+      function loader(source){
+        let pos = 0
+        let curr = null
+        let segs = []
+        while (curr = reg.exec(source)){
+          let [matchUrl, g] = curr
+          let last = reg.lastIndex - matchUrl.length
+          segs.push(source.slice(pos, last))
+          pos = reg.lastIndex
+          segs.push(`"url("+require(${g})+")"`)
+        }
+
+        segs.push(JSON.stringify(source.slice(pos)))
+
+        return `module.exports=${segs.join("")}`
+      }
+
+      module.exports = loader
+      #+end_example
+      #+begin_example js
+      // ./style-loader.js
+
+      function loader(source){
+        let str = `
+          var style = document.createElement("style")
+          style.innerHTML = ${JSON.stringify(source)}
+          document.head.appendChild(style)
+        `
+
+        return str
+      }
+
+      const loaderUtils = require("loader-utils")
+      loader.pitch = function(remainingRequest){
+        // remainingRequest为剩余的loader，值为css-loader!less-loader!./style.less
+        let str = `
+          var style = document.createElement("style")
+          style.innerHTML = ${require(loaderUtils.stringifyRequest(this, "!!" + remainingRequest))}
+          document.head.appendChild(style)
+        `
+
+        return str
+      }
+
+      module.exports = loader
+      #+end_example
 
 * Plugins
    用于bundle文件的优化、资源管理和环境变量注入等，作用于整个构建过程。可以说Loader实现不到的功能都是通过Plugin来实现的。
