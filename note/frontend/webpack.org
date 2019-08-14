@@ -1467,3 +1467,25 @@
 
 * Node 工具
   1) node-prune，用于移除./node_modules中不必要的文件，如TypeScript源码文件等，可通过减少node_modules中文件的体积，加快应用部署的速度。
+* QA
+  1) 启动Weback watch时抛出错误码EOSPC异常。
+     - EOSPC表示 Error No more hard-disk space available
+       #+begin_quote
+       What this command does is to increase the number of watches allowed for a single user. By the default the number can be low (8192 for example). When nodemon tries to watch large numbers of directories for changes it has to create several watches, which can surpass that limit.
+       #+end_quote
+     - 解决方法
+       1) 提高系统的允许监听的文件数
+          #+begin_example bash
+          echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
+          #+end_example
+       2) 过滤不必要监听的文件
+          - 在project root下创建nodemon.json
+            #+begin_example json
+            {
+              "ignore": [
+                "*.test.js",
+                "dist/*"
+              ]
+            }
+            #+end_example
+          - 默认为过滤 ~.git,node_modules,bower_components,.nyc_output,coverage,scss-cache~

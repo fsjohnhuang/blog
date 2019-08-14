@@ -1,0 +1,66 @@
+* Y7000 2019
+** wifi adapter not found
+1) 输入 ~sudo rfkill list all~ 查看所有无线设备驱动的信息
+   #+begin_quote
+   # ideapad为联想自带的无线网卡驱动
+   0: ideapad_wlan: Wireless LAN
+   Soft blocked: no
+   Hard blocked: yes
+
+   # Ubuntu默认的无线网卡驱动
+   1: phy0: Wireless LAN
+   Soft blocked: no
+   Hard blocked: no
+   #+end_quote
+2) 联想自带的驱动和Ubuntu默认的驱动冲突导致无法找到wifi驱动
+   1) 临时修复(重启系统后失效)
+      #+begin_example bash
+      sudo modprobe -r ideapad_laptop
+      #+end_example
+   2) 永久修复，在 ~vi /etc/rc.local~ 的 ~exit 0~ 前添加
+      #+begin_example bash
+      #!/bin/bash
+
+      sudo modprobe -r ideapad_laptop
+      exit 0
+      #+end_example
+
+** nvidia安装
+1) 添加驱动源
+   #+begin_example bash
+   sudo add-apt-repository ppa:graphics-drivers/ppa
+   #+end_example
+2) 安装驱动，并重启
+   #+begin_example bash
+   sudo apt-get install nvidia-384 && reboot
+   #+end_example
+3) 检查安装是否成功
+   #+begin_example bash
+   sudo nvidia-smi
+   sudo nvidia-settings
+   #+end_example
+
+** 禁用Nouveau
+Nouveau为Nvidia显卡的非官方支持的开源驱动
+
+* apt-get
+以下命令均在root用户下执行
+#+begin_example bash
+apt-get update # 更新源
+apt-get install <package> # 安装包
+apt-get install <package> --reinstall # 重新安装包
+apt-get install <package> -f # 修复安装
+apt-get remove <package> # 移除包，但保留配置和数据文件
+apt-get remove <package> --purge # 移除包，不保留配置和数据文件
+apt-get upgrade # 更新已安装的包
+apt-get dist-upgrade # 更新系统
+
+apt-cache search <package> # 搜索包
+apt-cache show <package> # 获取包信息，包括说明、大小和版本号等
+apt-cache depends <package> # 获取该包的依赖项
+apt-cache rdepends <package> # 获取依赖该包的其它包
+
+apt-get source <package> # 下载源码
+apt-get check # 检查是否有损坏的依赖
+apt-get clean && apt-get autoclean # 清理无用的包
+#+end_example
