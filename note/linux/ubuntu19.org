@@ -24,6 +24,7 @@
       sudo modprobe -r ideapad_laptop
       exit 0
       #+end_example
+      - 设置为可执行权限 ~sudo chmod +x /etc/rc.local~
 
 ** nvidia安装
 1) 添加驱动源
@@ -42,6 +43,26 @@
 
 ** 禁用Nouveau
 Nouveau为Nvidia显卡的非官方支持的开源驱动
+
+** 设置中文输入法
+   1) 安装输入法管理器
+      #+begin_example bash
+      sudo apt install fcitx-bin fcitx-table -y
+      #+end_example
+   2) 安装Google拼音输入法(搜狗输入法未能很好地支持Ubuntu19，因此不使用)
+      #+begin_example bash
+      sudo apt install fcitx-googlepinyin -y
+      #+end_example
+   3) 重启系统
+   4) 安装(简体/繁体)中文语言包作为输入源(input source)
+      1) 搜索并进入 Region & Language
+      2) 在Input Sources面板点击 ~+~ 后选择 ~Chinese~ ，然后在新的弹出窗选择 ~Chinese(Intelligent Pinyin)~
+   5) 设置系统的输入法管理器
+      1) 搜索并进入 Input Method
+      2) 选择fcitx
+   6) 添加GoolgePinyin到输入发列表中
+      1) 搜索并进入 Fcitx Configuration
+      2) 点击底部的 ~+~ 添加 GooglePinyin 即可
 
 * apt-get
 以下命令均在root用户下执行
@@ -64,3 +85,64 @@ apt-get source <package> # 下载源码
 apt-get check # 检查是否有损坏的依赖
 apt-get clean && apt-get autoclean # 清理无用的包
 #+end_example
+* Swap Ctrl-R with CapsLock
+  1) ~vi ~/.Xmodmap~
+     #+begin_example text
+     !
+     ! swap Caps_Lock <---> Control_R
+     !
+     remove Lock = Caps_Lock
+     remove Control = Control_R
+     keysym Control_R = Caps_Lock
+     keysym Caps_Lock = Control_R
+     add Lock = Caps_Lock
+     add Control = Control_R
+
+     !
+     ! swap Esc <---> `(on the left of '1' key)
+     !
+     keysym Escape = grave asciitilde grave asciitilde
+     keysym grave = Escape
+     #+end_example
+  2) ~xmodemap ~/.Xmodemap~
+
+  we can achieve keycode by ~xev~.
+
+* TODO ~/etc/rc.local~ and ~/etc/init.d/~
+* TODO ~/etc/profile~ and ~/etc/profile.d/~
+* TODO Zsh
+** 查看系统当前支持的shell
+   #+begin_example bash
+   cat /etc/shells
+   #+end_example
+
+** Zsh介绍
+   官网：http://www.zsh.org
+   兼容 Bash 99% 的操作。
+
+   1) 安装
+      #+begin_example bash
+      sudo apt install zsh -y
+      #+end_example
+      - Zsh 的配置文件位于 =~/.zshrc=
+   2) 安装扩展集合 —— oh-my-zsh
+      #+begin_example bash
+      wget https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O - | sh
+      #+end_example
+      - oh-my-zsh 的安装目录位于 =~/.oh-my-zsh=
+   3) 设置 Zsh 作为默认的 Login Shell
+      #+begin_example bash
+      chsh -s /bin/zsh <user>
+      #+end_example
+      - 恢复 Bash 作为默认 Login Shell
+        #+begin_example bash
+        chsh -s /bin/bash <user>
+        #+end_example
+   4) 注销重新进入即可
+      - 终端模拟器为用户 Login Shell 的一个子进程，因此必须注销当前 Login Shell 后才能生效；
+      - 而调用 ssh 时是创建一个新的 Login Shell ，因此马上会有效果。
+
+*** 增强配置
+    1) 启用 ~/etc/profile~ 的配置
+       1) 在 =~/.zshrc= 中添加 ~source /etc/profile~ 并保存
+       2) 执行 =source ~/.zshrc=
