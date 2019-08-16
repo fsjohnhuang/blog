@@ -1,0 +1,473 @@
+** 打开DevTools的方式
+1. menu > more tools > developer tools
+2. 页面元素上右键菜单,选择inspect
+3. ctrl+shift+i,打开或关闭DevTools
+#+begin_src cljs
+;; 检查DevTools是否启用了
+(defn enable-devtools? []
+  (let [a-enable? (atom false)
+        el (js/document.createElement "div")]
+    (js/Object.defineProperty el "id" #js {:get #(reset! a-enable? true)})
+    (js/console.log "%c" el)
+    @a-enable?))
+#+end_src
+
+** 快捷键
+切换检查模式:ctrl+shift+c
+全局内容搜索:ctrl+shift+f
+运行当前分析面板的分析器:ctrl+e
+
+** Command line API 
+$(slctr: string, startNode: HTMLElement?)就是document.querySelector
+$$(slctr: string, startNode: HTMLElement?)就是document.querySelectorAll
+$x(xpath: string, startNode: HTMLElement?)就是通过XPath查找元素
+$0-$4,最近5个inspect过的DOM元素或JS对象
+$_,最近的表达式执行结果
+inspect(target: any),target为元素时跳转到Element面板,为JS对象时跳转到Source面板.和在对应面板鼠标选中元素或JS对象效果是一样的.
+copy(object),复制对象的字符串形式到系统剪贴板
+debug(function), 调试指定函数
+undebug(function), 解除指定函数的调试
+keys(object),返回object的键数组
+values(object),返回object的值数组
+table,等同于console.table
+dir,等同于console.dir
+
+** 监控
+#+begin_src
+{- 向Element面板的Event Listeners添加/删除DevTools的事件监听,
+ - 添加监听后事件触发时会将事件对象输出到控制台上.
+ - 忽略EventNames就是添加/删除所有事件监听.
+ - 另外还提供一组事件类型映射到预设的事件集上
+ - mouse: mousedown, mouseup, click, dblclick, mousemove, mouseover, mouseout, mousewheel
+ - key: keydown, keyup, keypress, textinput
+ - touch: touchstart, touchmove, touchend, touchcancel
+ - control: resize, scroll, zoom, focus, blur, select, change, submit, reset
+ -}
+type EventNames = Maybe Either String [String]
+monitorEvents :: HTMLElement -> EventNames -> Nil
+unmonitorEvents :: HTMLElement -> EventNames -> Nil
+#+end_src
+
+#+begin_src
+{- 获取指定元素所有事件监听信息(包括通过monitorEvents的监听信息) -}
+getEventListeners :: HTMLElement -> Object
+#+end_src
+
+#+begin_src
+{- (解除)监控函数被调用时的入参和返回值,并输出到控制台上 -}
+monitor :: Function -> Nil
+unmonitor :: Function -> Nil
+#+end_src
+
+** console的用法
+打开/关闭console专用面板:ctrl+shift+j
+打开/关闭console抽屉面板:esc
+打开/关闭消息时间戳:settings > preferences > console > show timestamps
+清屏: 
+1. clear().
+2. ctrl+l.
+3. 右键菜单 > clear console.
+4. 刷新页面时会自动清屏,通过启用settings > preferences > console > preserve log upon navigation可禁止刷新页面时清屏.
+清理历史记录: 右键菜单 > clear console history.
+保存屏幕记录: 右键菜单 > save as
+
+切换browser context:
+默认browser context为top,若要操作其下某个iframe下的元素,则需要切换到该iframe的browser context才行.
+
+消息过滤:
+1. 正则过滤消息内容
+2. 隐藏网络消息
+3. 按消息严重性级别
+  1. all, show all console output.
+  2. errors, only show output from console.error().
+  3. warnings, only show output from console.warn().
+  4. infos, only show output from console.info().
+  5. logs, only show output from console.log().
+  6. debug, only show output from console.timeEnd() and console.debug().
+
+settings:
+1. log XMLHTTPRequests, determine if the console logs each XMLHttpRequest.
+
+换行: shift+enter
+
+*** console api
+#+begin_src
+{- 断言为false时,向console输出Assertion failed的错误信息. -}
+type Assertion = Boolean
+type Message = Object
+console.assert :: Assertion -> Message -> IO String
+#+end_src
+
+#+begin_src
+{- 累计同一个Label的执行次数 -}
+type Label = String
+console.count :: Label -> IO String
+#+end_src
+
+#+begine_src
+{- 当FormatString不含格式说明符时, 多个入参以一个空格为间隔进行拼接.
+ - 格式说明符:
+ - %s, formats the value as a string
+ - %i 或 %d, formats the value as an integer
+ - %f, formats the value as a floating point value
+ - %o, formats the value as expandable DOM element, console.log("%o", el)和 el效果一样
+ - %O, formats the value as expandable JavaScript object, console.log("%O", el)和console.dir(el)效果一样
+ - %c, applies CSS style rules to the succeeding output string
+ -}
+type FormatString = String
+console.log :: FormatString -> [*] -> IO String
+console.error :: FormatString -> [*] -> IO String
+console.info :: FormatString -> [*] -> IO String
+console.warn :: FormatString -> [*] -> IO String
+console.debug :: FormatString -> [*] -> IO String
+{- 打印当前调用栈信息 -}
+console.trace :: FormatString -> [*] -> IO String
+#+end_src
+
+#+begin_src
+{- 消息(折叠)分组 -}
+type FormatString = String
+console.group :: FormatString -> [*] -> IO String
+console.groupCollapsed :: FormatString -> [*] -> IO String
+console.groupEnd :: Empty
+#+end_src
+示例:
+#+begin_src cljs
+(js/console.group "Group%d" 1)
+(js/console.log "test1")
+(js/console.log "test2")
+
+(js/console.group "Group%d" 1.1)
+(js/console.log "test1.1")
+(js/console.groupEnd)
+
+(js/console.log "test3")
+
+(js/console.groupCollapsed "Group%d" 2)
+(js/console.log "test2.1")
+(js/console.groupEnd)
+(js/console.groupEnd)
+#+end_src
+
+#+begin_src
+{- 以二维表格的形式,输出Collection的项目.
+ - 可通过Columns罗列输出的列名.
+ -}
+type Collection = [Object] | [[*]]
+type Columns = Maybe [String]
+console.table :: Collection -> Columns -> IO String
+#+end_src
+
+#+begin_src
+{- 测量执行时间,以Label作为标识计算time和timeEnd之间执行的毫秒数.
+ - 并且在Pefermance中添加独立于Main的Console标记信息
+ -}
+type Label = String
+console.time :: Label -> IO String
+console.timeEnd :: Label -> IO String
+#+end_src
+
+#+begin_src
+{- 向Performance添加Timer Fired名为Label值的时间戳标记 -}
+type Label = String
+console.timeStamp :: Label -> IO String
+#+end_src
+
+#+begin_src
+{- 向JavaScript Profiler添加一个名为Label值的JavaScript CPU的分析信息 -}
+console.profile :: Label -> Nil
+console.profileEnd :: Label -> Nil
+#+end_src
+
+** 设置监控DOM变化的断点
+DOM change breakpoints,用于监控DOM的更改,删除或添加.
+3种监控:
+1. substree modifications
+2. attribute modifications
+3. node removal
+在Element面板中选中元素,右键菜单选择Break on > 就可以勾选这3种监控了.
+
+** XHR断点
+2种监控:
+1. XHR实例状态变化监控
+  在Sources面板的Event Listener Breakpoints.
+2. XHR请求的URL与某字符串匹配时监控
+  在Sources面板的XHR/fetch Breakpoints的加号设置URL包含某字符串则进入断点.
+
+** 异常断点
+2种监控:
+1. 发生异常即断点
+  在Sources面板的Pause on exception
+2. 通过try...catch捕获的异常后,抛出指定异常后触发
+  在Sources面板的Pause on exception > Pause on Caught Exceptions.
+
+** Scope面板中对象名
+颜色淡的是不可枚举
+颜色深的时可枚举
+
+** Async call stack
+  在Sources面板 > Call stack下若存在异步调用栈时,会将两个阶段的调用栈都显示出来.
+** Blackbox
+  1. 在Settings > Blackboxing 添加匹配列入黑盒模式的文件路径正则表达式.
+  2. 在编辑窗口选中代码,右键菜单 > Blackbox script
+
+** 实时编辑
+   js文件可直接在编辑窗口修改,然后ctrl+s保存,那么就会自动更新vm中该函数的定义.
+*** 代码片段
+   Sources > Snippets下可创建代码片段, 代码片段是整个浏览器共享的.
+   代码片段只能直接执行,无法直接拖动到其他代码中.
+
+** @sourceURL
+   用于命名evals,内联脚本和样式.调试时更容易查找对应的代码.
+#+begin_src
+//# sourceMappingURL=
+//# sourceURL=
+//下面是兼容老式浏览器
+//@ sourceMappingURL=
+//@ sourceURL=
+#+end_src
+
+** 性能分析
+Performance面板下分为4个信息板块
+1. Overview: 页面性能的高级摘要
+  1. FPS(Frames Per Second): 每秒帧数. 绿色条越高FPS越高. 绿色条上方的红色块表示渲染过长的帧,Chrome称之为jank.
+    当CPU资源处于idle(空闲)时,Chrome会自动降低帧率,因此帧数低时要结合CPU指标才能确认是否丢帧.
+
+  2. CPU: 指示哪类型在某时段消耗CPU资源量.
+  3. NET: 每个彩色条代表一个资源. 彩色条长度表示检索该资源所花费的时间.较亮的部分为等待时间(从请求资源到下载第一个字节之间的时间), 较暗的部分为加载时间(从下载第一个字节到最后一个字节之间的时间)
+  4. HEAP: JS堆变化.
+  彩色条的颜色含义:
+  1. blue: HTML文件
+  2. yellow: 脚本
+  3. purple: 样式表
+  4. green: 媒体文件
+  5. grey: 其他杂项
+2. Flame Chart: CPU,GPU,网络请求,渲染帧中各时间的可视化.
+  三条垂直线: 蓝线-DOMContentLoaded事件;绿线-第一次绘制;红线-load事件.
+  函数调用的色块的颜色是随机的
+3. Js Heap,Document,Nodes,Listeners和GPU Memory
+4. Details: 对应2中检查项目的详细信息.
+  可通过ctrl+f打开搜索栏,筛选指定的事件进行检测.
+
+*** DOMContentLoaded事件
+The DOMContentLoaded event is fired when the document has been completely loaded and parsed, without waiting for stylesheets, images, and subframes to finish loading.
+
+CAUTION:
+Stylesheet loads block script excution.(not loading)
+
+触发条件：
+#+begin_src
+// global status
+(def document-readiness (atom :parsing))
+(def insertion-point (atom :some-point))
+(def stack-of-open-elements (atom [:div-start-tag :span-start-tag]))
+(def scripts (atom []))
+(def tasks (atom []))
+
+(defn set-global-status!
+  ""
+  []
+  (reset! document-readiness :interactive)
+  (reset! insertion-point nil)
+  (reset! stack-of-open-elements []))
+
+(defn execute-scripts! [stylesheet-blocking?]
+  (if stylesheet-blocking?
+    (do (wait 10ms)
+        (recur @stylesheet-blocking?))
+    (for [script (first scripts)]
+      (execute-script! script)
+      (recur (next scripts)))))
+
+(defn fire-domcontentloaded-event [finish-parsing?]
+  (when finish-parsing?
+    (set-global-status!)
+    (when (seq @scripts)
+      (execute-scripts @stylesheet-blocking?))
+    (swap! tasks
+           (fn [o]
+             (conj o :DOMContentloaded)))))
+#+end_src
+
+*** 图片加载和解码
+现代浏览器会自动收集外部链接，其中就包括图片url，然后尽早地触发加载行为。但加载后对图像解码，则受到stylesheet的影响。要等stylesheet下载解析并构成CSSOM后才会触发解码。
+
+
+render:渲染
+paint:绘制
+
+*** 事件属性
+**** 通用属性
+1. Aggregated Self Time: 执行本身的耗时(不包含嵌套子事件)
+2. Self Time: 调用+执行本身的耗时(不包含嵌套子事件)
+#+begin_src
+// foo()这个动作也耗时
+// Self Time为foo()耗时+foo()执行耗时
+// Aggregated Self Time为foo()执行耗时
+function foo(){
+  console.log(123)
+}
+foo()
+#+end_src
+
+**** Loading类型的事件
+1. Send Request: 网络请求已发送
+2. Receive Response: 接收HTTP响应的第一个字节
+3. Receive Data: 接收HTTP响应数据,这个将会触发一个或多个数据接收事件
+4. Finish Loading: 一个网络请求完成
+5. Parse HTML: 解析HTML
+**** Rendering类型的事件
+1. Invalidate Layout: 通过DOM修改使页面布局无效
+2. Layout: 执行页面布局
+3. Recalculate Style: 重新计算元素样式
+4. Scroll: 内嵌的视图内容已滚动
+**** Rendering类型的属性
+1. Layout invalidate: 录制时,代码的堆栈跟踪导致布局失效
+2. Nodes that need layout: 在重新录制前标记为需要布局的节点数.
+3. Layout tree size: 布局节点构成的树的大小
+4. Layout scope: Partial表示局部重新布局, Whole document表示整个文档重新布局.
+5. Element affected: 受重新计算样式影响到元素数量.
+6. Styles invalidated: 导致style无效的代码栈.
+7. Layout root: Layout tree的根节点
+**** Painting类型的事件
+1. Composite Layers: 渲染引擎合成图像图层
+2. Image Decode: 解码图像
+3. Image Resize: 调整图像的原始尺寸
+4. Paint: 绘制复合层到显示器指定的区域
+**** Painting类型的属性
+1. Location: Paint事件中绘制矩形的x和y坐标
+2. Dimensions: Paint事件中绘制矩形的宽高
+
+
+优化原则:
+1. JS上分离读写函数,并首先执行读取
+2. 使用尽量少的CSS和保持CSS选择器简单
+  因为嵌套的选择器会让浏览器要了解其他无关元素的信息.
+3. 总是选择不触发layout的CSS
+4. 绘制往往是耗时最长的操作
+
+常见的JS问题:
+1. 问题: 影响响应或动画的昂贵的输入处理程序
+   例子: touch, parallax scrolling
+   解决办法: 让浏览器尽可能晚地处理touch和scrolling操作
+2. 问题: Badly-timed JavaScript
+   例子: 
+3. 问题: Long-running JavaScript
+4. 问题: Garbage-y脚本
+
+常见的Layout问题:
+1. 强制同步布局(forced reflow).
+  在flame charts > main thread中红色块标识.
+2. 布局抖动(layout thrashing).
+  JS反复对DOM元素写然后读那些会引发reflow的CSS属性.
+  原因:
+  1. 修改元素会引发reflow的CSS属性时会触发Invalidate Layout事件,那么默认情况下浏览器会在每帧Paint前执行Layout/Reflow操作;(性能最好的状况)
+  2. 执行1后,在帧完成前,读取元素会引发reflow的CSS属性时会让浏览器提前执行reflow.
+  防止布局抖动:
+#+begin_src
+function syncForcedLayout(){
+  const h1 = el1.clientHeight   // 读取可能会触发reflow的CSS属性,但由于之前没有触发过Invalidate Layout,所以这个操作不会触发提前的reflow
+  el1.style.height = `${h1*2}px` // 写,触发Invalidate Layout事件
+  
+  const h2 = el2.clientHeight   // 这次会触发提前reflow了
+  el2.style.height = `${h2*2}px` // 写,触发Invalidate Layout事件
+
+  const h3 = el3.clientHeight   // 这次会触发提前reflow了
+  el3.style.height = `${h3*2}px` // 写,触发Invalidate Layout事件
+}
+
+function goodBoy(){
+  const els = [el1, el2, el3]
+  // 读写分离,先读后写
+  const hs = els.map(el => el.clientHeight)
+  
+  hs.forEach((h, i) => {
+    els[i].style.height = `${h*2}px`
+  })
+}
+
+function asyncGoodBoy(){
+  const h1 = el1.clientHeight
+  // 在下一次paint前执行,执行完刚好执行reflow,不会触发提前reflow
+  // 即不要把先写后读的操作放在同一个帧内执行
+  requestAnimationFrame(() => {
+    el1.style.height = h1*2 + "px"
+  })
+
+  const h2 = el2.clientHeight
+  requestAnimationFrame(() => {
+    el2.style.height = h2*2 + "px"
+  })
+
+  const h3 = el3.clientHeight
+  requestAnimationFrame(() => {
+    el3.style.height = h3*2 + "px"
+  })
+}
+#+end_src
+
+
+常见的Paint问题:
+1. 问题:大量的绘制工作(绘制范围大,复杂度高)
+   解决办法:改用transform和opacity让元素拥有独立layer,避免paint
+2. 问题:过多layer
+   解决办法:确保有改善才生成独立layer
+
+** JavaScript Profiler
+三种视图:
+1. Chart,和Performance下的Flame Chart一样
+2. Heavy(Bottom Up),从对性能影响的大到小顺序列出函数,还可以查看函数的调用路径
+3. Tree(Top Down),从调用栈的顶端开始
+
+Animation Frame Fired事件触发后必定会调用通过requestAnimationFrame注册的回调函数. 因此在Flame Chart > Main中会看到Animation Frame Fired色块下有个Function Call色块,然后在下方就是回调函数.
+
+
+** 网络请求时序
+*** Connection Setup阶段
+queuing(排队)->stalled(停滞)->DNS lookup(DNS查找)->initial connection(初始化链接)->SSL handshake(SSL握手)
+*** Request/Response阶段
+Request sent(请求发送)->Waiting(接收到第一个字节的时间,TTFB-Time to First Byte)->Content Download(内容下载)
+
+Q:请求放置在queue的原因?
+1. 渲染引擎认为该资源优先级比脚本和样式等低.图片的优先级较低.
+2. 等待一个即将释放的TCP socket.
+3. 并行的TCP连接数已达到HTTP1中规定的6个.
+4. 正在生成磁盘缓存条目.
+
+Q:Stalled/Blocking?
+发送请求前的等待时间,这个时间包括代理协商时间.
+
+Q:Proxy Negotiation(代理协商)
+与代理服务器协商的时间
+
+Q:DNS lookup
+页面上每个新域名都需要执行一次完整的往返(roundtrip)才能用于访问资源.
+优化措施:
+1. 利用DNS缓存(设置TTL时间-Time to Live)
+2. 利用Connection:keep-alive特性建立持久连接,可以在当前连接上进行多个请求,无需再进行域名解析.
+
+Q:Initial Connection/Connecting
+建立连接的时间,包括TCP握手和协商SSL
+
+Q:SSL
+SSL握手所用时间
+
+Q:Request sent
+发送第一个字节到最后一个字节的时间.
+
+Q:Waiting
+是发送第一个字节到接收第一个字节的时间,包括服务器发送数据的延时和网络传输时间.建议保持在200ms以下
+
+Q:Content Download/Downloading
+从接收第一个字节到最后一个字节的时间.
+
+HTTP2支持TCP连接多路复用,因此单个连接可同时传输多个资源.
+
+
+** REF
+https://calendar.perfplanet.com/2013/the-runtime-performance-checklist/
+http://www.css88.com/doc/chrome-devtools/rendering-tools/
+https://developers.google.com/web/fundamentals/performance/rendering/reduce-the-scope-and-complexity-of-style-calculations
+https://developers.google.com/web/fundamentals/performance/rendering/stick-to-compositor-only-properties-and-manage-layer-count
+https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing?hl=en
+https://developers.google.com/web/fundamentals/performance/rendering/stick-to-compositor-only-properties-and-manage-layer-count

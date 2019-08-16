@@ -1,0 +1,21 @@
+A Node is an interface from which a number of DOM types inherit, and allows these various types to be treated(or tested) similarly.
+
+Node(Interface)
+- Document(Interface)
+- Element(Interface)
+- CharacterData(Interface)
+  - Text
+  - Comment
+  - CDATASection
+- ProcessingInstruction
+- DocumentFragment
+- DocumentType
+- Notation
+- Entity
+- EntityReference
+
+通过Node实例的nodeType属性值，可以判断具体的子类类型。如TEXT_NODE为3，ELEMENT_NODE为1。
+
+
+HTMLCollection是Element的集合
+NodeList是Node的集合

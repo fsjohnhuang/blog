@@ -1,0 +1,137 @@
+** 限制
+1. 同源限制:worker线程运行的文件必须和主线程运行的同域
+2. DOM限制:worker线程无法访问主线程所在网页的DOM元素,document,window和parent等对象.但可以访问navigator(WorkerNavigator实例)和location对象的部分属性.
+3. 通信方式:worker线程和主线程必须通过消息通信,不能直接通信.
+4. 脚本限制:worker线程不能调用alert和confirm等方法,但可以通过xhr/fetch发起网络请求
+5. 文件限制:worker线程运行的文件不能来自本机的文件系统,但可以时data-url.
+6. 数量限制:一般浏览器限制到20条以内,每条线程大概5M左右.
+
+** 分类
+1. 专用线程(Dedicated Worker)
+  只能被创建它的页面访问,随当前页面关闭而结束.
+2. 共享线程(Shared Worker)
+  能被多个同域页面共享,不随创建的页面关闭而结束，而是同域的所有页面都关闭才会结束。
+
+兼容IE11
+线程上跑的代码无法在DevTools的sources和network上查看
+
+** 专用线程用法
+#+begin_src cljs
+;; in main thread
+;; 异步创建线程和加载资源
+;;Webkit中会在内核在JSBindings层构造WebCore::JSWorker和对应的WebCore::Worker对象
+(let [worker (new js/Worker 
+                  "longtimejob.js"                        ; 必选入参, worker线程执行的脚本
+                  #js {:name "the name of worker thread"} ; 可选配置项,为worker实例命名
+             )]
+  ;; 线程间通过message cloning
+  (.addEventListener worker
+                     "message" 
+                     (fn [evt] (print (.-data evt))))
+  ;; 消息通信是值传递,因此会对数据先进行序列化,复制传输到目标线程,然后再反序列.
+  ;; 因此当序列化失败时就会触发messageerror事件了.
+  (.addEventListener worker
+                     "messageerror"
+                     (fn [e] (print e)))
+  ;; 主线程监听worker线程的错误信息
+  (.addEventListener worker
+                     "error"
+                     (fn [e] (print e)))
+
+  ;; 后台会自动创建MessagePort实例,用于HTML5线程间通信.
+  ;; 若传送二进制数据(File,Blobk,ArrayBuffer)时,可采用transferable objects的方式.传送后源线程再无法访问该数据了.
+  ;; transferable objects就是除了将对象传输到目的线程外，还将所有权转交(transfer ownership)到目标线程。
+  ;; 主线程向worker线程发送信息
+  (let [data {:cmd "chunk"
+              ; 二进制对象通过transferable objects方式传送
+              :buffer (new js/ArrayBuffer 32)}
+        transferable-objects [(:buffer data)]]
+    (.postMessage worker (clj->js data) (clj->js transferable-objects)))
+
+  ;; 主线程强行终止worker线程
+  (.ternimate worker))
+
+;; in worker thread
+(importScripts js/self "otherjs.js" "anotherjs.js") ; worker线程内部同步阻塞加载其他脚本
+(.addEventListener js/self 
+                   "message"
+                   (fn [evt] (print (.-cmd evt))))
+(.addEventListener js/self
+                   "messageerror"
+                   (fn [e] (print e)))
+(.postMessage js/self #js {:cmd "yeah!"})
+(.close js/self) ; worker线程自主销毁
+#+end_src
+
+** 共享线程
+每个页面都连接到该共享线程的新的端口上,并通过这个端口与共享工作线程进行通信.
+所以工作线程要保存端口,以便后续通信.
+#+begin_src cljs
+;; in main thread
+(let [shared-worker (new js/SharedWorker 
+                         "sharedworker.js"
+                         "name of worker")
+      port (.-port shared-worker)]
+
+  (.start port)
+
+  (set! (.-onmessage port)
+        (fn [e] (print e)))
+
+  (.postMessage port "data"))
+
+;; in worker thread
+(defn handle-connect [e]
+  (let [ports (.-ports e)
+        port (first ports)]
+    ;; ports是sequence,不是Array,没有length属性,也不能执行JSON.stringfiy
+    (.addEventListener port
+                       "message"
+                       (fn [e] "anything"))
+    (.start port))) ;; 使用addEventListener则需要调用start启用通信,若直接设置onmessage则不需要.
+
+(set! (.-onconnect js/self) handle-connect)
+#+end_src
+[[[[http://coolaj86.github.io/html5-shared-web-worker-examples/?]]] [live sample]]
+
+** Worker中可操作的BOM
+#+begin_src
+setTimeout/clearTimeout
+setInterval/clearInterval
+XMLHttpRequest
+navigator.appName/appVersion/platform/userAgent等
+localtion.url相关信息
+Application cache
+indexedDB
+WebSocket
+Promise
+#+end_src
+
+** JSONP
+#+begin_src
+(defn handle-request [obj-json]
+  (.postMessage js/self
+                (.-FirstName obj-json)))
+(.importScripts js/self
+                "http://someserver.com?jsonp=handle-request")
+#+end_src
+
+** 性能
+1. 通信时会占用CPU时间,即使使用了transferable objects的方式传输二进制对象.尤其当对象大小大于100MB.
+2. WebWorker和C#等的线程不同，属于更高阶和成本更大的“工作线程“，因为会创建一个新的JS VM。而且不能直接控制webworker的特性。
+3. WebWorker是否合理分配到多个核，则全靠浏览器控制了。
+
+** 用途
+1. 执行耗时的同步任务
+
+** 二进制数据
+Blob:存储一组字节序列
+SharedArrayBuffer
+ArrayBuffer
+
+** 参考
+https://www.ibm.com/developerworks/cn/web/1112_sunch_webworker/index.html
+https://segmentfault.com/a/1190000009313491
+http://www.alloyteam.com/2015/11/deep-in-web-worker/#prettyPhoto
+http://www.andygup.net/advanced-web-worker-performance/
+https://typedarray.org/concurrency-in-javascript/

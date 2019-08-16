@@ -1,0 +1,20 @@
+** ERROR:A browsing context is required to set a domain
+#+begin_src
+x.ownerDocument.domain = "test.com"
+// will throw exception below:
+// Uncaught DOMException: Failed to set the 'domain' property on 'Document': A browsing context is required to set a domain.
+#+end_src
+
+*** What is browsing context
+A browsing context is an environment in which Document objects are presented to the users.
+
+browsing context
+Document object
+Window object
+
+// Returns the associate Window object with this Document object
+document.defaultView :: Window
+
+
+** REF
+[[www.w3.org/TR/html/browsers.html]]

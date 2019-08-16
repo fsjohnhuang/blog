@@ -164,7 +164,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # 启动/关闭Vagrant镜像版本更新检测功能，手动更新采用vagrant box outdated
   config.vm.box_check_udpate = false
 
-  # NAT端口转发，访问宿主机的8889端口将转发到虚拟机的80端口
+  # NAT(Network Address Translation)端口转发，访问宿主机的8889端口将转发到虚拟机的80端口
   # 优点：外网可以访问虚拟机
   # 缺点：1. 配置麻烦
   #       2. 不能使用宿主机小于1024的端口，如不能SSL的443端口进行HTTPS连接
@@ -172,26 +172,27 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.network :forwarded_port, guest: 80, host: 8889
   # 默认只转发TCP包，若要转发UDP则需如下设置
   config.vm.network :forwarded_port, guest: 80, host: 8889, protocol: "udp"
-    
-  # host-only模式，仅宿主机和同一网段的其它虚拟机能访问虚拟机，虚拟机能访问外网
+
+  # host-only模式，仅宿主机和同一网段的其它虚拟机能访问虚拟机，虚拟机能访问外网。
   # 优点：只有子集能访问
   # 缺点：不能和团队成员共享合作
   # 官网：https://www.vagrantup.com/docs/networking/private_network.html
   # 添加auto_config: true 那么在打包后网络IP有冲突就会自行解决
   config.vm.network :private_network, ip: "192.1.1.2", auto_config: true
 
-  # 桥接
+  # 桥接(Bridged Adapter)，虚拟机拥有和宿主机相同网段的独立IP，对宿主机和网路上其它主机它是一台独立的“主机”。
+  # 如宿主IP为10.73.19.133，那么虚拟机通过DHCP获取的IP可能为10.73.19.143。
   config.vm.network :public_network, bridge: "en1: Wi-Fi (AirPort)"
 
 
   # 默认情况Vagrant设置虚拟机的SSHD采用基于公钥的验证方式
   # 指定密钥路径
   config.vm.ssh.private_key_path = "~/.ssh/id_rsa"
-  
+
   # 启用基于口令的验证方式
   config.vm.ssh.username = "vagrant"
   config.vm.ssh.password = "vagrant"
-  
+
   config.vm.provider :virtualbox do |v|
     v.name = "自定义虚拟机名称"
     v.hostname = "自定义虚拟机主机名"
@@ -231,7 +232,7 @@ fi
 
 *** TODO 共享目录(Synced Folders)
     虚拟机中的/vagrant作为与宿主机间的共享目录，默认/vagrant映射到Vagrantfile所在目录。
-        
+
 *** TODO 制作Windows Server 2012 base box
 工具：Packer
 组成：
@@ -258,12 +259,12 @@ Vagrant.config(VAGRANTFILE_API_VERSION) do |config|
         mgmt_config.vm.provision "shell", inline: <<-SHELL
         # install ansible
         sudo yum install ansible.noarh -y
-        
+
         # install dependencies for winrm
         sudo easy_install pip
         sudo pip install pywinrm
         sudo pip install requests
-        
+
         # configure hosts file
         cat >> /etc/hosts <<EOL
         #vagrant env node
@@ -273,7 +274,7 @@ Vagrant.config(VAGRANTFILE_API_VERSION) do |config|
         EOL
         SHELL
     end
-    
+
     # Create some web server roles
     (1..2).each do |i|
         config.vm.define "web#{i}" do |web_config|
@@ -310,7 +311,7 @@ end
              config.ssh.private_key_path = "/path/to/private_key"
              #+END_EXAMPLE
 
-*** 注意点  
+*** 注意点
 1) VirtualBox中Nginx必须在nginx.conf中设置 ~sendfile off~ ，否则静态文件会缓存起来。
 2) VirtualBox中Apache必须在httpd.conf中设置 ~EnableSendFile off~ ，否则静态文件会缓存起来。
 3) VirtualBox升级时可能导致VirtualBox Guest Additions失效，可通过安装Vagrant插件解决 ~vagrant plugin install vagrant-vbguest~
@@ -440,7 +441,7 @@ Kubernetes: 基于Google Borg集群软件模型，但与Borg不同。
   6) 监控
   7) 紧急事务处理
   8) 容量规划与管理
-  
+
   针对上述内容制定一套完整的沟通准则和行事规范。
 
 ** Goolge SRE核心方法论

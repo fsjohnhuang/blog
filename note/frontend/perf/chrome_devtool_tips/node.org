@@ -1,0 +1,4 @@
+shallow size，对象本身所占的内存大小，不包含其引用的对象大小。
+retained size，对象的shallow size+其直接和间接引用的 且 GC roots不可直达的对象的shallow size 之和，就是GC后最大释放的内存大小。
+heap size，运行堆大小
+allocated size，运行堆中已分配的大小。

@@ -1,0 +1,101 @@
+
+入侵：在数据中嵌入指令，并被成功执行。
+
+请求头Referer可以用于防止盗链和CSRF漏洞。
+
+搜索技巧：
+intext:keyword，完整内容包含keyword
+查看源码：
+view-source:url
+
+前端
+** XSS(Cross Site Script)
+*** 分类
+1. 反射型
+从URL中输入指令，然后由后端将问题指令输出到前端，可以从网站源码中看到问题指令。
+2. 存储型
+将问题指令保存到后端存储中，下一次用户正常问题被攻击的网站时运行问题指令。
+3. DOM base型
+从URL中输入指令，然后由JavaScript将问题指令输出到前端，无法从网站源码中看到问题指令。
+
+*** 编码
+1. URL编码
+   百分号和字符的ASCII编码对应的2位十六进制数字。如`/`的URL编码为`%2F`。
+2. 字符编码
+   十进制或十六进制ACSII码或unicode字符编码，格式为：`&#数值;`，如`<`的字符编码为`&#060;`或`&#x3c;`。
+3. CSS编码
+   反斜杠`\`后跟1~6位的十六位进制数字，如`e`可编码为`\65`或`\00065`
+4. JS编码
+   如`e`可编码为`\145`、`\x65`或`\u0065`
+
+*** 常见测试语句
+#+begin_src
+<script>alert('test');</script>
+<svg onload=alert('test')>
+<img src="javas&#99;ript:alert('test)">
+<IMG SRC=# onerror=alert('test')>
+<BODY ONLOAD=alert('test')>
+<DIV STYLE="width:expression(alert('test'));">
+<BASE HREF="javascript.:alert('test');//">
+#+end_src
+
+** CSRF(Cross-site request forgery,跨站请求伪造)
+利用用户已登录的身份，在用户毫不知情的情况下，以用户的名义完成非法操作。
+需要用户主动操作被黑网站才能实现
+
+
+** 点击劫持(clickjacking,也称为UI覆盖攻击)
+通过覆盖不可见的框架误导受害者点击而造成攻击行为。
+#+begin_src
+button.clickjacking+iframe[src=http://hacker.com]
+
+html,body,iframe{
+  display: block;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+iframe{
+  -moz-opacity: 0;
+  opacity: 0;
+  filter: alpha(opacity=0);
+  position: absolute;
+  z-index: 2;
+}
+#+end_src
+
+** URL跳转
+利用可信网站的URL跳转的漏洞，将用户引导进第三方不安全网站。
+http://可信的官网?url=伪造的诈骗网站
+
+** 钓鱼
+通过邮件等让用户进行伪装网站输入敏感信息。
+
+** 暗链（Hidden hyperlinks）
+将链接植入网站源码中，用户不可点击也不可见但可以优化SEO。
+
+
+服务端
+** SQL注入
+
+** 命令注入
+
+** 文件上传
+上传Webshell、木马
+
+
+** 文件下载
+下载系统任意文件、下载程序代码
+
+** 文件包含
+恶意代码作为公共模块供其他模块调用
+
+
+** 暴力破解
+
+https://www.cnblogs.com/imwtr/p/9721563.html
+
+** resource
+https://www.hacksplaining.com/lessons

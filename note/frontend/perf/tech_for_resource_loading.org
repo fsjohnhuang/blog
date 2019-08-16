@@ -1,0 +1,173 @@
+** 资源分类
+1. 样式
+2. 脚本
+3. 图片/视频/音频
+
+** 事件
+DOMContentLoaded: 完成HTML parsing并完成DOM Tree构建时触发。
+load: 页面所有资源加载完成时触发（iframe,img,script,css等）。
+
+
+** 优化前
+#+begin_src html
+head
+  script[src=1.js]
+  script[src=2.js]
+  script[src=3.js]
+body
+  header>img[src=1.png]
+  main>img[src=2.png]
+  footer>link[href=3.css]
+#+end_src
+| Resource | 0~10ms | 10ms~20ms | 20ms~30ms | 30ms~40ms |
+|----------+--------+-----------+-----------+-----------|
+|index.html|Blocking| Blocking  | Blocking  | Blocking  |
+| 1.js     | Fetch  | Excution  |           |           |
+| 2.js     | Fetch  |           | Excution  |           |
+| 3.js     | Fetch  |           |           | Excution  |
+| 1.png    | Fetch  |           |           |           |
+| 2.png    | Fetch  |           |           |           |
+| 3.css    | Fetch  |           |           |           |
+1. JS脚本加载造成block parsing，因此会阻塞dom tree的构建。
+2. Chrome等现代浏览器绕过block parsing，会收集外部资源请求，并在后台加载资源。
+
+** async优化
+HTML5引入
+IE10开始支持
+行为：脚本异步加载，一旦加载完成即马上同步执行。
+限制：仅用于JS脚本。
+特点：
+1. 执行时间点不确定
+2. 不会延迟DOMContentLoaded事件的触发，脚本可能在DOMContentLoaded的前后执行。
+3. 多个启用async的脚本，它们不是按书写顺序执行，而是采用先加载完先执行。
+#+begin_src html
+head
+  script[src=1.js async]
+  script[src=2.js async]
+body>div
+#+end_src
+| Resource | 0~10ms | 10ms~20ms | 20ms~30ms | 30ms~40ms |
+|----------+--------+-----------+-----------+-----------|
+|index.html| Parsing| Blocking  | Blocking  | Paring    |
+| 1.js     | Fetch  | Excution  |           |           |
+| 2.js     | Fetch  |           | Excution  |           |
+
+** defer优化
+HTML4引入
+IE9下支持但有bug
+行为：脚本异步加载，并在即将触发DOMContentLoaded前，按书写顺序依次执行。
+限制：仅用于js脚本。
+特点：
+1. 会延迟DOMContentLoaded事件的触发。
+#+begin_src html
+head
+  script[src=1.js defer]
+  script[src=2.js defer]
+body>div
+#+end_src
+| Resource   | 0~10ms  | 10ms~20ms | 20ms~30ms | DOMContentLoaded |
+|------------+---------+-----------+-----------+------------------|
+| index.html | Parsing | Parsing   | Blocking  |                  |
+| 1.js       | Fetch   |           | Excution  |                  |
+| 2.js       | Fetch   |           | Excution  |                  |
+
+
+** 动态异步script
+特点：
+1. 效果和sync一致
+#+begin_src
+(defn create-script [url]
+  (let [el (js/document.createElement "script")]
+    (set! (.-type el) "text/javascript")
+    (set! (.-src el) url)
+    el))
+
+(defn append-scripts [mount urls]
+  (.appendChild mount (create-script (first urls)))
+  (when (seq urls)
+    (recur mount (next urls))))
+#+end_src
+
+** 动态同步script
+#+begin_src
+(defn create-script [url]
+  (str "<script type='text/javascript' src='" url "'></script>"))
+
+(defn append-scripts [urls]
+  (js/document.write (create-script (first urls)))
+  (when (seq urls)
+    (recur (next urls))))
+#+end_src
+
+
+** Prebrowsing
+开发者告诉浏览器某些资源在不久的将来将会使用，可以在空闲时预加载。
+*** DNS Prefetch
+IE11支持
+提前解析域名
+#+begin_src
+head
+  link[rel="dns-prefetch" href="//fsjohnhuang.cnblogs.com"]
+#+end_src
+
+*** Prefetch
+IE11支持
+提前下载并缓存好数据，等真正请求时，则直接从缓存中读取。
+注意：
+1. 没有同域的限制
+2. 资源下载的优先级很低，浏览器会在空闲时才会去预加载
+3. 会占用单域并行6个连接的资源，所以要慎用
+4. 缓存过多资源，会导致缓存失效。
+#+begin_src
+link[rel="prefetch" href="//fsjohnhuang.cnblogs.com"]
+#+end_src
+
+*** Preconnect
+Chrome支持
+提前解析DNS，建立TCP链接和TLS协议(DNS Lookup, Initial Connection and SSL Negotiation)。然后当真正要请求时，则马上发起请求下载数据。
+#+begin_src
+link[rel="preconnect" href="//fsjohnhuang.cnblogs.com"]
+#+end_src
+
+*** Subresource
+Edge和Chrome支持
+功能和prefetch一样，但指定资源为最高优先级的下载资源。
+
+*** Prerender
+IE11、Chrome支持
+预先下载指定页面中的所有资源。
+#+begin_src
+link[rel="prerender" href="//fsjohnhuang.cnblogs.com/user.html"]
+#+end_src
+
+*** Preload优化
+IE不支持
+特点：
+1. 支持异步加载JS和CSS资源
+2. 不影响load事件
+3. 可以控制执行时间点
+限制： preload作为提示(hint)而不是强制浏览器一定要执行，浏览器会根据用户硬件性能等因素决定是否发起预加载操作。而prefetch则是必定会发起预加载行为。
+
+用法：
+#+begin_src
+link[href="/assets/myfont.woff" rel="preload" as="font"]
+#+end_src
+通过onload事件监听资源加载完成，然后执行响应操作。
+
+用途：
+1. 由于字体文件要等待到渲染时才会被加载，因此可以通过preload来预加载字体文件。
+
+上述除了通过标签设置外，还可以通过HTTP响应头Link字段设置
+#+begin_src
+Link: <http://othersite.com>; rel=preconnect; crossorigin
+Link: <://othersite.com>; rel=dns-fetch
+Link: <://othersite.com>; rel=preload; as=style
+#+end_src
+
+** 字体加载API
+
+** Page Visibility API
+
+** Ref
+https://csswizardry.com/2013/01/front-end-performance-for-web-designers-and-front-end-developers/#section:dns-prefetching
+https://www.igvita.com/2015/08/17/eliminating-roundtrips-with-preconnect/

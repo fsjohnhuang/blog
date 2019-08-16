@@ -1,0 +1,445 @@
+内存问题:
+1. memory leaks
+2. memory bloat
+3. frequent garbage collections.
+
+1. 页面是否占用过多的内存
+Tools:
+1. timeline memory view: 跟踪页面渲染过程中的DOM Node数、Document数和JS事件监听数。
+2. chrome task manager: more tools > task manager
+Principle:
+1. 移除不需要的DOM元素的引用
+```
+(def dom-ref #js {:dom (js/document.querySelector "#target")})
+;; do something......
+(set! (.-dom dom-ref) nil)
+```
+2. 移除不需要的事件监听（监听函数会引发闭包引用）
+```
+(.addEventListener dom-el "click" #(true))
+;; do something......
+(.removeEventListener dom-el "click")
+```
+3. 注意大块数据的存储问题
+
+2. 是否有内存泄漏
+Tools:
+1. object allocation tracker:用于查看JS对象的分配情况
+2. heap profiler:用于生成JS运行快照，通过对比操作前后的快照，找出没有被GC的对象
+
+3. GC频率
+Tools:
+1. timeline memory view
+Principle:
+1. GC频繁说明内存分配太频繁。
+
+Shallow Size(单位Byte): JS对象直接占用的内存，不包含其所引用的对象所占的内存
+
+渲染器内存：渲染过程中，页面本身占用的内存+JS堆占用的内存+页面触发的相关worker占用的内存
+
+Retained Size(单位Byte): Shallow Size + 其引用的依赖对象所占的内存，即该对象GC后一共能释放的内存
+
+GC Root:不能被GC Root遍历的对象都会被GC。
+
+Distance: 是从GC Root到达该对象最短路径长度。从distance最小的开始排查内存泄漏
+
+Dominator(支配对象):如果B对象在每个从GC到A对象的路径中出现，那么B对象就是A对象的支配对象。
+
+JavaScript对象描述：
+1. 原始类型(primitive type)，不会引用其他对象
+Number，两种存储方式
+  31bit整数字面量，又称为小整数(small integer)
+  双精度数或打包后，作为JS堆对象
+Boolean
+String，两种存储方式
+  JS堆对象
+  Web页面脚本源则存储在渲染器内存中
+
+2. 包装类型
+Object，JS的Object实际上是associative array.
+
+本地对象(native object), 不存储在JS堆的对象，不会被V8 GC。且只能通过JS的object引用．
+DOM对象，CSS规则都是native object.
+```
+(defn create-element [tag & props]
+  (let [el (js/document.createElement tag)]
+    (for [k (first props)
+          v (second props)
+          nprops (nnext rprops)]
+      (aset el (name k) v)
+      (when nprops
+        (recur (first nprops) (second nprops) (nnext nprops))))
+    el))
+(defn listen [el event-type handler]
+  (.addEventListener el (name event-type) handler))
+
+;; In main window
+(defn handle-load [e]
+  (let [iframe (.-target e)
+        local-variable (.-contentWindow iframe)
+        leaking-listener #(local-variable)]                ;; handle-cust-event 引用了局部變量
+    (listen js/document.body :cust-event leaking-listener) ;; 通過綁定事件監聽，保持局部變量的引用
+    (.remove iframe)))
+(defn init! []
+  (let [iframe (create-element "iframe" :src "iframe.html")]
+    (listen iframe :load handle-load)))
+(init!)
+
+;; In iframe.html
+(defn Leak [] "")
+(set! (.. window -global-ref) (new Leak))
+```
+上述的retaining path爲
+GC Root -> Main Window (JS對象) -> HTMLDocument (JS對象) -> HTMLDocument (DOM) -> <html> (DOM) -> <body> (DOM) -> EventListener (DOM) -> leaking-listener (JS對象) -> local-variable(JS變量) -> iframe window (JS變量) -> global-variable(JS變量)
+JS對象在JS/V8堆，而DOM是C++對象．
+Chrome66+新增C++ DOM跟蹤機制，因此可以通過heap snapshot得到上述的retaining path.
+
+GC已经可以很好处理，本地对象和JS object间孤岛引用的问题(僅IE6不能處理這類問題)
+```
+(comment "
+  js-obj.dom -> dom_node
+  dom_node.js_obj -> js-obj
+  但dom_node为detached，而js-obj无法从GC遍历，所以两者均会被GC掉
+")
+(defn foo[]
+  (def js-obj #js {:text "hello world"
+                   :dom (js/document.createElement "div")})
+  (set! (.. js-obj -dom -js_obj) js-obj))
+(foo)
+```
+
+分析过程时注意：
+1. 使用incognito模式
+2. 不要设置断点和调用console
+3. 启动chrome时添加flag`--user-data-dir=""`
+
+
+Devtool > Memory > Heap snapshot 
+- Constructor视窗，显示的指定对象自身的信息。
+- Retianers视窗，显示是指定对象的被引用树。
+
+** 分析步骤
+1. 通过timeline(devtool > performance)记录一段时间執行一系列操作後，點擊trash can按鈕執行full garbage collection，然後觀察JS堆，Document节点，DOM节点和Event监听数的变化．
+　　若内存和DOM节点数上升且没有返回到开始时的数目，則可以假設這些操作存在memory leak.(GC時會有所下降，但沒有將回起始狀態)
+另外最新版的Chrome還推出performance monitor，其實就是realtime timeline，可實時查看cpu,memory,node等變化．
+
+2. 找出导致内存泄漏(memory leak)的操作
+3. 使用heap snapshot定位问题来源(为JS堆的快照)
+`@数字`为对象的唯一ID
+背景色为黄色的对象为位于DOM Tree的DOM Node
+背景色为红色的对象为脱离DOM Tree的DOM Node
+
+Constructor列(closure)，函数闭包對象．
+```
+// named function 可以在devtool > heap snapshot中更容易定位
+/* (closure)
+ *   test() @26506
+ *   outer_test() @26809
+ */
+let f = null
+setTimeout(function outer_test(){
+  f = function test(){}
+}, 1000)
+```
+Constructor列(string,array,regexp,number)，一组数据类型String,Array,RegExp和Number的字面量的引用
+
+identifier in @123 表示identifier位于Constructor列名为Object,id为123的引用下.
+context in foo() 这里的context为called context/lexical environment.
+identifier in system / context 表示identifier位于called context/lexical environment中
+
+
+命名为system的对象没有对应的JS类型，它是V8内置对象，和JS对象一起存储在JS堆中
+
+Q:对象中没有包含所有属性和非字符串，数值？
+A:对象中部分属性是调用原生代码的getter方法获取，因此没有存储在JS堆中．另外getter可能会非纯函数，因此不应随意调用．不显示非字符串和数字是减小快照大小．
+
+Q:@ID有什么用？
+A:这个ID是多个快照共用的对象的唯一标识．
+
+Q:已死的对象还会在快照中？
+A:快照仅会显示存活的对象．
+
+Q:GC Root的组成？
+A:原生对象图，符号表，VM线程的栈，编辑缓存，控制器上下文，全局控制器等．
+
+4. 使用allocation instrumentation on timeline(对象跟踪器)，以20hz的频率执行heap snapshot，并在记录结束时再执行一次heap snapshot．
+  柱条表示snapshot中生成的对象，柱条高度为对象的大小．蓝色表示对象在最后一次snapshot中依然存在，灰色表示对象在timeline中生成在最后一次snapshot中已被GC．
+  (若timeline过程中间部分生成的对象，最后依然没有被回收，那么就要关注了)
+
+DOM内存泄漏
+```
+(comment "ul#tree>li>ul>li#leaf^^+btn[DOM memory leak]")
+(defn $ [slctor]
+  (js/document.querySelector slctor))
+(defn add-event-listener [el event-type handler]
+  (.addEventListener el (name event-type) handler))
+
+(def dom-refs (atom {:btn ($ "button")
+                     :tree ($ "#tree")
+                     :leaf ($ "#leaf")}))
+(defn handle-remove [e]
+  "1. 将#tree从DOM tree中移除
+   2. 将引用#tree节点的变量置null
+   但由于依然有变量引用#leaf，而#leaf节点通过parentNode属性又向上间接引用了#tree，因此#tree及其子孙元素均没法被释放"
+  (.remove (:tree @dom-refs))
+  (swap! dom-refs (fn [o] (assoc o :tree nil)))
+  (comment "这样就不会导致内存泄漏了！(swap! dom-refs (fn [o] (assoc o :tree nil :leaf nil)))"))
+(add-event-listener (:btn @dom-refs) :click handle-remove)
+```
+
+** Perf API
+`performance.memory`
+API
+```
+type SizeInBytes = Int
+jsHeapSizeLimit :: SizeInBytes -- the amount of memory that the JavaScript heap is limited to.
+totalJSHeapSize :: SizeInBytes -- the amount of memory that the JavaScript heap has allocated including free space.
+usedJSHeapSize :: SizeInBytes  -- the amount of memory currently being used.
+```
+注意：這個API得到的是整個chrome process的JS堆大小，一個chrome process可以包含多個tab．
+
+** GC
+在執行GC時會掛起所有JS線程，而頻繁的GC代表臨時對象過多的創建．
+
+
+** 幾種產生momery leak的操作
+1. 全局變量
+```
+function implicit_global_variable(){
+  global_variable = "test"
+}
+function global_variable_by_call(){
+  this.global_variable2 = "cccc"
+}
+implicit_global_variable()
+global_variable_by_call()
+```
+2. 沒有大小限制的caches
+3. 沒有釋放setInterval句柄
+```
+var some_resource = new Date()
+setInterval(function(){
+  // do something with some_resource
+}, 1000)
+```
+4. closures share scope in the same parent scope.
+```
+(def the-thing (atom nil))
+(defn replace-thing []
+  (let [orig-thing the-thing
+        unused (fn [] (when orig-thing "whatever you want."))]
+    (reset! the-thing %({:long-str (.join (new js/Array 10000) "*")
+                         :some-method %("anything is ok!")}))
+    "anything is ok"))
+(js/setInterval replace-thing 1000)
+```
+unused的閉包和some-method的閉包位於同一個parent scope中，因此兩者在創建閉包時會共享同一個lexical scope．那麼unused創建閉包時scope爲`{:orig-thing orig-thing}`，然後some-method創建閉包時並沒有新建scope，而是沿用`{:orig-thing orig-thing}`，所以replace-thing執行2次後the-thing的結構爲：
+```
+{:long-str (.join (new js/Array 10000) "*")
+ :some-method %(let [orig-thing {:long-str (.join (new js/Array 10000) "*")
+                                 :some-method %(let [orig-thing nil] "anything is ok!")}]
+                 "anything is ok!")}
+```
+所以導致內存泄漏．
+修復辦法
+```
+(defn replace-thing []
+  (let [unused (-> (fn [orig-thing] %(when orig-thing "whatever you want."))
+                   (apply the-thing))]
+    (reset! the-thing %({:long-str (.join (new js/Array 10000) "*")
+                         :some-method %("anything is ok!")}))
+    "anything is ok!")) 
+```
+5. 以前的瀏覽器中的closure會不管本地變量有沒有用到，都會加入到scope中
+```
+(defn foo []
+  (let [local-variable "test"]
+    %("anything is ok!")))
+(def my-closure (foo))
+;; my-closure的scope爲{:local-variable "test"}
+```
+6. 直接引用eval
+```
+function leak_memory (){
+  var local_variable = {long_str: new Array(100000).join("*")}
+  return function(){
+    eval("if (123) return 123")
+  }
+}
+// 間接eval並不會創建scope，所以不會引發memory leak
+var indirect_eval = eval
+function no_leak_memory (){
+  var local_variable = {long_str: new Array(100000).join("*")}
+  return function(){
+    indirect_eval("if (123) return 123")
+  }
+}
+```
+7. V8下，进入函数即会创建called context，而不是创建closure时创建
+lexical environment在V8下称为called context，实际上就是JSFunction的实例．
+```
+(defn leak_memory []
+  (let [big_guy {:long-str (-> (new js/Array 100000)
+                               .join "*")}]
+    (when false $(when big_guy "i cause memory leak."))
+    %(print "oh my gold!")))
+(def f (leak_memory))
+```
+虽然when后的闭包永远不会被执行，但called context中已经包含big_guy了．
+8. V8下非`use strict`的函数内调用`arguments`，那么入参会被分配到called context中．
+```
+function leak_memory(x, y){
+  var a = arguments[0]
+  return function(){}
+}
+var f = leak_memory(1,2)
+
+function no_leak_memory1(x, y){
+  "use strict"
+  var a = arguments[0]
+  return function(){}
+}
+
+function no_leak_memory2(){
+  var a = arguments[0]
+  return function(){}
+}
+``` 
+注意：产生含成员的called context的函数，编译器无法执行inlining优化．
+[lexical environment/scope](http://es5.github.com/#x10.2)
+
+9. jquery事件缓存引发的内存泄漏
+```
+// 由于jquery会将事件缓存到jquery.cache中,因此不使用时必须调用off移除事件.
+var $target = $("#target")
+$target.on("click", e => {})
+$target.on("click.test", e => {})
+$target.on("dblclick.test", e => {})
+
+$target.off("click")
+$target.off("test")
+```
+
+** 参考
+https://blog.csdn.net/bug_zero/article/details/54883083
+https://www.smashingmagazine.com/2012/06/javascript-profiling-chrome-developer-tools/
+https://developers.google.com/chrome-developer-tools/docs/memory-analysis-101
+https://zhuanlan.zhihu.com/p/34272169
+https://auth0.com/blog/four-types-of-leaks-in-your-javascript-code-and-how-to-get-rid-of-them/
+https://medium.com/m/global-identity?redirectUrl=https%3A%2F%2Fblog.meteor.com%2Fan-interesting-kind-of-javascript-memory-leak-8b47d2e7f156
+
+** 练手
+[Example 1: Growing memory](https://developer.chrome.com/devtools/docs/demos/memory/example1.html)
+[Example 2: Garbage collection in action](https://developer.chrome.com/devtools/docs/demos/memory/example2.html)
+[Example 3: Scattered objects](https://developer.chrome.com/devtools/docs/demos/memory/example3.html)
+[Example 4: Detached nodes](https://developer.chrome.com/devtools/docs/demos/memory/example4.html)
+[Example 5: Memory and hidden classes](https://developer.chrome.com/devtools/docs/demos/memory/example5.html)
+[Example 6: Leaking DOM nodes](https://developer.chrome.com/devtools/docs/demos/memory/example6.html)
+[Example 7: Eval is evil (almost always)](https://developer.chrome.com/devtools/docs/demos/memory/example7.html)
+[Example 8: Recording heap allocations](https://developer.chrome.com/devtools/docs/demos/memory/example8.html)
+[Example 9: DOM leaks bigger than expected](https://developer.chrome.com/devtools/docs/demos/memory/example9.html)
+[Example 10: Retaining path](https://developer.chrome.com/devtools/docs/demos/memory/example10.html)
+[Example 11: Last exercise](https://developer.chrome.com/devtools/docs/demos/memory/example11.html)
+
+[Gathering scattered objects](https://developers.google.com/chrome-developer-tools/docs/heap-profiling-summary)
+[Verifying action cleanness](https://developers.google.com/chrome-developer-tools/docs/heap-profiling-comparison)
+[Exploring the heap contents](https://developers.google.com/chrome-developer-tools/docs/heap-profiling-containment)
+[Uncovering DOM leaks](https://developers.google.com/chrome-developer-tools/docs/heap-profiling-dom-leaks)
+[Finding accumulation points](https://developers.google.com/chrome-developer-tools/docs/heap-profiling-dominators)
+
+
+页面加载过程(loading journey)
+1. Is it happening
+   1. Navigation begins, TTFB(Time to First Byte)
+   2. First paint, the first non-blank paint on screen
+   3. First contentful paint, navigation has successfully started
+2. Is it useful
+   1. First meaningful paint, page's primary content is visible
+   2. Visually ready, page looks nearly done
+3. Is it usable
+   1. Time to interactive(TTI, 可交互性, First input delay), visually usable and engaged
+   2. Fully loaded, end of load lifecycle
+
+*** 参考Performance API
+file://performance_api.png
+
+Audits/LightHouse@ChromeDevTools 可审查上述指标(metrics)
+基线:在慢速3G网络下5秒内具备可交互性
+
+Coverage@ChromeDevTools 通过代码覆盖来发现无用代码
+
+WebWorker处理逻辑部分
+Service Worker缓存资源
+
+压缩算法:gzip, deflat, brotli和zopfli
+
+PRPL模式
+Push
+Render
+Precache
+Lazy-load
+
+RUM(Real User Monitor)
+[[[[https://w3c.github.io/longtasks/]]] [Long Tasks API]], 用于收集耗时50ms以上可能会阻塞主线程的的脚本信息
+[[https://developers.google.com/web/updates/2018/05/first-input-delay] [First Input Delay]], 用于收集用户点击后到浏览器响应后可与用户再次交互的耗时.[[https://github.com/GoogleChromeLabs/first-input-delay] [polyfill]]
+
+
+** Performance Budget管理和度量性能
+https://timkadlec.com/2013/01/setting-a-performance-budget/
+指标包括:
+1. 里程碑时间,基于加载页面的用户体验时间(TTI)
+2. 基于质量的指标,基于原始值(如JavaScript权重,HTTP请求的数量)
+3. 基于规则的指标,由Lighthouse或WebPageTest生成的分数
+
+渲染引擎(Trident, Gecko, Blink, Webkit)
+  Webkit下的HTML和CSS是同步解析,Gecko下的CSS需要等到HTML文件解析为内容Sink后进行解析.
+JS引擎(V8, Chakra, TraceMonkey)
+
+渲染/UI线程 和 JS线程是互斥的
+
+setTimeout/setInterval会在帧中某时间点进行,可能刚好在末尾从而导致掉帧或卡顿.因此可用requestAnimationFrame.
+
+浏览器中的线程:
+1. 1个渲染/UI线程
+2. 1个JS线程
+3. GUI/浏览器事件触发线程
+  当一个事件被触发时该线程会把事件添加到待处理队尾,等待JS线程处理.事件包括当前代码块,定时任务,鼠标点击和AJAX异步请求等.
+4. 定时触发器线程
+  浏览器的定时计数器由单独的线程来计时和触发.
+5. 异步HTTP请求线程
+  XMLHttpRequest链接后会通过浏览器新打开一个线程请求.当状态发生变化时且设置回调函数时,则该线程会把事件添加到待处理对尾,等待JS线程处理.
+
+
+JS线程从任务队列读取事件,然后压入执行栈,但执行栈清空后,继续从任务队列中读取下一个事件.
+
+#+begin_src cljs
+;; 由于xhr发起的是异步任务, 异步任务最快也要下一个事件循环才执行.
+;; 所以在没有缓存的情况下send-by-xhr1和send-by-xhr2效果一样
+;; 若有缓存,则不会发起异步任务,而是直接插入栈帧到执行栈中.那么send-by-xhr1和send-by-xhr2效果就不一样了.
+(defn send-by-xhr1 [method url params callback]
+  (let [xhr (new js/XMLHttpRequest)
+        json (-> params cljs->js js/JSON.strinify)]
+    (.open xhr (name method) url)
+    (set! (.-onload xhr) callback)
+    (.send xhr json)))
+
+(defn send-by-xhr2 [method url params callback]
+  (let [xhr (new js/XMLHttpRequest)
+        json (-> params cljs->js js/JSON.strinify)]
+    (.open xhr (name method) url)
+    (.send xhr json)
+    (set! (.-onload xhr) callback)))
+#+end_src
+
+setTimeout最短间隔,HTML5规定为4ms,老版本IE为10ms.若设置值小于最短间隔则会自动调整为最短间隔.
+
+渲染流程:
+JavaScript > Style > Layout/Reflow > Paint > Composite
+10ms内完成上述操作才能获得60fps(每帧耗时16.67ms)
+requestAnimationFrame在下一帧Paint前执行,因此将耗时长任务分拆为多个子任务并分别在requestAnimationFrame中执行,可确保子任务平均分配到每一个渲染帧.
+
+Layout/Reflow是浏览器计算元素位置和尺寸的过程.
+Paint是填充像素的过程,往往是渲染过程中开销最大的部分.
+Composite是将多个渲染层合并的过程,然后显示在屏幕上.坚持compositor-only的属性,则可完成避免Paint步骤.
+
+利用GPU就是想跳过style,reflow和paint步骤，直接执行composite。

@@ -26,7 +26,7 @@ pip install sqlalchemy
       1) Connection Pooling
       2) Dialect
 3) DBAPI
-   
+
 
 内置DataSource 和 日志功能
 
@@ -35,10 +35,10 @@ pip install sqlalchemy
 ** 连接数据库
 #+BEGIN_EXAMPLE python
 from sqlalchemy import create_engine
-# Args: 
+# Args:
 #   encoding(str): 编码方式。
 #   echo(bool): 设置是否在控制台输出SQL等日志信息，默认值为False。
-# 
+#
 # Returns:
 #   sqlalchemy.engine.base.Engine: 数据引擎实例，只有调用数据库操作时才会去连接数据库
 engine = create_engine('mysql://root:@localhost:3306/webpy?charset=utf8', encoding='utf-8', echo=True)
@@ -83,7 +83,7 @@ conn.execute('select * from dual')
                  Column('email', String(60), nullable=False),
            )
 
-    # 若表不存在则创建       
+    # 若表不存在则创建
     metadata.create_all(engine)
 
     # 定义实体类
@@ -91,12 +91,12 @@ conn.execute('select * from dual')
         pass
     class Addr(object):
         pass
-      
+
     # 创建表和实体类间的映射
     userMapper = mapper(User, userTable)
     addrMapper = mapper(Addr, addrTable)
     #+END_EXAMPLE
-    
+
 2) 通过 ~declarative_base~ 统一定义
    ~declarative_base~ 类用于维护类和表的映射关系， 应用中一个数据库使用唯一一个Base作为该数据库下所有映射的父类。
    #+BEGIN_EXAMPLE python
@@ -111,7 +111,7 @@ conn.execute('select * from dual')
    )
    from sqlalchemy.ext.declarative import declarative_base
 
-      
+
    Base = declarative_base()
    # 统一定义
    class User(Base):
@@ -121,7 +121,7 @@ conn.execute('select * from dual')
 
        def __init__(self, name, ):
            self.name = name
-          
+
        def __repr__(self):
            return '<{}({},{})>'.format(self.__class__.__name__, self.id, self.name)
 
@@ -134,7 +134,7 @@ conn.execute('select * from dual')
        def __init__(self, user_id, email, ):
            self.user_id = user_id
            self.email = email
-          
+
        def __repr__(self):
            return '<{}({},{},{})>'.format(self.__class__.__name__, self.id, self.user_id, self.email)
 
@@ -152,7 +152,7 @@ Base.metadata.drop_all()
 *** 字段类型
     1) 通用类型位于 ~sqlalchemy~ 下
     2) 特定数据库(如MySQL)的类型位于 ~sqlalchemy.dialects~ 下
-    
+
 ** 自增主键
 1) 数据库不提供自增字段的(如Oracle)
    #+BEGIN_EXAMPLE python
@@ -172,9 +172,9 @@ Base.metadata.drop_all()
     #+BEGIN_EXAMPLE python
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    
+
     engine = create_engine('sqlite:///test.db')
-    
+
     DBSession = sessionmaker(bind=engine)
     # 后期也可以设置数据库引擎，DBSession.configure(bind=engine)
     session = DBSession()
@@ -191,7 +191,7 @@ Base.metadata.drop_all()
        q1: Query = session.query(User)
        # 定义返回的结果组件类型为tuple(User.name, User.age)
        q2: Query = session.query(User.name, User.age)
-       # 定义返回的结果组件类型为tuple(user: User, User.name)    
+       # 定义返回的结果组件类型为tuple(user: User, User.name)
        q3: Query = session.query(User, User.name)
 
        for name, age in q2.all():
@@ -204,26 +204,26 @@ Base.metadata.drop_all()
           #+END_EXAMPLE
        2) ~filter~ 参数为SQL表达式结构
           #+BEGIN_EXAMPLE python
-          records = q2.filter(User.name == 'john').all()          
-          records = q2.filter(User.name != 'john').all()     
-          records = q2.filter(User.name.like('j%')).all()     
+          records = q2.filter(User.name == 'john').all()
+          records = q2.filter(User.name != 'john').all()
+          records = q2.filter(User.name.like('j%')).all()
           # IN
           records = q2.filter(User.name.in_(['a', 'b'])).all()
           # NOT IN
-          records = q2.filter(~User.name.in_(['a', 'b'])).all()     
-          records = q2.filter(User.name == None).all()     
-          records = q2.filter(User.name != None).all()     
+          records = q2.filter(~User.name.in_(['a', 'b'])).all()
+          records = q2.filter(User.name == None).all()
+          records = q2.filter(User.name != None).all()
           # 3种AND的方式
-          records = q2.filter(User.name != None, User.age == 12).all()               
+          records = q2.filter(User.name != None, User.age == 12).all()
           records = q2.filter(User.name != None).filter_by(age == 12).all()
           from sqlalchemy import and_
           records = q2.filter(and_(User.name != None, age == 12)).all()
           # OR
           from sqlalchemy import or_
-          records = q2.filter(or_(User.name != None, User.age == 12)).all()               
+          records = q2.filter(or_(User.name != None, User.age == 12)).all()
           # 入参raw sql
           from sqlalchemy import text
-          records = q2.filter(text('id<24')).order_by(text('id')).all()       
+          records = q2.filter(text('id<24')).order_by(text('id')).all()
           #+END_EXAMPLE
        3) 触发返回结果
           1) ~all()~ 返回所有
@@ -277,15 +277,15 @@ Base.metadata.drop_all()
              __tablename__ = 'user'
              id = Column('id', Integer, primary_key=True)
              addr = relationship('Addr')
-          
+
          class Addr(Base):
              __tablename__ = 'addr'
              id = Column('id', Integer, primary_key=True)
              user_id = Column(Integer, ForeignKey('user.id'))
-   
+
          user = session.query(User).get(0)
          user.addr # 可访问
-   
+
          addr = session.query(Addr).get(0)
          addr.user # 访问失败
          #+END_EXAMPLE
@@ -295,15 +295,15 @@ Base.metadata.drop_all()
              __tablename__ = 'user'
              id = Column('id', Integer, primary_key=True)
              addr = relationship('Addr', backref='user')
-          
+
          class Addr(Base):
              __tablename__ = 'addr'
              id = Column('id', Integer, primary_key=True)
              user_id = Column(Integer, ForeignKey('user.id'))
-   
+
          user = session.query(User).get(0)
          user.addr # 可访问
-   
+
          addr = session.query(Addr).get(0)
          addr.user # 可访问
          #+END_EXAMPLE
@@ -428,4 +428,99 @@ Base.metadata.drop_all()
 
 
 
+* Oracle
+cx_Oracle为Python的Oracle连接驱动模块，需要另行下载安装。而cx_Oracle又依赖instant client。
+官网: https://oracle.github.io/python-cx_Oracle/
+Doc: https://cx-oracle.readthedocs.io/en/latest/
 
+环境参数: Python3, amd64
+
+** Linux下安装cx_Oracle
+
+*** 安装instantclient-basic和instantclient-sdk
+在 http://www.oracle.com/technetwork/database/database-technologies/instant-client/downloads/index.html 下载和目标oracle对应的版本(~select * from v$version;~)
+1) 解压
+#+begin_src shell
+unzip xxx.zip -d /opt/
+#+end_src
+
+2) 设置环境变量
+#+begin_src .bashrc
+export ORACLE_HOME=/opt/instantclient_major_minor/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ORACLE_HOME
+export C_INCLUDE_PATH=$ORACLE_HOME/sdk/include/
+#+end_src
+
+3) 建立软链接
+#+begin_src shell
+cd $ORACLE_HOME
+ln -s libclnth.so.major.minor libclnth.so
+#+end_src
+
+4) 安装python3-dev
+#+begin_src shell
+sudo apt install python3-dev
+#+end_src
+否则会报python.h缺失的异常。
+
+5) 安装cx_Oracle
+cx_Oracle必须和操作系统和instantclient版本一致，如32位、Python3.x。
+#+begin_src shell
+sudo pip install cx_Oracle
+#+end_src
+
+疑问：https://oracle.github.io/odpi/doc/installation.html#linux
+
+** Windows下安装cx_Oracle
+1) 安装instant client，并设置环境变量
+#+begin_src
+setx TNS_ADMIN "d:\instanceclient_12_2"
+setx NLS_LANG "SIMPLIFIED CHINESE_CHINA.ZHS16GBK"
+#+end_src
+
+2) 将instant client下的oraocci12.dll、oraociei12.dll、oci.dll复制到%PYTHON_HOME%\Lib\site-packages下
+
+3) 验证 ~python -c "import cx_Oracle"~
+若报异常：64-bit Oracle Client library cannot be loaded: "The specified module could not be found"
+则需要安装正确的VC++库（Oracle版本对应的VC++库，不是越新越好，向下不兼容的）
+| Oracle版本     | VC++库版本               |
+|----------------+--------------------------|
+| Oracle18和12.2 | VS 2013                  |
+| Oracle12.1     | VS 2010                  |
+| Oracle11.2     | VS 2005 (32bit 或 64bit) |
+VC++库: https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads#bookmark-vs2013
+
+
+在TNS_ADMIN下添加tnsnames.ora即可设置TNS。
+
+
+1.6. 验证
+进入python3 REPL，输入import cx_Oracle看是否引入成功
+
+#+begin_src python
+import cx_Oracle
+
+conn_str = "帐号/密码@数据库服务器ip:端口/服务"
+conn = cx_Oracle.connect(conn_str, encoding='UTF-8',
+                         nencoding='UTF-8')  # 这样就可以解决中文乱码的问题
+cursor = conn.cursor()
+cursor.execute("select * from dual")
+row = cursor.fetchone()
+print(row)
+
+cursor.close()
+conn.close()
+#+end_src
+
+分页
+#+begin_src python
+type page_start_from_1 = int
+type pagesize = int
+type is_raise_error_when_nodata = bool
+paginate: : page_start_from_1 -> pagesize -> is_raise_error_when_nodata -> Pagination
+
+Pagination  # has_next :: bool
+Pagination  # has_prev :: bool
+Pagination  # next_num :: int
+Pagination  # prev_num :: int
+#+end_src

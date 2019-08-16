@@ -1,0 +1,11 @@
+#+STARTUP: showall
+
+** meta标签
+作用
+#+begin_quote
+
+#+end_quote
+
+#+begin_src
+<meta http-equiv="Pragma" content="no-cache">
+#+end_src

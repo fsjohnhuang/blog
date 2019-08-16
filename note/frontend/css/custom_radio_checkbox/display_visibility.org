@@ -1,0 +1,93 @@
+** visibility
+*** Two different functions
+1. hides rows and columns of a table.
+2. hides an element *without changing the layout*.
+
+*** Four valid values
+1. visible
+  just like it sounds, `visible` makes things visible.
+2. hidden
+  only visually hides elements(you can't see it anymore), but the element is still there and still takes up space on the page.
+  this property doesn't inherit by default. so you can  make an element hidden, and still have one of its children as visible.
+#+begin_src
+.hidden{
+  visibility: hidden;
+
+  &:hover{
+    visibility: visible;
+  }
+  
+  .visible{
+    visibility: visible;
+  }
+}
+#+end_src
+  hidden elements could not response events(e.g. hover, click).
+
+3. collapse
+  this value hides the table sub element(e.g. tr,tbody,col,colgroup and elements made to be that way via display property) without leaving the space where it was. but apply it to other elemnets would act as hidden value dose.
+  but there are some many quirks, so *don't use this ever*.
+
+  IE7 doesn't support
+
+4. inherit
+  the default value. simply causes the element to inherit the value of its parent.
+
+  IE7 doesn't support
+
+** display:none
+1. elements with display:none default.
+style,script,dialog,input[type=hidden]
+
+2. the value of input element with display:none would be submited as normal.
+   the form would be submitted by pressing enter, even the input[type=submit] is display:none.
+#+begin_src
+<form>
+  <input type="text" class="display:none" name="name">
+  <input type="submit" id="submit" class="display:none">
+  <label for="submit"> submit </label>
+</form>
+#+end_src
+
+3. the value of display of element must be none, when its parent element is display:none.
+
+1. still occupy position or not
+
+`display:none` would not occupy original position
+
+`visibility:hidden` would occupy original position
+
+
+2. trigger repaint and reflow or not
+
+`display:none` would trigger repaint and reflow.
+
+`visibility:hidden` would not. don't trigger repaint??
+
+3. effection on children
+
+`display:none` would take effect on children no doubt 
+
+`visibility:hidden` has exceptions.
+```
+<div style="visibility:hidden">
+  <div style="visibility:visible">
+    text
+  </div>
+</div>
+```
+
+4. css counter would take the visibility:hidden into account, but does not to display:none.
+
+5. transtion effect support visibility but not display
+
+HTML5新增hidden这个布尔属性，让元素天生隐藏。为达到兼容性可添加下面的CSS：
+#+begin_src
+[hidden]{
+  display: none;
+}
+#+end_src
+
+** ref
+https://css-tricks.com/almanac/properties/v/visibility/
+https://juejin.im/post/5b406f40e51d45194832b759

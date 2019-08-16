@@ -1,0 +1,55 @@
+** 请求报文结构
+Request Line(请求行)
+Header(头部)
+CRLF
+[Message] Body(数据体)
+
+** 响应报文结构
+Status Line(状态行)
+Header(头部)
+CRLF
+[Message] Body(响应正文)
+
+
+** Chrome中出现“Provisional headers are shown”
+根本原因是：请求并没有真正发生，所以Header里显示的是伪信息，直到服务器真的有响应返回，Header才会被更新为真实的。但有可能请求被插件屏蔽，或启用缓存导致没有真实的HTTP响应。
+
+具体引发形式多样：
+1. I believe it happens when the actual request is not sent. Usually happens when you are loading a cached resource.
+2. 浏览器安装AdBlock等拦截广告的插件。
+3. The exact same request is being sent again just after few milliseconds(most likely due to a bug in the client side).In that case you'll also see that the status of the first request is "canceled" and that the latency is only several milliseconds.
+
+*** 通过chrome://net-internals排查网络问题
+Net Internals是一套工具集，通过监听DNS,Sockets,SPDY,Caches等事件和数据帮助诊断网络请求和访问方面的问题。
+
+
+** KeepAlive模式
+普通模式（非KeepAlive模式）：每个请求/应答均需要新建一个连接。
+KeepAlive模式（又称为持久模式/连接重用）：多个请求/应答均在同一个连接上，避免TCP连接的重建。
+
+HTTP1.0默认为普通模式，需要在请求头部加入Connection: Keep-Alive来启用KeepAlive模式；
+HTTP1.1默认为KeepAlive模式，需要在请求头部中加入Connection: close来启用普通模式。
+除了浏览器端需要支持外，还要服务端支持才能实现KeepAlive模式。
+
+在HTTP/2中将忽略Connection和Keep-Alive这两个请求头。
+
+*** 优点
+RFC 2612:https://tools.ietf.org/html/rfc2616
+1. By opening and closing fewer TCP connections, CPU time is saved in routers and hosts(clients, servers, proxys, gateways, tunnels, or caches), and memory used for TCP protocol control blocks can be saved in hosts.
+2. 
+
+Keep-Alive让发送者提示连接信息，可用于设置连接超时和请求数上限。
+#+begin_src
+Keep-Alive: timeout=timeout_in_sec, max=max_amount_of_request
+// 示例，响应头
+Keep-Alive: timeout=5, max=1000
+#+end_src
+timeout:指定当连接(connection)空闲时，最快多少秒后会被释放。当超时大于TCP的超时时间，则该设置会被忽略。
+max:指定单个连接可发起的最多的请求数。对于没有管道(non-piplined)的连接，该值只能为0.对于HTTP管道（HTTP pipeline）可通过这个限制管道。
+
+
+*** REF
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive
+https://www.byvoid.com/zht/blog/http-keep-alive-header
+http://www.nowamagic.net/academy/detail/23350305
+
