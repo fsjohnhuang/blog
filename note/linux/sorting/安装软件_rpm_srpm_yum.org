@@ -1,0 +1,298 @@
+* RPM
+打包者在特定的操作系统和硬件上编译程序，然后将程序的基本信息（程序版本、打包程序作者、功能说明）、程序依赖信息及程序打包为RPM格式的文件中。
+文件后缀： ~.rpm~
+** 优点
+1) 程序和预设配置已经过编译，使用者安装程序时只是将程序和配置等复制到预设的目录即可
+2) 安装前RPM会检查磁盘容量、操作系统版本，若不满足安装条件则中止安装
+3) 安装前RPM会检查程序依赖项是否都存在，若不满足安装条件则中止安装
+4) 安装时RPM在本机维护已安装程序的仓库，以便程序的升级、卸载、查询和检验
+** 版本号说明
+#+BEGIN_EXAMPLE
+rp-pppoe-3.11-5.el7.x86_64.rpm
+#+END_EXAMPLE
+1) rp-pppoe，程序名称
+2) 3.11，程序主版本.次版本
+3) 5，打包次数。打包后可能会因某些bug或安全问题，需要进行小幅度的patch和重设某些编译参数，通过打包次数表示。
+4) x86_64，操作系统平台。
+   - i386，适用于所有x86平台。i是指Intel相容的CPU
+   - i586，针对586等级优化编译的
+   - i686，针对686等级优化编译的
+   - x86_64，适用于所有64位平台
+   - noarch，没有CPU等级上的限制，一般RPM文件中没有二进制程序，仅包含shell、python等脚本程序。
+** devel版本的RPM文件
+打包的RPM文件一般分为
+- 一般使用版本
+- 开发用版本，命名格式为 ~<software>-devel-<major_ver>.<minor_ver>.rpm~
+
+两个版本是内部包含的依赖不同。
+*** TODO 到底有什么不同呢？
+** 使用
+已安装的RPM程序信息都保存在 ~/var/lib/yum/~ 下，程序版本升级、版本对比、查询等都是操作这个目录下的文件，因此绝对不能修改这个目录的内容。
+#+BEGIN_EXAMPLE
+# 检验rpm文件的依赖信息
+rpm -ivh <rpm文件路径> --test
+
+# 从网上下载rpm文件并安装
+rpm -ivh http://website.name/path/pkgname.rpm
+
+# 安装本地rpm文件
+rpm -ivh <rpm文件路径>
+
+# 安装本地多个rpm文件
+rpm -ivh *.rpm
+
+# 重装
+rpm -ivh <rpm文件路径/url> --replacepkgs
+
+# 重置配置文件
+rpm -ivh <rpm文件路径/url> --replacefiles
+
+# 已安装则更新，无安装则安装
+rpm -Uvh <rpm文件路径/url>
+
+# 只有已安装才会执行更新，否则中止更新操作
+rpm -Fvh <rpm文件路径/url>
+
+# 卸载，若该包被其他包所依赖，则无法中止卸载
+rpm -e <包名>
+
+# 强行卸载，若该包被其他包所依赖，则照常执行卸载
+rpm -e --nodeps <包名>
+#+END_EXAMPLE
+*** 查询
+#+BEGIN_EXAMPLE
+-q  ：僅查詢，後面接的軟體名稱是否有安裝；
+-qa ：列出所有的，已經安裝在本機 Linux 系統上面的所有軟體名稱；
+-qi ：列出該軟體的詳細資訊 (information)，包含開發商、版本與說明等；
+-ql ：列出該軟體所有的檔案與目錄所在完整檔名 (list)；
+-qc ：列出該軟體的所有設定檔 (找出在 /etc/ 底下的檔名而已)
+-qd ：列出該軟體的所有說明檔 (找出與 man 有關的檔案而已)
+-qR ：列出與該軟體有關的相依軟體所含的檔案 (Required 的意思)
+-qf ：由後面接的檔案名稱，找出該檔案屬於哪一個已安裝的軟體；
+-q --scripts：列出是否含有安裝後需要執行的腳本檔，可用以 debug 喔！
+查詢某個 RPM 檔案內含有的資訊：
+-qp[icdlR]：注意 -qp 後面接的所有參數以上面的說明一致。但用途僅在於找出
+    某個 RPM 檔案內的資訊，而非已安裝的軟體資訊！注意！
+#+END_EXAMPLE
+
+* SRPM
+Source RPM 即RPM文件中包含的是源码而不是编译后的程序。安装时先将SRPM编译为RPM，然后再安装RPM即可。
+文件后缀： ~.src.rpm~
+** 优点
+1) 由于是源码编译安装，因此不受操作系统、硬件限制
+2) 可修改预设配置对源码进行编译
+3) 可利用RPM管理程序，方便管理程序依赖、更新、卸载等
+* YUM 
+基于RPM增加线上升级机制的软件安装管理程序。
+采用Python进行开发，因此当升级系统的Python解释器后执行yum报"No module named yum"，则表示当前Python版本与yum要求的不一致，这时只要修改yum通过hashbang指向的Python解释器位置即可。
+#+BEGIN_EXAMPLE shell
+# 找出yum脚本位置
+whereis yum
+
+# 进入yum脚本将hashbang修改即可
+vim /usr/bin/yum
+#+END_EXAMPLE
+修改后如果报错
+#+BEGIN_QUOTE
+File “/usr/sbin/yum-updatesd”, line 35, in 
+import dbus 
+ImportError: No module named dbus 
+#+END_QUOTE
+则需要找到yum-updatest文件进行一样的修改。
+
+** 网络架构
+- YUM服务端
+  - 向Linux客户端提供HTTP/FTP服务
+  - 存储 RPM文件 和 在header中保存所有RPM文件的依赖信息（/path/repodata/清单）
+- Linux客户端
+  - 每次安装、更新程序时都从YUNM服务端下载清单到/var/cache/yum/，然后和本地RPM仓库信息对比再决定要下载哪些依赖和如何安装了
+** 使用
+*** 查询
+#+BEGIN_EXAMPLE
+# 根据关键字搜索程序名称或描述匹配的程序
+yum search <关键字>
+
+# 列出已安装的所有程序名称和版本号，相当于rpm -qa
+# 还列出可以更新和未安装的程序
+yum list
+
+# 列出可以更新的程序
+yum list updates
+
+# 列出以pam开头的程序清单
+yum list pam*
+
+# 列入已安装的所有程序详细信息，相当于rpm -qai
+yum info
+
+# 相当于rpm -qf
+yum provides <filepath>
+#+END_EXAMPLE
+*** 安装升级卸载
+#+BEGIN_EXAMPLE shell
+yum install <程序名称>
+yum update <程序名称>
+
+# 安装devtoolset
+yum groupinstall "Development tools"
+
+# 临时启用某个仓库
+yum --enablerepo=epel install R
+
+# 升级所有已安装的程序
+yum update
+
+yum remove <程序名称>
+#+END_EXAMPLE
+*** 仓库配置
+仓库配置文件(后缀为.repo)保存在/etc/yum.repos.d/子目录下（不包含孙目录），一个仓库配置文件包含0～n个仓库信息
+**** 配置项说明
+~[base]~ 代表仓库名称，必须唯一，否则yum无法得知从哪里找程序清单
+~name~ 仓库描述
+~mirrorlist=~ 仓库映射站点URL，可省略
+~baseurl=~ 仓库站点URL，yum从这些URL中查询、下载程序。
+~enable=1~ 是否启用该配置，0为禁用，1为启用
+~gpgcheck=1~ 是否启用RPM文件的数位签名验证，0为禁用，1为启用
+~gpgkey=~ 数位签名的公钥文件路径，若gpgcheck=0则可省略gpgkey
+
+示例：
+#+BEGIN_QUOTE
+[base]
+name=CentOS-$releasever - Base
+baseurl=http://ftp.ksu.edu.tw/FTP/CentOS/7/os/x86_64/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[updates]
+name=CentOS-$releasever - Updates
+baseurl=http://ftp.ksu.edu.tw/FTP/CentOS/7/updates/x86_64/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[extras]
+name=CentOS-$releasever - Extras
+baseurl=http://ftp.ksu.edu.tw/FTP/CentOS/7/extras/x86_64/
+gpgcheck=0
+#+END_QUOTE
+
+***** TODO mirrorlist和baseurl的区别
+baseurl下存在repodata目录，该目录存放这分析RPM文件后得到的依赖关系信息的。
+
+***** 变量
+在.repo文件中可使用以下变量：
+- ~$releasever~ ，发行版的版本，从[main]部分的distroverpkg获取，如果没有，则根据redhat-release包进行判断。
+- ~$basearch~ ，cpu的基本体系组，如i686和athlon同属i386，alpha和alphaev6同属alpha。
+- ~$arch~ ，cpu体系，如i686,athlon等
+
+**** EPEL/Remi/RPMForge第三方仓库组件
+EPEL是Extra Packages for Enterprise Linux的缩写，提供除标准程序仓库外的其他第三方程序RPM文件（官网：https://fedoraproject.org/wiki/EPEL）
+由Fedora社区打造的，为RHEL及其衍生版本如CentOS提供高质量服务端用软件包。
+而rpmfusion.org则是提供桌面端用软件包。
+
+国内高质量的YUM源：
+- 中国科技大学-http://mirrors.ustc.edu.cn
+- 浙江大学-http://mirrors.zju.edu.cn/epel/
+- 上海交通大学-http://ftp.sjtu.edu.cn/fedora/epel/
+- 网易163-http://mirrors.163.com/
+- sohu-http://mirrors.sohu.com/fedora-epel/
+
+例如在CentOS6中安装Ansible时，则需要向/etc/yum.repo.d/添加epel配置文件，然后从第三方仓库搜索、下载和安装Ansible。
+#+BEGIN_EXAMPLE
+# 安装yum优先级插件，然后在仓库配置项中添加priority属性设置优先级别
+yum install yum-priorities
+
+# 安装epel.repo和epel-testing.repo到/etc/yum.repos.d/下
+
+rpm -Uvh http://mirrors.ustc.edu.cn/fedora/epel/6/x86_64/epel-release-6-8.noarch.rpm
+rpm -Uvh http://rpms.famillecollet.com/enterprise/remi-release-6.rpm
+# 导入key
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6
+
+yum install ansible
+#+END_EXAMPLE
+
+在CentOS6.6下安装subversion1.10，新建/etc/yum.repo.d/wandisco-svn.repo
+#+BEGIN_EXAMPLE
+[WandiscoSVN]
+name=Wandisco SVN Repo
+baseurl=http://opensource.wandisco.com/centos/6/svn-1.10/RPMS/x86_64/
+enabled=1
+gpgcheck=0
+#+END_EXAMPLE
+
+**** 本地仓库
+若没有连接网络，可将仓库存储在本地磁盘（光盘、U盘等挂载后和本地磁盘无异），然后配置/etc/yum.repos.d/cdrom.repo
+#+BEGIN_EXAMPLE
+[cdrom]
+name=cdrom
+baseurl=file:///mnt
+enabled=0
+gpgcheck=0
+#+END_EXAMPLE
+
+**** 命令
+#+BEGIN_EXAMPLE
+# 列出目前所用的仓库信息(包含启用与否)
+yum repolist all
+
+# 修改/etc/yum.repos.d下的仓库配置文件后，需要执行如下命令，清理缓存
+# 分别删除下载到/var/cache/yum下的rpm文件、依赖清单
+yum clean packages
+yum clean headers
+# 删除下载到/var/cache/yum下的rpm文件、依赖清单
+yum clean all
+
+# 然后重建缓存
+yum makecache
+#+END_EXAMPLE
+
+* APT
+Ubuntu的包管理工具。
+/etc/apt/sources.list 指定APT软件仓库的地址
+
+*** 常用命令
+#+begin_src
+apt-get update # 更新源
+apt-get install 包名 # 安装
+apt-get install 包名 --reinstall # 重新安装
+apt-get install -f 包名 # 修复安装
+
+apt-get remove 包名 # 卸载
+apt-get remove 包名 --purge # 卸载，并且移除配置等信息
+
+apt-get build-dep 包名 # 安装包的编译环境
+
+apt-get upgrade # 更新已安装的包
+apt-get dis-upgrade # 升级系统
+apt-get source 包名 # 下载包的源码
+
+apt-cache search 包名 # 搜索软件包
+apt-cache show 包名 # 显示包的说明、大小和版本等信息
+apt-cache depends 包 # 查看包的依赖项
+apt-cache rdependes 包 # 查看依赖该包的其他包
+#+end_src
+
+*** 更新源
+清华的镜像：https://mirrors.tuna.tsinghua.edu.cn/
+#+begin_src
+# 备份
+sudo cp /etc/apt/source.list /etc/apt/source.list.bk
+
+# 替换源(16.04LTS)
+sudo echo "# 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial main restricted universe multiverse
+# deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-updates main restricted universe multiverse
+# deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-updates main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-backports main restricted universe multiverse
+# deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-backports main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-security main restricted universe multiverse
+# deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-security main restricted universe multiverse
+
+# 预发布软件源，不建议启用
+# deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-proposed main restricted universe multiverse
+# deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ xenial-proposed main restricted universe multiverse" > /etc/apt/source.list
+
+# 更新源
+sudo apt-get update
+#+end_src

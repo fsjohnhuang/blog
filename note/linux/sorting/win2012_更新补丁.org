@@ -1,0 +1,40 @@
+* 查看已安装的补丁
+#+BEGIN_EXAMPLE
+# 输出到stdout
+wmic qfe list full
+
+# 输出为html
+wmic qfe list full /format:htable >C:\Temp\hotfixes.htm
+
+# 查看补丁和其他信息
+systeminfo
+#+END_EXAMPLE
+问题：但从上述命令没法发现需安装的补丁号，但安装时却有可能报已安装该补丁。
+解答：直接安装补丁，再查看日志
+* 离线安装补丁
+#+BEGIN_EXAMPLE
+wusa "abc\1.msu" /quiet /norestart /log:"abc\1.evt"
+#+END_EXAMPLE
+注意：日志采用evt格式，因此采用文本打开会乱码。
+* 在线更新补丁
+** Windows Server 2008
+*** 通过wuauclt命令
+https://web.archive.org/web/20111008173343/http://www.wsuswiki.com/
+若启用自动更新特性，那么可以通过以下命令操作
+#+BEGIN_EXAMPLE cmd
+% 检查是否有更新
+wuauclt.exe /detectnow
+
+% 检查是否有更新并安装
+wuauclt.exe /detectnow /updatenow
+
+% 打开Windows Updates GUI
+wuapp.exe
+#+END_EXAMPLE
+*** 通过wua api
+https://docs.microsoft.com/zh-cn/windows/desktop/Wua_Sdk/searching--downloading--and-installing-updates
+
+
+
+
+

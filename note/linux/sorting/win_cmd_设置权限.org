@@ -1,0 +1,35 @@
+#+startup: showall
+
+* Windows CMD CRUD ACL
+
+** 读取目录/文件ACL
+命令： ~cacls <filepath>~
+示例：
+#+begin_src cmd
+cacls "C:\User\john\Local Settings"
+#+end_src
+输出：
+#+begin_quote
+C:\Users\john\Local Settings Everyone:(DENY)(特殊访问:)
+
+                                      FILE_READ_DATA
+ 
+                             NT AUTHORITY\SYSTEM:(OI)(CI)(ID)F 
+                             BUILTIN\Administrators:(OI)(CI)(ID)F 
+                             john-PC\john:(OI)(CI)(ID)F
+#+end_quote
+
+*** 权限
+N: 无权限
+R: 读取
+C: 更改（写入）
+F: 完全控制
+
+** 更新目录/文件ACE
+#+begin_src cmd
+rem 保持其它ACE不变的前提下,更新指定ACE
+cacls <filepath> /E /C /P Everyone:C
+
+rem 保持其它ACE不变的前提下,更新目录下所有文件的ACE
+cacls <dirpath> /T /E /C /P Everyone:C
+#+end_src

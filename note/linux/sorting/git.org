@@ -1,0 +1,740 @@
+
+* 配置
+#+BEGIN_SRC 
+# 设置全局提交者的信息显示在更新历史中
+git config --global user.name '<user name>'
+git config --global user.email '<user email>'
+
+# 设置当前项目提交者信息，信息保存在项目目录下.git/config中
+git config --local user.name '<user name>'
+git config --local user.email '<user email>'
+
+# 彩色显示
+git config --global color.ui auto
+
+# 正常显示中文文件名
+git config --global core.quotepath off
+
+# 子命令别名
+git config --global alias.co checkout
+#+END_SRC
+
+
+上述配置会保存到~/.gitconfig文件中
+
+
+** HTTP凭证存储
+当通过HTTP协议和远端仓库通信时，GIT会要求附上帐号、密码，并自动生成一个防止重放攻击的随机码。
+因此每次和remote repos通信时就会要求用户输入帐号密码，但我们可将帐号密码存储起来，后续操作就会自动填写。不同OS采用不同的方式管理密码。
+1) MAC下提供的是osxkeychain管理密码
+2) Windows下，CMD用git-credential-winstore，GitGUI则用git-credential-manager
+3) Linux下，CMD用git-credential-store（存储文件中）或git-credential-cache（存储在内存中）
+
+#+BEGIN_EXAMPLE
+# 查看当前HTTP凭证存储方式
+git config --list | grep credential
+
+# 设置当前项目使用git-credential-store，默认保存在$HOME/.git-credentials
+git config --local credential.helper store
+
+# 设置当前项目使用git-credential-store，并将信息保存到指定文件中
+git config --local -e # 进入编辑模式
+# 在[credential] section下添加
+helper = store --file $HOME/git-credentials/myproject.gitcredentials
+
+# 清理凭证存储方式
+git config --local --unset credential.helper -f
+#+END_EXAMPLE
+
+* 操作
+工作区(Work Directory)
+暂存区(Index 或 Staged)
+本地仓库(Repository)
+
+** 获取远程仓库
+#+BEGIN_SRC 
+git clone http://127.0.0.1:9999/root/test.git
+cd test
+touch README.md
+git add README.md
+git commit -m "add README"
+# git remote add origin http://127.0.0.1:9999/root/test.git
+git push -u origin master
+# git push -u origin --all
+# git push -u origin --tags
+#+END_SRC
+
+#+begin_src 
+# 查看远程库版本信息
+git remote -v 
+
+# 查看远程库信息
+git remote show <remote>
+
+# 从当前分支恢复指定文件到暂存区
+git reset head <filepath>
+
+# 文件改名
+git mv <old> <new>
+
+# 删除文件
+git rm <file>
+
+# 取消版本跟踪，但不删除文件
+git rm --cached <file>
+
+# 修改最后一次提交
+git commit --amend
+
+# 查看某文件的提交日志（含对比信息）
+git log -p <file>
+
+# 查看某文件的提交日志（仅含sha码、提交日志信息）
+git blame <file>
+#+end_src
+
+
+cherry-pick
+
+** 撤销
+#+BEGIN_EXAMPLE
+# 撤销暂存的某文件
+git reset HEAD <file>
+
+# 撤销暂存的所有内容
+git reset HEAD
+
+# 撤销工作区的某文件
+git checkout -- <file>
+
+# 撤销到某提交的某文件
+git checkout <commit_id> <file>
+
+git reset --hard HEAD^         # 回退到上个版本
+git reset --hard HEAD~3        # 回退到前3次提交之前，以此类推，回退到n次提交之前
+git reset --hard <commit_id>     # 退到/进到 指定commit的sha码
+#+END_EXAMPLE
+
+
+** 文件对比
+#+begin_src
+# 比较工作区和暂存区中指定文件
+git diff <filepath>
+
+# 比较工作区和当前分支中指定文件
+git diff head <filepath>
+
+# 比较暂存区和当前分支中指定文件
+git diff --cached <filepath>
+
+# 比较某分支和当前分支中指定文件
+git diff <branch_name> <filepath>
+
+# 与某次提交进行比较
+git diff <commit_id> <filepath>
+#+end_src
+
+** 分支操作
+#+BEGIN_SRC 
+# 查看本地所有分支信息
+git branch
+
+# 查看本地和拉取到本地的远程所有分支信息
+git branch -a
+
+# 创建新分支
+git branch <new_branch_name>
+
+# 创建新分支并切换过去
+git checkout -b <new_branch_name>
+
+# 从标签创建分支
+git checkout -b <new_branch_name> <tag_name>
+
+# 从指定分支床将分支
+git checkout -b <new_branch_name> <old_branch_name>
+
+# 切换分支
+git checkout <branch_name>
+
+# 删除分支
+git branch -d <branch_name>
+
+# 向远程仓库推送分支
+git push origin master:master
+
+# 从标签创建detached branch
+# 在detached branch中可作实验性修改然后提交
+# 当执行git checkout <branch_name>切换到其他分支时，detached branch就会被丢弃
+# 若要保存修改则要将detached branch转换为实际branch，git checkout -b <new_branch_name>
+git checkout <tag_name>
+
+# git pull后会将remote的分支信息同步到本地，但没有创建与之对应的本地分支
+# 通过下面命令生成对应的本地分支
+git branch --track <local_branch> origin/<remote_branch>
+
+# 向远程推送分支
+git push <remote> :<branch_name>
+
+# 删除本地存在,而远程已经删除的分支
+git remote prune origin
+#+END_SRC
+
+注意：
+1) 分支名称和标签名称尽量保持不一样，避免使用全路径引用（标签明一般如v0.1.0，分支则用0.1.0）
+2) 标签v0.1.0的全路径引用为refs/tags/v0.1.0
+3) 分支0.1.0的全路径引用为refs/heads/0.1.0
+
+fast forward？
+
+*** 分支合并
+#+BEGIN_SRC 
+# 以非fast-forward方式合并分支到当前分支
+git merge --no-ff <branch_name>
+
+# 衍生指定分支到当前分支
+git rebase <branch_name>
+#+END_SRC
+
+** 标签操作
+#+BEGIN_SRC
+# 为当前分支版本打上tag
+git tag -a <tag_name> -m "<message>"
+
+# 为当前分支指定版本追加tag，version_hash就是提供的版本hash编码
+git tag -a <tag_name> -m "<message>" <version_hash>
+
+# 查看当前分支的标签
+git tag
+
+# 删除标签
+git tag -d <tag_name>
+
+# 查看指定标签的具体内容
+git show <tag_name>
+
+# 向远程仓库推送标签
+git push origin :<tag_name>
+
+# 向远程仓库推送所有标签
+git push --tags
+#+END_SRC
+
+** QA
+1) 提交和tag的签名技术？
+2) 远程仓库已经将分支删除，但本地执行 ~git pull~ 后执行 ~git branch -a~ 依然看到 remote/origin/分支名。为什么？如何处理？
+
+* 工作流
+** 集中式工作流
+只有一条主分支(master)，用户每天从主分支拉取最新代码，本地修改后提交到本地仓库，测试通过后提交到远程仓库。
+适合1~2人的规模。
+
+*** 优点
+1) 流程简单
+
+*** 缺点
+1) 提高主分支代码不可用的风险
+
+** 功能分支工作流
+有一条主分支(master)，开发时针对每个功能从主分支中创建一个独立的功能分支(feature_xxx)，功能分支验证后再合并到主分支和其它功能分支上，然后删除该功能分支。
+适合5人以下的规模
+
+*** 发布阶段
+对主分支打上标记（如：1.0.0-RELEASE），然后从主分支拉取代码发布。
+
+*** 合并功能分支到主分支的操作
+在功能分支申请pull request
+
+** GitFlow工作流
+源自Vincent Driessen在2010年提出的分支模型。
+适合大规模
+标签命名规范：1.0.0-RELEASE。
+
+有主分支(master)、开发分支(develop)、功能分支(feature-xxx)、预发布分支(release-x.y.z)、bugfix分支、hotfix-x分支。
+
+*** 主分支
+1) 代码必须可运行
+2) 从hotfix和预发布分支合并代码，打上标签后，用于向正式环境发布
+
+标签是为正式环境发布时生成代码的快照
+
+
+*** 开发分支
+1) 开发新功能时从开发分支创建一个独立的功能分支，功能分支作单元测试后合并到开发分支上，注意：在发布到正式前都不要删除该分支，避免develop和预发布分支重建时代码丢失
+2) 进入uat/ver阶段，则从开发分支创建一个预发布分支
+3) 在预发布分支发现问题时，有两种方式
+   1) 从预发布分支创建一个bugfix分支，问题修复并完成单元测试后，合并到预发布分支，然后删除该分支
+   2) 直接在预发布分支修改代码
+4) 预发布分支验证通过后，则合并到主分支和开发分支上，然后删除该分支
+
+第三中的bugfix可以省略，直接在预发布分支上修复bug
+一个功能分支可能由一个人开发，或者由一个小组开发
+   
+
+*** hotfix分支
+当正式环境发现的bug无需马上处理时，可排到下一个版本发布，那么就不用创建hotfixs分支，而是在develop分支上拉一个功能分支即可。
+
+1) 当正式环境发现bug，那么就从主分支对应的标签上创建一个hotfix分支
+2) hotfix修复并集成测试通过后，合并到主分支并打上标签后，发布正式，并删除该分支。同时也要合并到develop和预发布分支，防止遗漏这个bug修正
+3) 有可能主分支标签有1.0.0-RELEASE和1.1.0-RELEASE，现在发现1.0.0下有bug，而1.1.0没有，那么就从1.0.0创建hotfix，验证后合并为1.0.1版本。
+   
+
+*** 裁剪
+可省去功能分支，直接在开发分支上采用集中式工作流的方式开发，但就无法做到预开发了。
+
+
+*** 实践原则
+1) master分支时刻保持正常运行，一般不允许开发者直接在master分支上修改或提交代码(gitlab上将其设置为protect)
+2) master安排专人管理(gitlab上的权限管理)
+3) 集成自动化测试，在合并前通过自动化测试
+4) 功能分支往develop分支合并前必须
+   1) 本地编译通过
+   2) 修改的内容没有新的sonarqube高级别的defect
+   3) 通过单元测试和集成测试
+5) develop分支实行每日构建或实时构建，若出现问题则禁止其他功能分支合并，并在下一个新创建功能分支前修复或回滚
+6) 分支合并时，尽可能不使用fast forward方式，以便回滚和状态确认
+7) 分支越多意味着沟通/合并/冲突等成本的增加，在精益开发中强调避免浪费，因此用完就要删除本地和远程的功能分支
+8) 预发布分支往主分支合并前，需要结合流程规范(申请、批准、审核等)
+
+
+*** 实例分析
+
+*** 工具
+git-flow脚本和SourceTree
+
+**** 预发布分支中发现某个功能分支的提交有问题，要回滚该功能分支的内容
+
+
+** github-flow
+适合时常发布的项目
+
+主分支只有master，辅助分支有hotfix和feature分支
+
+master用于UAT、VER和发布
+新功能开发将从master创建一个新feature分支，单元测试/UAT测试通过后申请Pull Request（review后）合并到master分支，然后在master分支进行VER测试，并发布，打上标签
+有bug时，从标签创建分支，修改测试通过申请Pull Request合并到master发布。
+
+* GitLab
+** VirtualBox使用
+#+BEGIN_EXAMPLE
+# 查看所有虚拟机
+VBoxManage list vms
+
+# 查看虚拟机的详细信息
+VBoxManage list vms --long
+
+# 查看运行者的虚拟机
+VBoxManage list runningvms
+
+# 后台运行虚拟机
+VBoxManage startvm <vm_name> -type headless
+
+# 运行虚拟机并开启远程连接
+VBoxManage startvm <vm_name> -type vrdp
+
+# 关闭虚拟机
+VBoxManage controlvm <vm_name> acpipowerbutton
+
+# 强制关闭虚拟机
+VBoxManage controlvm <vm_name> poweroff
+#+END_EXAMPLE
+*** 虚拟机网络配置
+1) VM采用NAT网络接入方式
+   + 配置端口转发：ssh tcp 9022 22
+   + 链接：ssh -p 9022 root@127.0.0.1
+
+** CentOS7下安装
+gitlab ce版的国内镜像：https://mirror.tuna.tsinghua.edu.cn/help/gitlab-ce/
+
+#+BEGIN_SRC 
+# 安装ssh服务
+yum install -y curl policycoreutils-python  openssh-server openssh-clients
+
+# 开机自动启动
+systemctl enable sshd.service
+systemctl start sshd.service
+
+# 设置入站规则
+firewall-cmd --permanent --add-service=http
+systemctl reload firewalld.service
+
+# 安装gitlab.rpm
+rpm -i gitlab-ce-10.0.0-ce.0.el7.x86_64.rpm
+
+# 配置
+vim /etc/gitlab/gitlab.rb
+
+# 默认端口为80、8080和9090端口，而jenkins默认为8080端口，因此修改端口
+external_url 'http://<你的服务器地址或域名>:60200‘ # 站点访问地址
+unicorn['port'] = 60201
+prometheus['listen_address'] = 'localhost:60202
+
+# 加载配置
+gitlab-ctl reconfigure
+# 重启
+gitlab-ctl restart
+
+# 开机自动重启
+systemctl enable gitlab-runsvdir.service
+systemctl start gitlab-runsvdir.service
+
+# 启动gitlab
+gitlab-ctl start
+
+# 关闭gitlab
+gitlab-ctl stop
+#+END_SRC
+然后访问gitlab站点，默认帐号为root，并重置密码。
+
+** 汉化
+#+BEGIN_SRC
+# 查看gitlab版本号，假设返回的是gitlab-ce 10.0.0
+head /opt/gitlab/version-manifest.txt
+# 或 cat /opt/gitlab/embedded/service/gitlab-rails/VERSION
+
+# 下载gitlab源码
+git clone https://gitlab.com/xhang/gitlab
+
+# 生成汉化版补丁
+git branch -a # 查看分支信息
+# 对比10-0-stable..remotes/origin/10-0-stable-zh间的差异，并生成补丁
+# 注意：版本号完完全全对应上，10.0只能对应10.0不能对应10.0.+
+git diff remotes/origin/10-0-stable remotes/origin/10-0-stable-zh > ~/10.0.diff
+# 备份
+cp -r /opt/gitlab/embedded/service/gitlab-rails{,.ori}
+
+# 打补丁
+gitlab-ctl stop
+patch -d /opt/gitlab/embedded/service/gitlab-rails -p1 < /home/10.0.diff
+gitlab-ctl start
+gitlab-ctl reconfigure
+#+END_SRC
+
+** 邮箱配置
+官方教程：https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/doc/settings/smtp.md
+在/etc/gitlab/gitlab.rb
+#+BEGIN_SRC
+gitlab_rails['smtp_enable'] = true
+gitlab_rails['smtp_address'] = "smtp.exmail.qq.com"
+gitlab_rails['smtp_port'] = 465
+gitlab_rails['smtp_user_name'] = "xxxx@xx.com"
+gitlab_rails['smtp_password'] = "password"
+gitlab_rails['smtp_authentication'] = "login"
+gitlab_rails['smtp_enable_starttls_auto'] = true
+gitlab_rails['smtp_tls'] = true
+gitlab_rails['gitlab_email_from'] = 'xxxx@xx.com'
+#+END_SRC
+
+** 冲突处理
+前提：已为两个分支建立对应的MR
+场景：分支A先完成MR，而分支B修改内容与分支A冲突，那么分支B的MR页面会提示
+#+BEGIN_QUOTE
+There are merge conflicts 
+#+END_QUOTE
+那么只有主程序员可以处理冲突，点击 *Resolve conflicts* 在页面中处理 或 下载到本地处理。
+
+处理冲突提交合并后，远程的分支A和分支B都会合并master的代码。因此本地执行 ~git pull~ 即可。
+
+** TODO 用户信息集成
+官方教程：https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/doc/settings/ldap.md
+
+** TODO Sonar集成
+** TODO Code Review集成
+*** 基于MR的Code Review
+1) 通过MR单的Assignee指派Owner/主Reviewer
+2) 通过评论区的@someone指派额外的Reviewer
+3) 通过与否
+   1) 通过：Reviewer在追加评论 ~:thumbsup:~
+   2) 不通过
+      1) 直接在代码行上添加评论
+      2) 在评论区添加评论
+4) Owner/主Reviewer统计全票通过后在执行分支合并
+*** TODO IDE集成
+   
+
+** TODO 缺陷管理集成
+Redmine
+JIRA
+** TODO CI和CD
+CI：Jenkins、Travis CI
+** QA
+
+*** 网站报502 GitLab is not responding
+原因：GitLab网站启用80端口，而Linux中1024以下端口只能root用户才有权限使用。
+解决办法：
+   1) 配置为非80端口，然后以root通过iptables作端口映射 ~iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080~
+   2) 利用nginx等转发，不过nginx需要使用root权限
+   3) 直接用root启动GitLab
+   
+分析思路：
+   1) ~gitlab-ctl status~ 多次发现unicorn服务PID不断增加，而其他服务PID不变化，那么可以定位时unicorn有问题
+   2) ~gitlab-ctl tail unicorn~ 查看unicorn运行日志，发现如下日志，就能断定是权限问题
+   #+BEGIN_QUOTE
+   Errno::EACCES: Permission denied - bind(2) for 0.0.0.0:80
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/socket_helper.rb:149:in `bind'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/socket_helper.rb:149:in `new_tcp_server'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/socket_helper.rb:129:in `bind_listen'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/http_server.rb:231:in `listen'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/http_server.rb:808:in `block in bind_new_listeners!'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/http_server.rb:808:in `each'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/http_server.rb:808:in `bind_new_listeners!'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/lib/unicorn/http_server.rb:130:in `start'
+   /opt/gitlab/embedded/lib/ruby/gems/2.3.0/gems/unicorn-5.1.0/bin/unicorn:126:in `<top (required)>'
+   /opt/gitlab/embedded/bin/unicorn:23:in `load'
+   /opt/gitlab/embedded/bin/unicorn:23:in `<top (required)>'
+   #+END_QUOTE
+
+*** 内存消耗过大
+原因：默认开启32个进程
+解决办法：对于内存只有4G或更低时，将/etc/gitlab/gitlab.rb的unicorn['work_process']设置为2即可（若设置为1则可以导致服务器卡死）
+
+*** GitLab上Activity时间存在8小时时差
+原因：可能是时区问题
+解决办法：gitlab_rails['time_zone'] = 'Asia/Shanghai'
+
+
+
+
+
+
+
+* 其他
+
+没有测试、没有重构和没有CI的代码被称为legacy code，严重影响代码质量。
+
+degrade(退化)：以前修复好的bug，因本次修改再次出现了。
+因此要知道bug首次发现的时间、原因、修复过程、修复人员和哪次提交中被修复了。
+bug票要体现在缺陷管理系统，也要体现在CI测试结果记录中
+缺陷管理系统中的统筹信息不仅要对所有开发人员开放，还要向项目所有干系人开放。
+
+验证环境（VER/Staging）
+
+应用：
+1) 环境重置：发布正式时一同发布验证环境
+2) 依赖安装
+3) 配置项
+
+中间件：
+配置文件按环境分类，版本化管理。
+正式环境密码不放在版本管理系统，而是通过脚本每次发布时设置
+工具：Chef、Puppet、Capistrano、Fabric、ServerSpec等
+
+数据库：
+1) Table/View/Package/Procedure的Schema可以保持一致
+2) SQL不一定可以在开发环境执行
+3) DDL和DML执行顺序的不同可能会导致不同的结果
+4) DBLink等不一定可以建
+5) 只能重建主数据(master data)，关联数据(transaction data)因数据量大无法重建
+
+主数据(master data)：初始化程序所使用的数据
+关联数据(transaction data)：是用户数据，测试时可以通过Fixture机制加载和卸载
+
+数据库模式
+1) 无论什么环境都能用相同的步骤构建数据库
+2) 能够反复多次执行
+3) 文本文件
+
+数据库的CI称为CDBI(Continuous DataBase Integration)
+数据库迁移工具的特性
+1) 管理SQL执行顺序和需要执行哪些SQL
+2) 管理模式定义编辑的冲突
+3) 提供回滚机制
+4) 提供主数据的加载
+
+需要对数据库迁移文件进行版本管理，然后通过测试验证合并是否正确
+
+
+邮件的问题：
+1) 邮件非任务/课题管理软件，
+   1) 即使归类一类主题的邮件进行查阅，也无法弄清问题
+   2) 无法进行状态管理
+2) 非直观、检索性不强（即使提供全文检索）
+3) 无法共享信息
+
+
+** 缺陷驱动开发(TiDD)
+通过版本管理工具的Client/Server Side Hook，检测提交信息中是否有关联的bug票号，无则拒绝提交，从而让每个提交和bug票据关联。
+
+*** 缺陷管理与版本管理关联
+1) 从提交连接到问题票
+2) 从问题票连接到提交
+3) 提交的同时修改问题票的状态
+
+
+*** GitHub/GitLab
+
+**** 与自身缺陷管理工具集成
+在提交消息中写 ~Fixed #21~ ，那么issues中21号问题票就会添加提交记录，而状态也编程close。
+
+**** 与第三方缺陷管理工具集成
+通过Service Hooks与第三方关联
+
+
+** Scrum的术语中的课题分类
+
+*** epic
+大粒度需求、跨部门的课题。
+需求定义阶段的课题都是epic级别的。
+
+**** 特点
+1) 与工程师的相关的事情不多
+2) 以确定优先顺序为主要目的，因此以一览表形式更有效
+3) 一般都处于模糊状态，因此不适合采用固定格式
+4) 要方便多人编辑、共享
+
+
+**** 示例
+1) 构建开拓新市场用的系统
+2) 为每个用户构建信息中心，提供对用户所使用的产品的统计信息和用户的访问情况进行分析的功能
+
+*** story
+具体的、可直接为用户带来价值的需求
+一般由产品负责人(product owner)或高级工程师编写
+与缺陷票据关联并指定负责人，若涉及多个部门，则通过表格再细分出来，由各部门自行建立子票据和指派具体的负责人。
+
+**** 示例
+1) 为体现出对顾客的欢迎，想要在顾客登陆时根据用户信息显示欢迎等信息
+2) 将每个用户ID的访问情况，按小时、属性分别进行统计，并提供阅读和下载工能
+
+*** task
+多个任务的完成构成story的完成
+
+**** 特点
+1) 具体的作业内容
+2) 有且仅有一个负责人
+3) 关联story，因此story关联问题票据，那么task则关联子问题票据
+
+**** 示例
+1) 初始化系统
+2) 写单元测试
+
+*** bug
+由QA和用户提出，按规模可定义为story或task粒度。
+
+** 持续集成(CI)
+
+*** 集成内容
+1) 所有代码集中到一处
+2) 设置依赖程序(库、NAS)等的路径
+3) 必要条件下进行编译
+4) 进行数据库构建和数据加载
+5) 必要条件下对中间件作配置和启动
+6) 执行单元测试、集成测试和用户验收测试等
+
+
+
+* 迁出模式
+锁模式：加锁->编辑->解锁
+版本管理系统：VSS(Visual Source Safe)、Peroforce、PVCS
+
+合并模式：复制->编辑->合并冲突
+版本管理系统：CVS、Subversion、Git和Mercurial
+
+在合并模式为主的版本管理系统中，对二进制文件、重要模块可适当使用锁模式从而达到高效的版本管理。
+
+* 版本管理方式
+基于文件：每个文件有独立的版本号，若要回滚到某个时间，那么就要分别回滚相关的文件
+版本管理系统：VSS(Visual Source Safe)、CVS
+
+基于变更集：多个文件组成的变更作为一个独立的版本号，若要回滚到某个时间，那么直接返回到对应的变更集版本号即可
+版本管理系统：Subversion、Git和mercurial
+
+Subversion创建分支容易，但合并分支困难。
+
+
+* 代码规范
+
+** 命名
+1) 表达是什么和做什么，而不是怎样做
+#+BEGIN_EXAMPLE
+// Bad smell
+function getUserInfoFromVector(){}
+
+// Good taste
+function getUserInfo(){}
+#+END_EXAMPLE
+1) 代码即注释
+2) 出现嵌套循环时，采用有意义的名称命名迭代变量，而不是 ~i,j~ 等
+3) 避免使用缩写，尤其是拼音缩写，也不要使用非约定俗成的缩写
+4) 避免使用魔法数
+5) 不要害怕长的变量名
+#+BEGIN_EXAMPLE
+let standars // 来料入厂检验标准
+
+let incomingInspectionStandars // 通过命名就可以知道含义，不必额外附加注释
+#+END_EXAMPLE
+
+
+** 函数
+为实现一个函数只做一件事，因此将函数分为 *骨架函数* 和 *步骤函数*
+*骨架函数* ，组织各步骤函数和其他骨架函数按业务逻辑执行
+*步骤函数* ，完成具体任务
+#+BEGIN_EXAMPLE
+// 步骤函数
+function anyPass(){
+    preds = arguments
+    return x => {
+       let isPass = false
+       for (let i = 0; isPass == false && i < preds.length; i++){
+           let pred = preds[i]
+           isPass = isPass || pred(x)
+       }
+
+       return isPass
+    }
+}
+
+function isEmpty(x){
+    return isEmpty[type(x)](x)
+}
+isEmpty.string = x => /^[\S\u200\u300]*$/.test(x)
+isEmpty.number = x => x == 0
+
+function isNull(x){
+    return x == null
+}
+
+const isNullorEmpty = anyPass(isNull, isEmpty)
+
+
+// 骨架函数
+function getValidateUserNames(){
+    const allUserNames = getUserNames()
+    const userNames = filter(isNullorEmpty, allUserNames)
+
+    return userNames
+}
+#+END_EXAMPLE
+
+* 测试
+单元测试(Unit Test, UT)
+** 原则
+1) Tests As Documentation
+2) Fully Automated and Self-Checking
+3) Do No Harm(不为测试添加、删减逻辑)
+4) Keep Tests as Simple as Possible(为保证UT的代码不会出错，必须写得越简单越好)
+5) Tests as Safety Net
+6) Defect Localization
+7) Treat Tests as Code
+8) Fast & Repeatable
+** 模式
+1) Forth Step
+2) State Verification vs. Behavior Verification
+3) Test Doubles
+
+集成测试(Integration Test, IT)
+用户验证测试(User Acceptance Test, UAT)
+回归测试
+
+
+windows建立符号链接
+#+BEGIN_EXAMPLE
+mklink /D /J 符号路径 目录文件路径
+#+END_EXAMPLE
+
+
+
+
+* 配置化架构
+定义：以可配置的方式构建软件的方法。它是在领域建模的基础上，以配置表述业务，以配置组织架构元素（服务、组件、数据），并对配置进行规范化、自动化的管理。
+实现手段：通过DSL描述组件间的关联，实现用户自行修改配置即可修改软件。
