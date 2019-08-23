@@ -34,7 +34,7 @@
   git config --global alias.st status
   git config --global alias.type cat-file -t
   git config --global alias.dump cat-file -p
-  git config --global alias.hist log --pretty=format:'%h %ad | %s%d [%a]' --graph
+  git config --global alias.hist "log --pretty=format:'%h %ad | %s%d [%a]' --graph"
   #+END_EXAMPLE
 
 * 本地操作
@@ -80,8 +80,8 @@
   # 带注释的标签，git会创建一个tag对象保存注释和其指向的commit
   git tag -a
   # 不带注释的标签，tag直接指向commit id，不会创建tag对象
-  git tag 
-  
+  git tag
+
 
   # 分离头指针(detached head)，即HEAD指向一系列的提交并且没有与某分支关联，git会将其当成垃圾清理掉
   # 为分离头指针建立关联分支
@@ -103,7 +103,7 @@
   # 以指定的标签作为基础创建并切换到detached branch
   git checkout <tag>
   # 注意：分支名称和标签名称必须有所区分，若有重复那么引用时就要使用全路径refs/heads/<branch>和refs/tags/<tag>
-  
+
   # 分支合并时若两个分支不存在同一个父提交，那么即使没有明显的冲突也会被认为存在冲突
   # 合并后产生的commit存在两个父commit
   # 以非fast-forward方式将指定分支内容合并到当前分支
@@ -185,7 +185,7 @@
   git cat-file -t <id>
   # 通过对象id查看对象内容
   git cat-file -p <id>
-  
+
   # 将refs/heads、refs/tags/和refs/remotes/下的文件和及内容压缩保存到packed-refs
   git gc
 
@@ -203,7 +203,7 @@
 
   # 添加关联的远端仓库信息
   git remote add <remote-repo-name> <repo-uri>
-  
+
   # 将本地新建的分支推送到远端仓库
   git push --set-upstream <remote-repo-name> <local-branch-name>
   # 将本地标签推送到远端仓库
@@ -266,7 +266,7 @@
   .git/
     - HEAD     # 内容为 ref: refs/heads/master，记录当前所在分支
     - config   # 内容为 git config --list --local的输出信息
-    - refs/   
+    - refs/
       - heads/ # 分支目录
         - master # master分支，存放分支指向的commit id，执行git cat-file -t `cat .git/refs/heads/master`回显为commit，表示指向的一个commit对象
         - temp   # temp分支，存放分支指向的commit id
@@ -280,7 +280,7 @@
   #+END_EXAMPLE
   一个commit对应一棵tree，一颗tree包含0~n个blob和0~n棵tree。tree对应文件系统的目录，而blob对应文件系统的文件，注意的是文件内容相同的文件被保存为同一个blob。整体保存该commit对应的文件系统快照。
   例如：一个commit仅包含./doc/readme，那么一个tree表示./，一个tree表示doc，一个blob表示readme。
-  
+
 * TODO 服务端
 #+BEGIN_EXAMPLE bash
 # 创建用户
@@ -314,9 +314,9 @@ git clone --bare <repo-uri> <repo>
      2) 安装依赖
         #+BEGIN_EXAMPLE bash
         yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel asciidoc
-        yum install  gcc perl-ExtUtils-MakeMaker 
+        yum install  gcc perl-ExtUtils-MakeMaker
         wget http://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.14.tar.gz
-        tar zxvf libiconv-1.14.tar.gz 
+        tar zxvf libiconv-1.14.tar.gz
         cd libiconv-1.14
         ./configure --prefix=/usr/local/libiconv
         make && make install
@@ -335,7 +335,7 @@ git clone --bare <repo-uri> <repo>
         #+END_EXAMPLE
 
 * 工作流
-  
+
 ** 因素
    1) 团队人员组成
    2) 研发设计能力
@@ -368,7 +368,7 @@ git clone --bare <repo-uri> <repo>
    |          |          |          |           | feat-a    |           |          |
    |          |          |          | commit-b1 | commit-b2 | commit-b3 |          |
    |          |          |          |           |           | feat-b    |          |
-   
+
 ** GitLabFlow
    适用因素：
    1) 基于特性分支开发

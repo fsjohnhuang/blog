@@ -1,3 +1,5 @@
+#+startup: content
+
 * Y7000 2019
 ** wifi adapter not found
 1) 输入 ~sudo rfkill list all~ 查看所有无线设备驱动的信息
@@ -64,6 +66,28 @@ Nouveau为Nvidia显卡的非官方支持的开源驱动
       1) 搜索并进入 Fcitx Configuration
       2) 点击底部的 ~+~ 添加 GooglePinyin 即可
 
+* WPS中文字体显示问题
+
+** 字体缺失
+   1) 下载字体(./wps_symbol_fonts)
+      #+begin_example bash
+      sudo cp ./wps_symbol_fonts /usr/share/fonts
+      #+end_example
+   2) 生成字体索引信息
+      #+begin_example bash
+      sudo mkfontscale
+      sudo mkfontdir
+      sudo fc-cache
+      #+end_example
+
+** 中文字体大小不一致
+   安装字体即可
+   #+begin_example bash
+   sudo apt install ttf-wqy-microhei # 文泉驿-微米黑
+   sudo apt install ttf-wqy-zenhei   # 文泉驿-正黑
+   sudo apt install xfonts-wqy       # 文泉驿-点阵宋体
+   #+end_example
+
 * apt-get
 以下命令均在root用户下执行
 #+begin_example bash
@@ -84,29 +108,41 @@ apt-cache rdepends <package> # 获取依赖该包的其它包
 apt-get source <package> # 下载源码
 apt-get check # 检查是否有损坏的依赖
 apt-get clean && apt-get autoclean # 清理无用的包
+
+apt-get add-apt-repository ppa:<repos> # 添加PPA仓库
+apt-get add-apt-repository --remove ppa:<repos> # 移除PPA仓库
 #+end_example
+
+** 源
+默认位置：/etc/apt/sources.list
+
 * Swap Ctrl-R with CapsLock
-  1) ~vi ~/.Xmodmap~
-     #+begin_example text
-     !
-     ! swap Caps_Lock <---> Control_R
-     !
-     remove Lock = Caps_Lock
-     remove Control = Control_R
-     keysym Control_R = Caps_Lock
-     keysym Caps_Lock = Control_R
-     add Lock = Caps_Lock
-     add Control = Control_R
+** 通过xmodmap
+   1) ~vi ~/.xmodmap~
+      #+begin_example text
+      !
+      ! swap Caps_Lock <---> Control_R
+      !
+      remove Lock = Caps_Lock
+      remove Control = Control_R
+      keysym Control_R = Caps_Lock
+      keysym Caps_Lock = Control_R
+      add Lock = Caps_Lock
+      add Control = Control_R
 
-     !
-     ! swap Esc <---> `(on the left of '1' key)
-     !
-     keysym Escape = grave asciitilde grave asciitilde
-     keysym grave = Escape
-     #+end_example
-  2) ~xmodemap ~/.Xmodemap~
+      !
+      ! swap Esc <---> `(on the left of '1' key)
+      !
+      keysym Escape = grave asciitilde grave asciitilde
+      keysym grave = Escape
+      #+end_example
+   2) 每次重新进入系统(重启、锁屏后重新进入)和键盘重新接入(多模式键盘)，都要执行 ~xmodemap ~/.xmodemap~ ；
+   3) 注意重复在执行会撤销设置；
+   4) 可以通过 ~xev~ 获取keycode。
 
-  we can achieve keycode by ~xev~.
+** 通过setxkbmap
+   1) 每次重新进入系统(重启、锁屏后重新进入)和键盘重新接入(多模式键盘)，都要执行 ~/usr/bin/setxkbmap -layout us -option "ctrl:nocaps"~ ；
+   2) 由于可重复执行，因此可以放在 =~/.zshrc= 中。
 
 * TODO ~/etc/rc.local~ and ~/etc/init.d/~
 * TODO ~/etc/profile~ and ~/etc/profile.d/~
@@ -146,3 +182,6 @@ apt-get clean && apt-get autoclean # 清理无用的包
     1) 启用 ~/etc/profile~ 的配置
        1) 在 =~/.zshrc= 中添加 ~source /etc/profile~ 并保存
        2) 执行 =source ~/.zshrc=
+
+* 邮件客户端
+Claws Mail.

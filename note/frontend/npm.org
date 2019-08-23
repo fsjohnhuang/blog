@@ -85,6 +85,9 @@ NPM registry 管理工具，能够查看和切换当前使用的registry。
 
    # 访问registry的主页
    nrm home
+
+   # 添加源
+   nrm add <registry_name> <registry_url>
    #+end_example
 
 ** 常规命令
@@ -121,6 +124,11 @@ NPM registry 管理工具，能够查看和切换当前使用的registry。
     npm config delete proxy
     npm config delete http-proxy
     npm config delete https-proxy
+
+    # 获取设置的值
+    npm config get proxy
+    npm config get http-proxy
+    npm config get https-proxy
     #+end_example
  2) 当前操作配置网络代理
     #+begin_example bash
@@ -153,3 +161,4 @@ yarn start # starts the development server
 yarn build # bundles the app into static files for production
 yarn test # starts the test runner
 #+end_example
+* TODO 搭建私库
