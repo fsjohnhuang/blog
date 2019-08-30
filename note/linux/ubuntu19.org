@@ -1,3 +1,4 @@
+#+title: UBUNTU19
 #+startup: content
 
 * Y7000 2019
@@ -147,7 +148,7 @@ apt-get add-apt-repository --remove ppa:<repos> # 移除PPA仓库
 * TODO ~/etc/rc.local~ and ~/etc/init.d/~
 * TODO ~/etc/profile~ and ~/etc/profile.d/~
 * TODO Zsh
-** 查看系统当前支持的shell
+2** 查看系统当前支持的shell
    #+begin_example bash
    cat /etc/shells
    #+end_example
@@ -185,3 +186,85 @@ apt-get add-apt-repository --remove ppa:<repos> # 移除PPA仓库
 
 * 邮件客户端
 Claws Mail.
+
+* 其它工具
+** TODO ranger
+Console file manager with VI key bindings.
+http://git.midea.com/supplychainsystem/qms/ehs-project
+
+
+*** 配置
+#+begin_example bash
+# 生成配置文件所在目录 ~/.config/ranger
+ranger --copy-config=all
+#+end_example
+
+1) 删除不想预览的文件类型
+   在 =~/.config/ranger/scope.sh= 的externsions部分，注释掉不想预览的文件类型即可。
+
+*** 使用
+参考 http://www.mikewootc.com/wiki/linux/usage/ranger_file_manager.html
+#+begin_example bash
+zh # 显示隐藏文件
+
+S # 在当前目录打开新的终端
+#+end_example
+
+** Chrome
+
+*** 快捷键
+    | Action                         | Shortcut              |
+    |--------------------------------+-----------------------|
+    | Close current tab              | Ctrl + w              |
+    | Close current window           | Ctrl + Shift + w      |
+    | Close chrome                   | Ctrl + Shift + q      |
+    | Open new tab                   | Ctrl + n              |
+    | Open new tab in incognito mode | Ctrl + Shift + n      |
+    | Toggle Devtools                | Ctrl + Shift + j      |
+    | Clear browsing data            | Ctrl + Shift + Delete |
+    | View source code               | Ctrl + u              |
+    | Reload                         | Ctrl + r              |
+    | Stop loading                   | Esc                   |
+
+*** 插件Vimium
+     1) 查看快捷键
+        1) 在成功加载的页面中按 ~Esc~ 进入命令模式
+        2) 然后按 ~Shift+/~ 显示快捷键清单
+     2) 设置快捷键 ~o~ 和 ~O~ 的默认搜索引擎
+        1) 在Vimium的Options/Custom search engins设置
+           #+begin_example
+           s: https://cn.bing.com/search?q=%s
+           b: https://www.baidu.com/s?wd=%s
+           #+end_example
+        2) 然后通过快捷键 ~o~ 或 ~O~ 打开输入框后输入， ~s~ 或 ~b~ 空格加关键字即可。
+     3) 显示页面所有链接
+        1) 在当前标签中打开链接
+           1) 在命令模式下按 ~f~
+           2) 输入编号即可
+        2) 在新增标签中打开链接
+           1) 在命令模式下按 ~F~
+           2) 输入编号即可
+** 字典StarDict
+   http://stardict-4.sourceforge.net/
+
+   1) 安装
+      #+begin_example bash
+      sudo apt install stardict stardict-tools -y
+      #+end_example
+   2) 下载并安装词典库
+      - 地址 http://download.huzheng.org/
+      - 安装
+        #+begin_example bash
+        mkdir -p ~/.stardict/dic
+
+        cp <词典库压缩文件> ~/.stardict/dic
+        tar -xjvf <词典库压缩文件>
+        #+end_example
+   3) 下载并安装语音
+      - 地址 http://sourceforge.net/projects/stardict-4/files/WyabdcRealPeopleTTS/WyabdcRealPeopleTTS.tar.bz2/download
+      - 安装
+        #+begin_example bash
+        tar -xjvf WyabdcRealPeopleTTS.tar.bz2 -C /usr/share/
+        #+end_example
+** 百度网盘
+有提供rpm和dpk版本，直接下载安装使用即可。

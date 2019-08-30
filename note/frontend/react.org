@@ -3351,6 +3351,11 @@ export default() => (
 ** Ant.Design
    面向企业级应用的UI库。
 
+*** Grid
+    栅格系统分为多个列？24列吗？
+
+*** Form
+
 ** Material UI
    基于Google Material UI设计风格的UI库，面向终端用户。
 * TODO Next.js创建同构应用
@@ -3509,6 +3514,8 @@ export default() => (
 
               export default createStore(rootReducer, composeWithDevTools(applyMiddleware(logger)))
               #+end_example
+  5) Web Developer
+     https://www.crx4chrome.com/crx/1089/
 
 * 架构
 ** 理想架构
@@ -3600,6 +3607,83 @@ src/
 5) Nexus
 6) Ansible
 7) Docker+k8s
+
+** Stylelint
+   支持CSS(.css), Less(.less), Sass(.sass), Scss(.scss), SugarSS(.sss) 和所有与 PostCSS 兼容的语法(https://github.com/postcss/postcss#syntaxes)。
+
+*** 基本使用
+    1) 安装
+       #+begin_example bash
+       npm install stylelint -g
+       npm install stylelint-config-standard --save-dev
+       #+end_example
+    2) 配置.stylelintrc.yml
+       #+begin_example yaml
+       ---
+       extends: stylelint-config-standard
+       rules:
+         at-rule-empty-line-before: null
+       #+end_example
+    3) 使用
+       1) Node CLI
+          #+begin_example bash
+          # 检查foo目录下所有css文件
+          node node_modules/stylelint/bin/stylelint.js "foo/**/*.css"
+          # 检查foo目录下所有css文件，foo/docker目录下的css文件除外
+          node node_modules/stylelint/bin/stylelint.js "foo/**/*.css, !foo/docker/**"
+
+          # 检查标准输入的内容
+          echo "a{color:pink}" | node node_modules/stylelint/bin/stylelint.js
+
+          # stylelint默认根据文件扩展名识别语法，但可以手动指定
+          node node_modules/stylelint/bin/stylelint.js "foo/**/*.css" --syntax scss
+
+          # 自动在原文件上修复不合规的语句，并显示无法自动修复的问题
+          # 注意：位于/* stylelint-disable */下面的语句也会被修复。
+          node node_modules/stylelint/bin/stylelint.js "foo/**/*.css" --fix
+          #+end_example
+
+*** 配置
+    规则查找顺序
+    1) 在项目中的package.json的stylelint属性指定规则
+    2) 在项目的 ~.stylelintrc/.stylelintrc.json/.stylelintrc.yaml/.stylelintrc.yml/.stylelintrc.js~ 文件中指定规则
+    3) 在项目的 ~stylelint.config.js~ 通过 ~module.exports~ 导出规则
+       #+begin_example js
+       // stylelint.config.js
+       module.exports = {
+         processors: [], // 在stylelint的处理流中加入处理函数，如在处理html中style标签里的css代码，Markdown中的css代码等
+         plugins: [], // 一般由社区提供，对stylelint已有规则进行扩展，来支持一些非标准的CSS语法检查和其他特殊用途(如规定属性顺序)。一个插件会提供一个或多个检查规则。
+         extends: "stylelint-config-standard", // 官方推荐的规则集合
+         rules: {
+           "at-rule-empty-line-before": "always",
+           "at-rule-name-case": "lower",
+           "block-no-empty": true
+         }
+       }
+       #+end_example
+
+*** 排除检查
+    1) 全局：通过项目目录下的 ~.stylelintignore~
+       #+begin_example
+       // .stylelintignore
+       *.js
+       *.png
+       *.eot
+       *.ttf
+       *.woff
+       #+end_example
+    2) 局部：排除代码片段
+       #+begin_example css
+       /* stylelint-disable */
+       .cropper_toContainer .img-preview{
+         border: 0 none;
+       }
+       /* stylelint-enable */
+       #+end_example
+
+*** TODO 插件stylelint-selector-bem-pattern的使用
+*** TODO 集成git pre-commit
+    lint-staged
 
 * TODO 源码剖析
 * TODO PWA

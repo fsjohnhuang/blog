@@ -1,4 +1,20 @@
+#+title: NPM
+#+startup: content
+
 * npm
+** package和module
+1) package
+   - 定义
+     1) 包含package.json文件的目录
+     2) 包含package.json文件的压缩包
+2) module
+   - 定义
+     1) 一个JavaScript文件
+     2) 包含index.js文件的目录
+     3) 包含package.json文件，且其中其中的main属性指定某JavaScript文件的目录
+   - package可以是module，也可以不是module
+     如某些包提供可执行的命令行界面工具，但其package.json中的没有提供main属性，因此该package就不是module。
+
 ** nvm
    官网：https://github.com/nvm-sh/nvm
 
@@ -91,22 +107,126 @@ NPM registry 管理工具，能够查看和切换当前使用的registry。
    #+end_example
 
 ** 常规命令
- #+begin_example bash
- # 安装package.json中的dependencies和devDependencies依赖
- npm --proxy=http://<proxy_ip> --registry=https://registry.npm.taobao.org install
+#+begin_example bash
+# 安装package.json中的dependencies和devDependencies依赖
+npm --proxy=http://<proxy_ip> --registry=https://registry.npm.taobao.org install
 
- # 安装package.json中的dependencies依赖
- # 等价于 npm install --prod 或 NODE_DEV=production && npm install
- npm install --production
+# 安装package.json中的dependencies,devDependencies和optionalDependencies 的依赖
+npm install
 
- # 安装运行时依赖
- # 等价于 npm install -S <package>
- npm install --save <package>
+# 安装package.json中的dependencies依赖
+# 等价于 npm install --prod 或 NODE_DEV=production && npm install
+npm install --production
 
- # 安装开发时、构建时依赖
- # 等价于 npm install -D <package>
- npm install --save-dev <package>
- #+end_example
+# 安装package.json中的dependencies 和 devDependencies 的依赖，但不安装 optionalDependencies
+npm install --no-opitonal
+
+# 安装运行时依赖
+# 等价于 npm install -S <package>
+npm install --save <package>
+
+# 安装开发时、构建时依赖
+# 等价于 npm install -D <package>
+npm install --save-dev <package>
+
+# 卸载
+npm uninstall <package>
+npm uninstall -g <package>
+
+# 查看过时的依赖项
+npm outdated --depth=0
+npm outdated --depth=0 -g
+
+# 更新依赖项到符合semver规则的最新版本
+npm update
+npm update -g
+
+# 升级npm到最新版本
+npm install -g npm@lastest
+
+# 清理npm缓存
+npm cache clean --force
+
+# 罗列所有配置信息
+npm config ls -l
+
+# 返回当前node_modules/.bin的绝对路径，可通过 `npm bin`/webpack 的方式执行本地安装的webpack命令
+npm bin
+#+end_example
+
+** ~npm link~ 的使用
+将本地开发开发中的模块导出到本地全局，或者让其它模块引用，而不用修改过程中不停地重新安装。
+
+1) 项目A引用本地开发中的模块B
+   #+begin_example bash
+   cd /path/to/a
+   npm link /path/to/b
+   #+end_example
+2) 导出模块B到全局
+   #+begin_example bash
+   cd /path/to/b
+   npm link
+   #+end_example
+3) 导出模块B到全局，再在项目A引入模块B
+   #+begin_example bash
+   cd /path/to/b
+   npm link
+
+   cd /path/to/a
+   npm link b
+   #+end_example
+4) 解除
+   #+begin_example bash
+   npm unlink b
+   #+end_example
+
+*** npm-link-shared(https://github.com/OrKoN/npm-link-shared)
+假如本地开发中的模块B依赖本地开发中的模块A，而项目C依赖模块B。那么通过 ~npm link~ 的流程为
+#+begin_example bash
+cd /path/to/b
+npm link /path/to/a
+
+cd /path/to/c
+npm link /path/to/b
+#+end_example
+
+通过npm-link-shared可以简化
+#+begin_example bash
+npm-link-shared /path/to /path/to/c a b
+#+end_example
+
+** TODO NPM Run-Script
+** npx
+npm5.2.0+内置npx，提供如下功能：
+1) 以更便利的方式本地安装的命令
+   #+begin_example bash
+   npm i -D webpack
+
+   # 以前的方式1
+   ./node_mobules/.bin/webpack -v
+
+   # 以前的方式2
+   `npm bin`/webpack -v
+
+   # 通过npx
+   # 1. 先从当前目录的node_modules/.bin查找
+   # 2. 若没有则从$PATH查找
+   # 3. 还没有则会安装、执行，并在执行后卸载
+   npx webpack -v
+   #+end_example
+2) 允许执行一次脚本而不用将其安装到本地
+   #+begin_example bash
+   # 自动安装create-react-app并在执行完命令后卸载掉
+   npx create-react-app demo
+
+   # 启动一个静态服务器
+   npx http-server
+   #+end_example
+3) 允许以不同的node版本来运行指定的命令
+4) 允许直接安装来自gist的脚本
+   #+begin_example bash
+   npx github:piuccio/cowsay hello
+   #+end_example
 
 ** 网络代理配置
  1) 全局配置
@@ -137,6 +257,66 @@ NPM registry 管理工具，能够查看和切换当前使用的registry。
     npm --https-proxy=http://<proxy_ip> <command>
     #+end_example
 
+** package.json和package-lock.json
+npm 5.x 除了生成package.json，还会生成package-lock.json用于记录项目依赖的具体版本号和下载路径。
+
+1) package.json
+   1) 版本符号 ~^~ ，作为默认版本符号用于表示通过 ~npm install~ 安装依赖时，可以安装主版本号相同的最高版本。如 ~^2.3.1~ 表示若同时存在版本 ~2.3.4~ 、 ~2.5.1~  和 ~3.4.1~ 时，安装 ~2.5.1~ 。
+   2) 版本符号 =~= ，用于表示通过 ~npm install~ 安装依赖时，可以安装主版本号和次版本号均相同的最高版本。如 ~^2.3.1~ 表示若同时存在版本 ~2.3.3~ 、 ~2.5.1~  和 ~3.4.1~ 时，安装 ~2.3.3~ 。
+   3) ~npm install ajv --save~ 会将 ~默认呢版本符+当前安装版本号~ 添加到package.json的dependencies下，可通过 =npm config set save-prefix='~'= 来修改默认版本符。
+2) package.json的问题
+   根据semver规范，主版本号用于标识重大或非向后兼容的变更，次版本号用于标识新增特性，补丁版本号用于标识问题修复。虽然根据semver规范和版本符号安装依赖不会影响项目，但各开发人员/发布人员每次重新执行 ~npm install~ 安装的依赖可能有所不同。
+3) package-lock.json
+   记录当前项目依赖的具体版本号和下载路径， ~npm install~ 会根据package-lock.json安装依赖，而不是根据package.json安装依赖，从而确保所有人的环境中的依赖版本一致。
+
+** Scoped包
+用于将多个相关的包归为一个分组，name以 ~@~ 开头的为 *Scoped包* ，其中 ~@~ 和 ~/~ 之间的为Scoped名称。
+
+1) 分类
+   1) npm用户的Scoped包，如 ~@john/cli~
+   2) npm组织的Scoped包，如 ~@midea/cli~
+2) 创建Scoped项目的3种方式
+   1) 修改package.json的name属性为 ~"name": "@john/cli"~
+   2) 初始化项目时 ~npm init --scope=john~
+   3) 在 =~/.npmrc= 中添加 ~npm config set scope john~
+3) 安装Scoped包
+   #+begin_example bash
+   # 安装方式和普通包一致
+   npm install @john/cli --save
+   #+end_example
+
+** 配置
+NPM会从命令行、环境变量和npmrc文件中读取配置信息。
+
+*** 环境变量
+以 ~NPM_CONFIG_~ 开头的环境变量将自动被解析npm使用的环境变量，如执行 ~export NPM_CONFIG_FOO=test~ ，那么npm可通过环境变量 ~foo~ 获取值 ~test~ 。
+注意：变量名为大小写不敏感。
+
+*** npmrc文件
+通过 ~npm config~ 可以修改项目级别、用户级别和全局级别的npmrc的内容。
+**** 文件位置
+1) 每个项目的配置文件(~/path/to/my/project/.npmrc~)
+2) 用户家目录的配置文件(=~/.npmrc=)
+   可通过命令行参数 ~--userconfig~ 临时指定，或环境变量 ~NPM_CONFIG_USERCONFIG~ 临时指定。
+3) 全局配置文件(~$PREFIX/etc/npmrc~)
+   可通过命令行参数 ~--globalconfig~ 临时指定，或环境变量 ~NPM_CONFIG_GLOBALCONFIG~ 临时指定。
+5) npm的内置配置文件(~/path/to/npm/npmrc~)
+
+**** 格式和使用
+格式：ini
+#+begin_example ini
+# 配置格式为：key = value
+# 可通过 ${} 引用环境变量
+prefix = ${HOME}/.npm-packages
+
+# 设置数组采用 变量名[] 的方式
+key[] = "first value"
+key[] = "second value"
+
+# 行注释
+; 行注释
+#+end_example
+
 ** precommit钩子
 1) 通过lint-staged增量检查修改的文件
    1) 安装依赖
@@ -155,6 +335,21 @@ NPM registry 管理工具，能够查看和切换当前使用的registry。
         }
       }
       #+end_example
+** QA
+*** node-sass安装失败的坑
+    1) 安装编译环境
+       1) ~npm install -g node-gyp~
+       2) ~npm install -g --production windows-build-tools~
+          下载完msi文件后整个安装流程会被卡住，此时可以 ~Ctrl-c~ 中断安装流程，然后手工到msi文件的下载目录执行安装VC++相关依赖即可。
+       3) 安装Python2.7
+    2) 安装node-sass
+       #+begin_example bash
+       npm install node-sass
+       # 若还是报错，则需要先移除依赖再重新安装
+       # npm uninstall node-sass
+       # npm install node-sass
+       #+end_example
+
 * yarn
 #+begin_example bash
 yarn start # starts the development server

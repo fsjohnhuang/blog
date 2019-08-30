@@ -1,3 +1,153 @@
+#+title: Webapp
+#+startup: content
+
 * TODO REM方案
 1) 手淘的lib-flexible库在页面渲染时根据设备的宽高计算根元素的font-size值，从而修改页面其他元素的尺寸。
 2) hotcss.js会根据手机型号计算dpr的值，然后在html根标签中注入一个font-size值。
+
+* Viewport
+
+设备像素：设备屏幕的物理像素，任务设备的物理像素从出厂时已经固定下来的。可通过 ~screen.width/height~ 获取。
+CSS像素：在CSS和JavaScript中使用的一个抽象层，如高清屏中1个CSS像素对应4个物理像素，调节缩放比时CSS像素和物理像素的对应比也会随之变化。
+
+元素 ~html~ 所属的包含块为布局视窗，也被称为 *初始包含块* ，其将作为所有CSS百分比宽度推算的根源(~html,body{width: 100%; /*默认为100%*/}~)。
+
+** Layout Viewport(布局视窗)
+桌面浏览器中Layout Viewport的尺寸始终和浏览器工作区域保持一致，因此调整浏览器工作区域尺寸时会改变采用百分比宽高的元素尺寸，采用CSS像素。
+而在移动端浏览器中，Layout Viewport的尺寸不再和浏览器工作区域保持一致，而是各厂商将Layout Viewport的默认宽度设置为768px到1024px之间，一般为980px。开发者可通过 ~meta~ 再调节Layout Viewport的宽度。
+
+** Visual Viewpport(视觉视窗)
+桌面浏览器中不存在Visual Viewport，仅为移动端浏览器的技术，采用CSS像素。
+Visual Viewport为用户看到的网站区域，可以通过缩放来改变Visual Viewport的尺寸(CSS像素)，而Layout Viewport的尺寸将不被改变(CSS像素)。
+
+** 理想视窗
+Layout Viewport的默认宽度并不是理想的宽度，而苹果及其的追随者引入理想视窗——网站拥有最理想的阅读宽度并且刚进页面时也不需要缩放。
+只有网站为手机而设计时才应该使用理想视窗，否则则应该使用Layout Viewport。
+
+三种设置方式：
+1) device-width
+   #+begin_example html
+   <!-- 针对手机设计的网站，因该手动开启理想视窗
+        1. 安卓Webkit不允许任何小于Layout Viewport宽度的值，否则会自动采用Layout Viewport的默认宽度980px
+        2. IE10不允许任何大于480px的值，否则会自动采用Layout Viewport的默认宽度1024px
+        3. iOS的Safari不会根据设备旋转调整理想窗口尺寸
+     -->
+   <meta name="viewport" content="width=device-width">
+   #+end_example
+2) initial-scale
+   #+begin_example html
+   <!-- 设置初始缩放比：
+        1表示100%, Visual Viewport和理想视窗尺寸一致；
+        2表示200%，Visual Viewport的尺寸为理想视窗的一半。
+
+        设置为1后，iOS的Safari会根据设备旋转调整理想窗口尺寸
+     -->
+   <meta name="viewport" content="initial-scale=1">
+   #+end_example
+3) ~@-ms-viewport~
+   IE只有在手机上支持meta标签，而平板上不支持。并且由于其尽量向iPhone靠拢，导致移动端IE的理想视窗宽度为320px并不适合实际设备。因此需要使用它自家的 ~@-ms-viewport~ 来设置才能使用真正适合设备的理想视窗。
+   #+begin_example css
+   @-ms-viewport {
+     width: device-width;
+   }
+   #+end_example
+
+因此实际使用时是综合使用的
+#+begin_example html
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+#+end_example
+
+注意：
+1) 理想视窗的尺寸是由浏览器来决定来的，因此同一个台设备不同的浏览器其理想视窗可能会有所不同；
+2) 理想视窗的尺寸也会随着设备转向变化而改变；
+3) 只要告知浏览器使用理想视窗，然后通过媒体查询来适配目标的理想视窗尺寸即可。
+
+** 缩放
+   移动端浏览器中的缩放会影响Visual Layout的尺寸，但不会影响Layout Viewport的尺寸，而元素布局是以Layout Viewport为基础，因此缩放不会触发重新布局。
+
+*** 禁止缩放
+ #+begin_example html
+ <meta name="viewport" content="user-scalable=no">
+ #+end_example
+
+*** 文字缩放
+    桌面的Firefox、Chrome和Safari都支持文字缩放，而页面的其它部分保持不变。
+
+** 物理分辨率
+物理像素除以屏幕的以英寸为单位的宽度，可以得到设备每英寸的点数(DPI)。
+前端开发者无法获取真实的物理分辨率，即使 ~screen.width/screen.height~ 也是不可靠的，所以要采用设备数据库来获取对应设备的物理分辨率数据。
+
+** 设备像素比(Device Pixel Ratio)
+   为设备的物理像素和理想视窗的CSS像素的比。如普通屏幕DPR为1,而高清屏的DPR则为2或2.25等。
+   调整缩放也会影响DPR。
+   可通过如下方式获取
+   1) JavaScript的 ~window.devicePixelRatio~, 默认单位为dppx
+   2) CSS的媒体查询条件 ~device-pixel-ratio~, 默认单位为dppx
+      可根据DPR加载普通图片还是高清图片，来提高用户体验。
+   3) CSS的媒体查询条件 ~resolution~
+      #+begin_example css
+      /* IE11不支持min-device-pixel-ratio，因此需要使用dpi单位来代替，对于普通屏幕而言1英寸对应96个CSS像素，因此即1dppx对应96dpi */
+      @media all and ((-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi)){
+        /* DPR大于等于2时生效 */
+      }
+      #+end_example
+
+** 媒体查询
+   | 媒体查询                           | 说明                                                                  |
+   |------------------------------------+-----------------------------------------------------------------------|
+   | min/max-width                      | Layout Viewport 宽度大于最小或小于最大值时匹配                        |
+   | device-width/height                | 底层使用JavaScript的screen.width/height获取值，因此不要使用该媒体查询 |
+   | device-aspect-radio                | screen.width/sreen.height                                             |
+   | aspect-ratio                       | Layout Viewport的宽高比                                               |
+   | orientation: portrait              | 基于转向，所有浏览器都支持                                            |
+   | -webkit-max/min-device-pixel-ratio | 基于dpr，要和max/min-resolution一起使用来兼容IE                       |
+
+
+** JavaScript API
+   | API                                         | 桌面浏览器中的作用             | 移动端浏览器中的作用                                           | 备注                 |
+   |---------------------------------------------+--------------------------------+----------------------------------------------------------------+----------------------|
+   | window.innerWidth/Height                    | 获取包含滚动条尺寸的视窗大小   | 获取Visual Viewport的尺寸，但在安卓Webkit2和代理浏览器中不支持 | 由Netscape主导的属性 |
+   | document.documentElement.clientWidth/Height | 获取不包含滚动条尺寸的视窗大小 | 获取Layout Viewport的尺寸                                      | 由IE主导的属性       |
+   | screen.width/height                         | 获取屏幕的设备像素大小         | 可能获取的是理想视窗的尺寸，也可能为屏幕的设备像素尺寸         | 用处不大             |
+   | orientationchange事件                       |                                | 改变设备方向时触发                                             |                      |
+   | resize事件                                  | 浏览器尺寸变化时触发           | 有的浏览器是改变Visual Viewport时触发，有的是改变Layout Viewport时触发             |                      |
+
+* TODO 事件
+  渐进式事件
+
+** touch事件
+** pointer事件
+
+
+* TODO 图片优化
+
+** 响应式图片
+   http://responsiveimages.org
+
+* Passive Event Listener
+当我们在事件处理函数中调用 ~evt.preventDefaullt()~ 则会告知浏览器不执行默认事件处理函数，即是所有用户自定义的事件处理函数执行完后才能判断是否需要执行默认事件处理函数。
+在移动端中通过事件 ~touchstart~ 执行滚动操作，由于存在上述逻辑因此会造成滚动效果延迟，甚至造成卡顿。通过 Passive Event Listener 提前告知浏览器不用等待用户自定义的事件处理函数就确定 *需要执行默认事件处理函数* 。
+
+1) 示例
+   #+begin_example js
+   window.addEventListener("touchstart",
+                           evt => {
+                             for (let i = 0; i < 100000000; ++i);
+                           },
+                           {passive: true})
+   #+end_example
+2) 检测是否支持 Passive Event Listener
+   #+begin_example js
+   // Chrome 51 和 Firefox 49 已经支持
+   let supportPassive = false
+   try{
+     const opts = Object.defineProperty({}, "passive", {
+       get: function(){
+         supportPassive = true
+       }
+     })
+
+     window.addEventListener("test", null, opts)
+   }
+   catch(e){}
+   #+end_examp
