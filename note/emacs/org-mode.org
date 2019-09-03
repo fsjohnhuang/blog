@@ -43,6 +43,9 @@ C-u C-c C-t    ; 按顺序循环加入或更新关键字
 ; 预览
 M-x (org-export-as-html) ; 导出html到buffer
 M-x (browse-url-of-bffer); 在浏览器中打开buffer
+
+; 归档
+M-x (org-archive-subtree-default) ; 创建归档文件，并将当前任务归档
 #+END_EXAMPLE
 
 ** 配置

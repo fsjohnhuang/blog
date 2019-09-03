@@ -1,0 +1,287 @@
+Time is the most scarce resource.
+
+* 虚拟机和容器的关联
+1) 虚拟机
+   1) 一旦被开启，预分配的资源将全部被占用；
+   2) 必须拥有独立的操作系统。
+2) 容器
+   1) 共享硬件资源和操作系统，可实现资源的动态分配。
+
+* Docker组成
+
+** Image
+包含容器运行时依赖的程序、库、资源和配置等文件，和匿名卷、环境变量和用户等配置参数，但不包含任何动态数据。为一堆只读层(read only layer)的组合，并通过统一文件系统(union file system)将不同的层整合为一个文件系统。
+
+** Container
+容器 = 镜像 + 读写层
+
+** Docker Host/Machine
+运行Docker服务端的服务器
+
+** Repository
+分为公有仓库和私有仓库，和GitHub等类似。
+
+** Docker客户端 和 Docker服务端(Docker Daemon)
+Docker客户端负责与Docker服务端进行交互，Docker服务端负责构建、运行和分发Docker镜像。Docker客户端除了和本地Docker服务端通信外，还可通过RESTful、网络接口与远端Docker服务端通信。
+
+* 安装
+版本：分为CE(社区版)和EE(企业版)
+Ubuntu: https://docs.docker.com/install/linux/docker-ce/ubuntu/
+1) containerd.io
+2) docker-ce-cli
+3) docker-ce
+
+* 命令
+注意：为避免执行docker命令的权限问题，请将当前用户添加到docker分组。
+#+begin_example bash
+sudo systemctl enable docker # 设置开机启动docker服务端
+sudo systemctl start docker  # 启动docker服务端
+
+docker stats --help # Show manual of sub command.
+
+docker --version # 显示docker版本
+docker version # 显示docker客户端和服务端的详细版本信息
+docker info # 显示docker客户端和服务端的详细配置信息
+docker inspect <container_id|container_name> # 查看容器实例的状态，如数据卷是否挂在，数据卷类型等
+
+docker search <keyword> # Search image on repositry by keywords.
+docker image ls # List all installed or local images.
+docker images   #  List all installed or local images.
+docker image rm <image_id> # Remove the specified image from the machine.
+docker image rm `docker image ls -aq` # Remove all images from the machine.
+
+docker container ls # List all running container information.
+docker ps # List all running container information.
+docker container ls --all # List all container information.
+docker container ls -a # List all container information.
+docker container ls -aq # List the hashes of all containers.
+docker port <container_id|container_name> # Show the port mappings of specified container.
+docker container stop <container_id|container_name> # Gracefully stop the specified container.
+docker container kill <container_id> # Force shutdown the specifed container.
+docker container rm <container_id> # Remove the specified container.
+docker container rm `docker container ls -qa` # Remove all containers.
+
+docker start <container_name> # Start a stopped container.
+docker stop <container_id|container_name> # Stop the specified container.
+docker restart <container_name> # Restart a running container.
+# Send a signal to container.
+# e.g. docker kill -s KILL mynginx # Kill all nginx process running in container.
+docker kill [-s SIG] <container_name|container_id>
+# Remove at least one containers.
+# options
+# -f Send a SIGKILL signal to a running container then remove it.
+# -l Remove the network not the container
+# -v Remove the container and the related volume.
+docker rm [options] <container_name|container_id> [<container_name|container_id>...]
+docker pause [<container_name|container_id>...] # Pause the all process running on specified containers.
+docker unpause [<container_name|container_id>...] # Resume the all process have been suspended on specified containers.
+# Execute command on a running container.
+# options
+# -d run in detached mode
+# -i redirect container stdin to the host stdin
+# -t launch a terminal
+docker exec [options] <container_name|container_id> <command> [arg...]
+# Copy file from container to host.
+docker cp <container_id>:<container_absolute_path> <host_absolute_path>
+
+docker pull <image> # 下载镜像，其中<image>为镜像在仓库中的标识。如 docker pull library/hello-world.
+docker create --name <container_name> <image> # Create a container from image, but do not let it run.
+docker run <image> # Create container by <image> and run it, install the image if have not installed yet
+docker run <image> -p [<host_ip>:]<host_port>:<container_port>[/{tcp|udp}] # Create container mapping port [<host_ip>:]<host_port> to <container_port> in udp or tcp as default and run it.
+docker run <image> -d -p <host_port>:<container_port> # Create container mapping port <host_port> to <container_port>, and run in detached mode.
+docker run <image> -v <host_dirpath>:<container_dirpath> # Create container mapping host dirapth to container dirpath
+docker run ubuntu:15.10 /bin/echo "Hello World" # Create container and execute command ~/bin/echo "Hello World"~ in container.
+docker run <image> -i -t /bin/bash # Create container, launch ternimal by option -t, and redirect stdin/stdout/stderr of container to host by option -i.
+
+docker logs <container_id|container_name> # Print the stdout of container.
+docker logs -f <container_id|container_name> # Print the stdout of container as tail -f.
+
+docker top <container_id|container_name> # Show processes of spefified container.
+# Attach to a running container
+# press ctrl-c to detach, after setting --sig-proxy to false.
+docker attach --sig-proxy=false <container_id|container_name>
+docker wait <container_name|container_id> [<container_name|container_id>...] # Blocking until the specified containers stop, then print the returning codes.
+docker export -o <tarball> <container_name|container_id> # Export the file system of specifed container to tarball.
+
+docker login # Login this CLI session using your own Docker credentials.
+docker tar <image> username/repository:tag # Tag <image> for upload to repository.
+docker push username/repository:tag # Upload tagged image to repository.
+#+end_example
+
+以Docker方式构建应用
+| 层        | 作用                           |
+|-----------+--------------------------------|
+| Stack     | 定义所有与services层交互的方式 |
+| Services  | 定义容器行为                   |
+| Container | 底层                           |
+
+* 数据持久化
+** Volume(数据卷)
+1) 作用
+   就是目录或文件，存在于一个或多个容器中，由docker挂载到容器，但不属于联合文件系统(union file system)，因此能够绕过union file system一些用于持续存储或共享数据的特性。
+   1) 容器间的数据交互
+   2) 容器和主机间的数据交互
+   3) 数据持久化
+2) 特点
+   1) 数据卷在容器间共享或重用数据
+   2) 卷中的更改可以直接生效
+   3) 数据卷中的更改不会包含在镜像的更新中
+   4) 数据卷的生命周期一直持续到没有容器使用它为止
+   5) 若Volume为空，而Container中有内容，那么会将Container的内容复制到Volume中
+   6) 若Volume不为空，则会将Volume的内容复制并替换Container中的内容
+3) 启用
+   1) 命令行
+      #+begin_example bash
+      # 配置可读可写的数据卷
+      # 若<host_absolute_path>不存在，则会自动在宿主机上创建
+      docker run <image> -v <host_absolute_path>:<container_absolute_path>
+      # 配置只读的数据卷
+      docker run <image> -v <host_absolute_path>:<container_absolute_path>:ro
+
+      # docker会在宿主机上创建/var/lib/docker/volumes/<host_volume_name>/_data绑定到container的路径上。
+      docker run <image> -v <host_volume_name>:<container_absolute_path>
+
+      # 配置匿名卷
+      # docker会在宿主机上创建/var/lib/docker/volumes/随机数/_data绑定到container的路径上。
+      docker run <image> -v <container_absolute_path>
+
+      # 手动创建var/lib/docker/volumes/<host_volume_name>/_data
+      docker volume create <host_volume_name>
+      #+end_example
+   2) Dockerfile
+      #+begin_example bash
+      # 为了迁移性，不能设置宿主机文件或目录路径
+      VOLUME <container_absolute_path>
+      VOLUME ["<container_absolute_path1>", "<container_absolute_path2>"]
+      #+end_example
+4) volumes-from
+   多个容器通过继承数据卷从而达到共享数据卷，非常适合使用Dockfile设置数据卷的容器间共享数据。
+   #+begin_example bash
+   # 创建并运行父容器dc00
+   docker run <image> -v /var/containerVolume1 -v /var/containerVolume2 --name dc00
+   # 创建并运行容器dc01，并且容器dc01继承容器dc00的数据卷
+   docker run <image> --volumes-from dc00 --name dc01
+   # 创建并运行容器dc02，并且容器dc01继承容器dc00的数据卷
+   docker run <image> --volumes-from dc01 --name dc02
+
+   # 此时在三个容器中修改两个数据卷的内容，将在三者中同步共享
+   # 即使强制删除父容器dc00，数据卷依然有效，直到所有使用它的容器都被删除为止
+   docker rm -f dc00
+   #+end_example
+5) QA
+   1) 若Docker挂载主机目录后出现 *cannot open directory: Permission denied*
+      - 解决办法：在命令行中挂载目录后多一个 ~--privileged=true~
+
+** TODO Bind Mount
+
+* Union File System
+为一种分层、轻量级并高性能的文件系统。它支持对文件系统的每次修改作为一次提交来一层层的叠加。同时可以将不同目录挂载到同一个虚拟文件系统下(unite several directories into a single virtual filesystem)。表明看为一个文件系统，但实际上是把多层文件系统叠加起来。
+
+* DockerFile
+1) 代码库
+   #+begin_example bash
+   mkdir demo
+   touch demo/Dockerfile demo/app.py demo/requirements.txt
+   #+end_example
+2) 应用代码部分
+   - app.py
+     #+begin_example python
+     from flask import Flask
+     import os
+
+     app = Flask(__name__)
+
+     @app.route("/")
+     def index():
+         html = "<h3>%s</h3>" % os.getenv("NAME", "Hello")
+         return html
+
+     if __name__ == "__main__":
+         app.run(host="0.0.0.0", port=80)
+     #+end_example
+   - requirements.txt
+     #+begin_example
+     flask
+     #+end_example
+3) Dockerfile
+   #+begin_example bash
+   # 从仓库下载官方的Python镜像作为父镜像
+   FROM python:2.7-slim
+
+   # 将工作目录设置为/app
+   WORKDIR /app
+
+   # 将当前目录的内容复制到容器中的/app目录
+   COPY . /app
+
+   # 通过设置环境变量设置代理
+   ENV http_proxy <ip>:<port>
+   ENV https_proxy <ip>:<port>
+
+   # 安装依赖
+   RUN pip install -r requirementns.txt
+
+   # 设置应用运行时需要的环境变量
+   ENV NAME bye
+
+   # 启动应用
+   CMD ["python", "app.py"]
+   #+end_example
+4) 修改Docker服务端参数
+   #+begin_example json
+   // /etc/docker/daemon.json
+   {
+     "dns": ["your_dns_addres", "8.8.8.8"], // 设置DNS地址
+     "mtu": 1450                            // 设置网卡的MTU
+   }
+   #+end_example
+   #+begin_example bash
+   # 修改后重启Docker服务端
+   sudo systemctl restart docker
+   #+end_example
+5) 构建和运行
+   #+begin_example bash
+   docker build --tag=<image> . # 在当前目录下构建名称为<image>的镜像，<image>格式如hello:v0.0.1
+   docker run <image> -p 4000:80 # 下载镜像并运行容器，并宿主机的4000端口映射到容器的80端口
+   docker ps # 显示容器中的进程
+   #+end_example
+
+** Dockerfile命令详细说明
+- ~FROM~ 用于指定基础镜像
+- ~MAINTAINER~ 用于指定镜像创建者及其联系方式
+  - 示例 ~MAINTAINER fsjohnhuang <fsjohonhuang@hotmail.com>~
+- ~EXPOSE~ 向宿主机暴露网络端口
+- ~WORKDIR~ 用于设置RUN、ENTRYPOINT和CMD命令的当前工作目录，默认为 ~/~ ，当设置为相对路径时在为相对于前一个WORKDIR的值而言。
+- ~RUN~ 用于在容器构建时内部执行命令，相当于在原有镜像上添加一层。
+- ~ENTRYPOINT~ 让容器如同一般的可执行程序一样，一个Dockerfile中仅最后一个ENTRYPOINT生效。
+  - 格式
+    1) ~ENTRYPOINT ["executable", "param1", "param2"]~ exec形式，推荐采用该方式
+    2) ~ENTRYPOINT command param1 param2~ shell形式
+  - 示例 ~ENTRYPOINT ["python"]~
+- ~CMD~ 用于在容器启动时执行命令，若其中没有可执行文件，那么其参数将传递给ENTRYPOINT，然后ENTRYPOINT来执行。，一个Dockerfile中仅最后一个CMD生效。
+  - 格式
+    1) ~CMD ["executable", "param1", "param2"]~ exec形式，推荐采用该方式
+    2) ~CMD command param1 param2~ shell形式，在容器内部会传递给 ~/bin/shell -c~ 来执行
+    3) ~CMD ["param1", "param2"]~ 没有可执行文件，因此将传递给ENTRYPOINT执行
+  - 注意：命令行的命令将会覆盖Dockerfile的CMD值，如 ~docker run <image> /bin/echo helloworld~ 其中的 ~/bin/echo helloworld~ 将覆盖Dockerfile的CMD值。
+
+
+* Run Jenkins with Docker
+1) Attach the ~$JENKINS_HOME~ path to local system.
+   #+begin_example bash
+   sudo mkdir /var/jenkins_home
+   # By default, Jenkins docker image uses a user with the UID 1000.
+   sudo chown 1000:1000 /var/jenkins_home
+   #+end_example
+2) Download image and run container
+   #+begin_example bash
+   # --name the display name of container
+   docker run -d -v /var/jenkins_home:/var/jenkins_home:z -p 8080:8080 -p 50000:50000 --name myjenkins jenkins/jenkins:lts
+   #+end_example
+
+* QA
+1) Docker对操作系统版本的依赖性强，因此安装时要特别注意Docker与操作系统的版本匹配。
+
+
+Cgroup
+Namespace

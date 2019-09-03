@@ -55,6 +55,9 @@ Jenkins.war内置轻量级Winstone Servlet引擎来运行服务。
 nohup java -jar jenkins.war --httpPort=1300 --httpListenAddress=0.0.0.0 --controlPort=8001 > /var/log/jenkins.log 2>&1 &
 #+END_EXAMPLE
 
+*** Jenkins家目录
+默认为当前用户家目录的.jenkins目录，但可通过环境变量 ~$JENKINS_HOME~ 设置。
+
 ** 配置
 
 *** 创建Jenkins服务专用用户
@@ -80,19 +83,25 @@ nohup java -jar ${JENKINS_BASE}\jenkins.war --httpPort=1300 &
 #+END_EXAMPLE
 
 **** 目录结构
- | 目录                 | 描述                                                                                                              |
- |----------------------+-------------------------------------------------------------------------------------------------------------------|
- | fingerprints         | 用于跟踪人工操作的痕迹                                                                                            |
- | logs                 | 存放Jenkins服务自身的日志记录
- | plugin               | 包含所有已安装的插件                                                                                              |
- | updates              | 内部目录，用于存放可用的插件更新                                                                                  |
- | userContent          | 存放自己为Jenkins服务器定制化的内容                                                                               |
- | users                | Jenkins本地用户数据库                                                                                             |
- | war                  | 存放扩展的war应用程序，若采用Jenkins.war单机应用启用时，那么Web应用会解压到这里                                   |
- | jobs                 | 存放任务配置和构建结果细节信息（最后一个构建号、最后一个成功构建号等）                                            |
- | jobs/job1/config.xml | 任务配置信息                                                                                                      |
- | jobs/job1/builds     | 存放构建结果细节信息，包含JavaDoc文档、覆盖率文档和打包发布文件等。因此必须配置适当的保留时间，以免该目录一直变大 |
- | workspace            | 在当前节点构建时的工作目录                                                                                        |
+ | 目录                                           | 描述                                                                                                              |
+ |------------------------------------------------+-------------------------------------------------------------------------------------------------------------------|
+ | fingerprints                                   | 用于跟踪人工操作的痕迹                                                                                            |
+ | logs                                           | 存放Jenkins服务自身的日志记录                                                                                     |
+ | plugin                                         | 包含所有已安装的插件                                                                                              |
+ | updates                                        | 内部目录，用于存放可用的插件更新                                                                                  |
+ | userContent                                    | 存放自己为Jenkins服务器定制化的内容                                                                               |
+ | users                                          | Jenkins本地用户数据库                                                                                             |
+ | war                                            | 存放扩展的war应用程序，若采用Jenkins.war单机应用启用时，那么Web应用会解压到这里                                   |
+ | jobs                                           | 存放任务配置和构建结果细节信息（最后一个构建号、最后一个成功构建号等）                                            |
+ | jobs/job1/config.xml                           | 任务配置信息                                                                                                      |
+ | jobs/job1/builds                               | 存放构建结果细节信息，包含JavaDoc文档、覆盖率文档和打包发布文件等。因此必须配置适当的保留时间，以免该目录一直变大 |
+ | jobs/job1/latest                               | symbolic link to the latest successful build                                                                      |
+ | jobs/job1/workspace                            | working directory for the version control system                                                                  |
+ | jobs/job1/promotions/                          | 阶段提升配置，内包含提升的config.xml                                                                              |
+ | config.xml                                     | Jenkins 配置文件                                                                                                  |
+ | workspace                                      | 在当前节点构建时的工作目录                                                                                        |
+ | *.xml                                          | 其它配置文件                                                                                                      |
+ | jenkins.model.JenkinsLocationConfiguration.xml | Jenkins服务的地址                                                                                                 |
 
 *** 内存考虑
 除Jenkins自身程序所需的内存外，每个构建都会创建独立的Java子进程它们也需要构建用的内存空间。
@@ -547,11 +556,13 @@ windows -> "windows 7" # 选择windows 7或非windows的从节点执行
 "windows 7" <-> uat
 #+END_EXAMPLE
 
-** 节点监控
+** TODO 节点监控
 通过监控以下指标，自动决定是否将从节点下线：
 1) 响应时间，过慢可能是网络问题或从节点已经关闭；
 2) 从节点中提供给Jenkins用户的可用磁盘空间、临时目录空间和swap空间
 3) 从节点和主节点间的系统时间差，若系统时钟没有正确同步则会发生奇怪的错误
+
+节点出问题(下线、空间不足等)，如何通知管理人员？？
 
 * Jenkins维护
 
@@ -786,6 +797,9 @@ QA:
 - 另外通过插件EnvInject可从工作空间读取配置文件的方式获取环境变量。
 
 * TODO 插件开发
+  ~.hpi~ 为使用gradle plugin architecture生成的插件
+  ~.jpi~ 为使用Maven architecture生成的插件
+
 * TODO 实例-.NET构建流程
 操作系统：Server Core for Windows Server 2012 R2
 MSBuild：https://www.microsoft.com/zh-cn/download/details.aspx?id=40760
@@ -840,7 +854,6 @@ sudo ssh-agent bash
 # 将密钥加入到ssh-agent的高速缓存中
 sudo ssh-add ~/.ssh/id_rsa
 #+END_EXAMPLE
-
 
 * QA
 ** 代理异常

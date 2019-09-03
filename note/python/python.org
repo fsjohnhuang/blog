@@ -249,6 +249,7 @@ pip install <local_package_path>  # 安装本地包
 pip install -r requirements.txt  # 根据依赖清单，从源仓库安装指定版本的包
 pip install --no-index -f file://`pwd` -r requirements.txt  # 根据依赖清单，从本地文件系统安装指定版本的包
 pip install -U <package>   # 从源仓库升级包
+pip install --trusted-host pypi.python.org -r requirements.txt # 从临时指定的仓库下载安装依赖
 
 # 从CVS中安装包
 sudo yum install git-core subversion  # 先安装CVS工具

@@ -268,3 +268,9 @@ S # 在当前目录打开新的终端
         #+end_example
 ** 百度网盘
 有提供rpm和dpk版本，直接下载安装使用即可。
+* 获取当前版本的代号(codename)
+Ubuntu 发布版本的官方名称是 Ubuntu X.YY ，其中 X 表示年份（减去2000），YY 表示发布的月份。
+Ubuntu 没有像其它软件一样有 1.0 版本，是因为其第一个版本是发布于 2004 年。所以Ubuntu的生日是10月20日。
+#+begin_example bash
+lsb_release -a
+#+end_example

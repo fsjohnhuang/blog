@@ -91,11 +91,43 @@ tail -f <filepath>
 
         eval echo "\$$#" # test.sh first last 回显 last
         #+END_EXAMPLE
+
+** find
+
+1) 命令格式
+   #+begin_example bash
+   find [path] [options] [file]
+   #+end_example
+2) 示例
+   #+begin_example bash
+   # 将当前目录下的所有文件移动到/test目录下
+   find -type f -exec mv {} /test \;
+   #+end_example
+
+** ifconfig
+用于设置或显示网络接口的程序，最小化安装时默认不安装。其和netstat、whois等命令都包含在net-tools下，因此需要手动安装net-tools。
+
 * 定时任务
 
 ** at
 
 * TODO 用户和用户组管理
+
+** 用户
+1) useradd
+   作为底层命令用于创建用户名。
+   #+begin_example bash
+   useradd <user> # 仅创建用户名和同名用户组，但没有创建对应的家目录，也没有设置密码。因此无法通过该帐号登录系统
+   useradd -m <user> # 创建用户名和在/home下创建同名家目录
+   passwd <user> # 设置密码
+
+   userdel -r <user> # 删除用户名和相关的用户组、邮件收件目录等信息
+   #+end_example
+2) adduser
+   perl开发的基于useradd的工具
+   #+begin_example bash
+   adduser <user> # 创建用户名、同名用户组，并以/etc/skel/作为模板创建家目录
+   #+end_example
 
 ** 用户组
 用户组信息位于: ~/etc/group~
@@ -110,8 +142,6 @@ usermod -G <groupA> <user>
 # 将用户添加到新的用户组
 usermode -a -G <groupA> <user>
 #+END_EXAMPLE
-
-
 
 ** 用户密码管理
    1) 2种无交互方式初始化密码的方式
@@ -133,7 +163,7 @@ usermode -a -G <groupA> <user>
 
 *** sudo命令的执行流程
     1) 系统查找/etc/sudoers文件，判断该用户是否拥有执行sudo的权限
-    2) 若具体权限则要求用户输入自己的密码
+    2) 若具有权限则要求用户输入自己的密码
        - 无需输入密码的情况
          1) root执行sudo时无需输入密码(/etc/sudoers中配置 ~root ALL=(ALL) ALL~ )
          2) 配置允许该用户不用输入密码(/etc/sudoers中配置 ~%wheel ALL=(ALL) NOPASSWOD: ALL~)
@@ -336,10 +366,10 @@ Allow 18.90.12.145
    5) ssh-copy-id
 
 *** 命令
-    #+BEGIN_EXAMPLE bash
-    # 删除known_hosts中主机的信息
-    ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169「」
-    #+END_EXAMPLE
+#+BEGIN_EXAMPLE bash
+# 删除known_hosts中主机的信息
+ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
+#+END_EXAMPLE
 
 *** 基于密码和密钥的认证方式
     1) 基于密钥的认证方式
@@ -482,4 +512,32 @@ Allow 18.90.12.145
             2) 重启sshd
                #+BEGIN_EXAMPLE bash
                systemctl restart sshd
-               #+END_EXAMPLE
+               #+END_EX
+* TODO 压缩/解压
+** 压缩格式
+1) Gzip
+   - 优点
+     1) 压缩/解压速度快，压缩率高
+     2) 处理压缩文件方便和处理文本一样
+   - 缺点
+     1) 不支持切片
+   - 场景
+     1) 文件压缩后的体积在130MB以内可使用
+   - 解压
+     #+begin_example bash
+     # 将压缩包解压到指定目录下
+     tar -zxvf xxx.tar.gz -C target_dir/
+
+     # 提取压缩包的部分文件到指定目录下
+     tar -C target_dir/ -zxvf xxx.tar.gz dir_in_tar/xxx*yyy
+     tar -C target_dir/ -zxvf xxx.tar.gz dir_in_tar/xxx1 dir_in_tar/yyy1
+     #+end_example
+2) Bzip2
+   - 优点
+     1) 压缩率高于Gzip
+     2) 支持切片
+   - 缺点
+     1) 压缩/解压速度超级慢
+   - 场景
+     1) 备份历史记录、文件
+     2) 对压缩速率要求不高，对压缩率要求高的场景
