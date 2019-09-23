@@ -117,6 +117,13 @@ apt-get add-apt-repository --remove ppa:<repos> # 移除PPA仓库
 ** 源
 默认位置：/etc/apt/sources.list
 
+* dpkg
+#+begin_example bash
+dpkg -i <package> # Install.
+dpkg -l # List all intalled packages.
+dpkg -r <package> # Uninstall.
+dpkg -P <package> # Uninstall and remove all related data files.
+#+end_example
 * Swap Ctrl-R with CapsLock
 ** 通过xmodmap
    1) ~vi ~/.xmodmap~
@@ -192,7 +199,6 @@ Claws Mail.
 Console file manager with VI key bindings.
 http://git.midea.com/supplychainsystem/qms/ehs-project
 
-
 *** 配置
 #+begin_example bash
 # 生成配置文件所在目录 ~/.config/ranger
@@ -206,10 +212,69 @@ ranger --copy-config=all
 参考 http://www.mikewootc.com/wiki/linux/usage/ranger_file_manager.html
 #+begin_example bash
 zh # 显示隐藏文件
-
 S # 在当前目录打开新的终端
+yy # 复制
+dd # 剪切
+pp # 粘贴
+:delete # 删除
+:cw # 重命名
+A # 在当前命名的基础上重命名
 #+end_example
 
+** pick
+允许用户从管道前一个命令输出的列表中，选择其中一项作为输出。并且支持模糊查询操作。
+1) 安装
+   #+begin_example bash
+   sudo apt -y install pick
+   #+end_example
+2) 使用
+   #+begin_example bash
+   # 当前目录搜索出的目录路径将作为pick的选项，用户可上下选中后回车，或直接输入字符进行筛选后再选择，选择结果将作为cd的参数
+   cd $(find . -type d | pick)
+
+   find -type f | pick | xargs less
+
+   mv "$(find . -maxdepth 1 | pick)" /path/to/target
+   #+end_example
+
+** locate
+通过Linux系统每天指定时间自动索引备份到系统数据库中的文件，实现文件的模糊查询。
+数据库:var/lib/mlocate/mlocate.db
+1) 更新数据库
+   #+begin_example bash
+   # 配置文件/etc/updatedb.conf
+   /usr/bin/updatedb
+   #+end_example
+   1) /etc/updatedb.conf
+      #+begin_example
+      PRUNE_BIND_MOUNTS = "yes"
+      PRUNEFS = "9p afs anon_inodefs auto autofs bdev binfmt_misc cgroup cifs coda configfs cpuset debugfs devpts ecryptfs exofs fuse fusectl gfs gfs2 hugetlbfs inotifyfs iso9660 jffs2 lustre mqueue ncpfs nfs nfs4 nfsd pipefs proc ramfs rootfs rpc_pipefs securityfs selinuxfs sfs sockfs sysfs tmpfs ubifs udf usbfs"
+      PRUNENAMES = ".git .hg .svn"
+      PRUNEPATHS = "/afs /media /net /sfs /tmp /udev /var/cache/ccache /var/spool/cups /var/spool/squid /var/tmp"
+      #+end_example
+      - 第一行PRUNE_BIND_MOUNTS="yes"的意思是：是否进行限制搜索。
+      - 第二行是排除检索的文件系统类型，即列出的文件系统类型不进行检索。
+      - 第三行表示对哪些后缀的文件排除检索，也就是列在这里面的后缀的文件跳过不进行检索。不同后缀之间用空格隔开。
+      - 第四行是排除检索的路径，即列出的路径下的文件和子文件夹均跳过不进行检索。updatedb之后使用locate仍然找不到想要文件，可以检查挂载的目录是否被忽略了。
+2) 使用
+   #+begin_example bash
+   # 搜索路径包含abc的记录
+   locate abc
+   # 搜索路径包含abc大小写不敏感的记录
+   locate -i abc
+   # 搜索basename包含abc的记录
+   locate -b abc
+   # 搜索路径全匹配abc的记录
+   locate '\abc'
+   # 搜索basename路径全匹配abc的记录
+   locate -b '\abc'
+   # 统计匹配记录数目
+   locate -c abc
+   # 利用正则表达式匹配，正则表达式语法为http://www.tldp.org/LDP/abs/html/x17129.html
+   locate -r "/search[a-z]*.html"
+   #+end_example
+
+** TODO find
 ** Chrome
 
 *** 快捷键
@@ -268,6 +333,8 @@ S # 在当前目录打开新的终端
         #+end_example
 ** 百度网盘
 有提供rpm和dpk版本，直接下载安装使用即可。
+** vsdx
+https://www.edrawsoft.com/
 * 获取当前版本的代号(codename)
 Ubuntu 发布版本的官方名称是 Ubuntu X.YY ，其中 X 表示年份（减去2000），YY 表示发布的月份。
 Ubuntu 没有像其它软件一样有 1.0 版本，是因为其第一个版本是发布于 2004 年。所以Ubuntu的生日是10月20日。

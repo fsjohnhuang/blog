@@ -42,6 +42,13 @@ chkconfig <service_name> on
 
 * 常用命令
 
+** uname
+获取内核信息
+#+begin_example bash
+uname -r
+uname -a
+#+end_example
+
 ** ps
 #+BEGIN_EXAMPLE
 # 查看进程正在在序号为多少的CPU物理核上运行
@@ -107,9 +114,111 @@ tail -f <filepath>
 ** ifconfig
 用于设置或显示网络接口的程序，最小化安装时默认不安装。其和netstat、whois等命令都包含在net-tools下，因此需要手动安装net-tools。
 
+** ss
+查看端口
 * 定时任务
 
 ** at
+
+** crond
+crond进程用于周期性(最小单位：分钟)执行某任务的守护进程。Linux的任务调度分为 *系统任务调度* 和 *用户任务调度*
+1) 系统任务调度
+   系统周期性所要执行的工作，如写缓存数据到硬盘、日志清理等。保存在 ~/etc/crontab~ 中。
+   #+begin_example bash
+   # /etc/crontab
+   # set environment variables before execute run-parts
+   SHELL=/bin/bash
+   PATH=/sbin:/bin:/usr/sbin:/usr/bin
+   MAILO="root"
+   HOME=/
+   # run-parts
+   51 * * * * root run-parts /etc/cron.hourly
+   24 7 * * * root run-parts /etc/cron.daily
+   24 4 * * 0 root run-parts /etc/cron.weekly
+   42 4 1 * * root run-parts /etc/cron.monthlly
+   #+end_example
+   - 注意：
+     1) 系统任务必须为用户root的任务，但root的任务可以定义为用户任务
+     2) 重启系统必须定义为系统任务，定义在用户任务中也不会被执行
+     3) 在crontab中 ~%~ 是有特殊含义的，表示换行的意思。如果要用的话必须进行转义 ~\%~ ，如经常用的 ~date'+%Y%m%d'~ 在crontab里是不会执行的，应该换成 ~date '+\%Y\%m\%d'~
+   - 特殊文件和目录
+     1) ~/etc/cron.deny~ 文件中列出用户不允许使用的crontab命令
+     2) ~/etc/cron.allow~ 文件中列出用户允许使用的crontab命令
+     3) ~/etc/cron.d~
+     4) ~/etc/cron.daily~
+     5) ~/etc/cron.hourly~
+     6) ~/etc/cron.monthly~
+     7) ~/etc/cron.weekly~
+     8) ~/var/log/cron~ 日志
+2) 用户任务调度
+   用户周期性所要执行的工作，如用户数据备份、定时邮件提醒等。用户可以通过crontab工具定制自己的计划任务。所有用户任务调度都会保存在 ~/var/spool/cron~ 目录中，并且文件名与用户名一致。
+3) ~/etc/crontab~ 和 ~/var/spool/cron/*~ 文件中每一行代表一项任务。
+   1) crontab 格式:  ~minute(0-59) hour(0-23) day(1-31) month(1-12) week(0-7) command~
+   2) 特殊字符
+      - ~*~ 代表所有可能的值，其它字段满足即可。
+      - ~,~ 代表一组离散值，只要满足其中一个即可。
+      - ~-~ 代表一组连续值，只要满足其中一个即可。
+      - ~/~ 代表时间频率，如minute中 ~*/2~ 表示每2分钟执行。
+   3) 示例
+      #+begin_example bash
+      # 每分钟执行一次command
+      * * * * * command
+      # 每小时第3和15分钟执行一次command
+      3,15 * * * * command
+      # 每小时执行一次command
+      * */1 * * * command
+      # 每小时第1分钟以root用户身份执行/etc/cron.hourly目录下的脚本
+      1 * * * * root run-parts /etc/cron.hourly
+      #+end_example
+4) 安装
+   #+begin_example bash
+   yum install -y crontabs
+
+   /sbin/service crond start
+   /sbin/service crond stop
+   /sbin/service crond restart
+   /sbin/service crond reload
+   /sbin/service crond status
+
+   ntsysv # config service start or not when OS is up in GUI.
+   chkconfig --level 35 crond on # enable crond start when OS is up.
+
+   crontab [-u <user>] <file> # 将文件<file>作为/var/spool/cron/<user>，默认为当前用户
+   crontab [-u <user>] -e # 编辑/var/spool/cron/<user>，默认为当前用户
+   crontab [-u <user>] -l # 查看/var/spool/cron/<user>，默认为当前用户
+   crontab [-u <user>] -r # 删除/var/spool/cron/<user>，默认为当前用户
+   crontab [-u <user>] -i # 删除/var/spool/cron/<user>前提示，默认为当前用户
+   #+end_example
+5) 注意事项
+   1) 手动执行成功，但通过crontab执行不成功。
+      - 原因：手动执行是在当前shell环境下执行，可利用当前shell环境的所有环境变量。但crontab执行则不会加载任何环境变量，因此需要在执行前先设置环境变量。
+      - 方法：通过 ~source~ 导入环境变量，或直接在cron文件中 ~export~
+   2) 脚本中涉及文件路径时必须写绝对路径。
+6) run-parts
+   遍历目标目录，并执行第一层目录下的可执行文件。
+   #+begin_example bash
+   # 每小时第1分钟以root用户身份执行/etc/cron.hourly目录下的脚本
+   1 * * * * root run-parts /etc/cron.hourly
+   #+end_example
+7) 最佳实践
+   - 目录结构
+     #+begin_example yaml
+     - sync.d/
+       - sync_api.sh
+       - sync_web.sh
+     - sync.cron
+     #+end_example
+   - sync.cron
+     #+begin_example bash
+     SHELL=/bin/bash
+     # run-parts
+     1 * * * * root run-parts sync.d
+     #+end_example
+   - 备份和创建
+     #+begin_example bash
+     crontab -l > cron.bk
+     crontab sync.cron
+     #+end_example
 
 * TODO 用户和用户组管理
 
@@ -371,17 +480,38 @@ Allow 18.90.12.145
 ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
 #+END_EXAMPLE
 
+*** 远程执行命令
+#+begin_example bash
+# 顺序执行多条非交互命令
+ssh root@168.1.2.3 "pwd; cat hello.txt"
+
+# 执行交互命令
+# 当ssh不带命令时，ssh会创建一个tty。当带命令时，默认不会创建tty，而是执行完命令后即结束会话。
+# 通过选项-t显式让ssh创建一个tty。
+# 官方解释："Force pseudo-terminal allocation.  This can be used to execute arbitrary screen-based programs on a remote machine, which can be very useful, e.g. when implementing menu services.  Multiple -t options force tty allocation, even if ssh has no local tty."
+ssh -t root@168.1.2.3 "sudo ls /etc"
+
+# 执行本地脚本文件
+ssh root@168.1.2.3 < test.sh
+# 执行可传参数的本地脚本文件
+ssh root@168.1.2.3 'bash -s' < test.sh helloworld
+# 执行远程脚本文件，必须为绝对路径
+ssh root@168.1.2.3 '/path/to/script.sh'
+# 执行可传参数的远程脚本文件，必须为绝对路径
+ssh root@168.1.2.3 '/path/to/script.sh' helloworld
+#+end_example
+
 *** 基于密码和密钥的认证方式
     1) 基于密钥的认证方式
        1) 客户端在 =~/.ssh= 下生成一对公钥密钥，并将公钥发送到将要登录的服务器上
           #+BEGIN_EXAMPLE bash
           # 生成SSH公钥(~/.ssh/id_rsa.pub)和密钥(~/.ssh/id_rsa)
           ssh-keygen -t rsa -C "xxx@xxx.com"
-          # 传输公钥到服务端的~/.ssh/authorized_keys文件中
+          # 传输并作为最后一行追加公钥到服务端的~/.ssh/authorized_keys文件中
           ssh-copy-id -i ~/.ssh/id_rsa.pub <user>@<remote_server_ip>
           #+END_EXAMPLE
        2) 客户端发起连接请求，并将客户端公钥一并发到服务端
-          客户端第一次登录服务端时，服务端会发送 *公钥指纹* 让用户确认将要连接的服务器是否有效(防止伪装)，若输入yes确认继续访问则会将给服务端的公钥保存到客户端的 =~/.ssh/known_hosts= 文件中，后续登录相同服务器时会作为依据和服务端的公钥进行验证，若验证失败则有可能是服务端被伪装了。但可通过修改客户端的 ~/etc/ssh/ssh_config~ 禁用这验证过程：
+          客户端第一次登录服务端时，服务端会发送 *公钥指纹* 让用户确认将要连接的服务器是否有效(防止伪装)，若输入yes确认继续访问则会将给服务端的公钥作为最后一行追加到客户端的 =~/.ssh/known_hosts= 文件中，后续登录相同服务器时会作为依据和服务端的公钥进行验证，若验证失败则有可能是服务端被伪装了。但可通过修改客户端的 ~/etc/ssh/ssh_config~ 禁用这验证过程：
           #+BEGIN_EXAMPLE
           StrictHostKeyChecking no
           #+END_EXAMPLE
@@ -528,9 +658,15 @@ ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
      # 将压缩包解压到指定目录下
      tar -zxvf xxx.tar.gz -C target_dir/
 
-     # 提取压缩包的部分文件到指定目录下
-     tar -C target_dir/ -zxvf xxx.tar.gz dir_in_tar/xxx*yyy
+     # 提取压缩包的部分文件到指定目录下, 压缩包中的目录结构保持
+     tar -C target_dir/ -zxvf xxx.tar.gz --wildcards dir_in_tar/xxx*yyy
      tar -C target_dir/ -zxvf xxx.tar.gz dir_in_tar/xxx1 dir_in_tar/yyy1
+     #+end_example
+   - 压缩
+     #+begin_example bash
+     # 压缩指定目录下的某个目录的内容
+     # 打包压缩./dist下的内容，并保存到当前目录下的dist.tar.gz
+     tar -C ./dist -zcvf dist.tar.gz .
      #+end_example
 2) Bzip2
    - 优点
@@ -541,3 +677,22 @@ ssh-keygen -f "~/.ssh/known_hosts" -R 192.168.0.169
    - 场景
      1) 备份历史记录、文件
      2) 对压缩速率要求不高，对压缩率要求高的场景
+3) xz
+   - 优点
+     1) 压缩率比7z高
+   - 缺点
+     1) 压缩/解压速度慢
+   - 解压
+     #+begin_example bash
+     # 分步解压
+     xz -d xxx.tar.xz
+     tar -xvf xxx.tar
+
+     # 直接解压
+     tar -xvJf xxx.tar.xz
+     #+end_example
+   - 压缩
+     #+begin_example bash
+     tar -cvf xxx.tar xxx
+     xz -z xxx.tar
+     #+end_example

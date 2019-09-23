@@ -1,0 +1,44 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/repos/blog/note/linux/ubuntu19.org
+
+
+* locate
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2019-09-11 Wed 15:05
+  :ARCHIVE_FILE: ~/repos/blog/note/linux/ubuntu19.org
+  :ARCHIVE_OLPATH: 其它工具
+  :ARCHIVE_CATEGORY: ubuntu19
+  :END:
+通过Linux系统每天指定时间自动索引备份到系统数据库中的文件，实现文件的模糊查询。
+数据库:var/lib/mlocate/mlocate.db
+1) 更新数据库
+   #+begin_example bash
+   # 配置文件/etc/updatedb.conf
+   /usr/bin/updatedb
+   #+end_example
+   1) /etc/updatedb.conf
+      #+begin_example
+      PRUNE_BIND_MOUNTS = "yes"
+      PRUNEFS = "9p afs anon_inodefs auto autofs bdev binfmt_misc cgroup cifs coda configfs cpuset debugfs devpts ecryptfs exofs fuse fusectl gfs gfs2 hugetlbfs inotifyfs iso9660 jffs2 lustre mqueue ncpfs nfs nfs4 nfsd pipefs proc ramfs rootfs rpc_pipefs securityfs selinuxfs sfs sockfs sysfs tmpfs ubifs udf usbfs"
+      PRUNENAMES = ".git .hg .svn"
+      PRUNEPATHS = "/afs /media /net /sfs /tmp /udev /var/cache/ccache /var/spool/cups /var/spool/squid /var/tmp"
+      #+end_example
+      - 第一行PRUNE_BIND_MOUNTS="yes"的意思是：是否进行限制搜索。
+      - 第二行是排除检索的文件系统类型，即列出的文件系统类型不进行检索。
+      - 第三行表示对哪些后缀的文件排除检索，也就是列在这里面的后缀的文件跳过不进行检索。不同后缀之间用空格隔开。
+      - 第四行是排除检索的路径，即列出的路径下的文件和子文件夹均跳过不进行检索。updatedb之后使用locate仍然找不到想要文件，可以检查挂载的目录是否被忽略了。
+2) 使用
+   #+begin_example bash
+   # 搜索路径包含abc的记录
+   locate abc
+   # 搜索路径包含abc大小写不敏感的记录
+   locate -i abc
+   # 搜索basename包含abc的记录
+   locate -b abc
+   # 搜索路径全匹配abc的记录
+   locate '\abc'
+   # 搜索basename路径全匹配abc的记录
+   locate -b '\abc'
+   #+end_example
