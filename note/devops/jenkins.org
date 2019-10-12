@@ -1,3 +1,4 @@
+
 * 路线
   1) GitLab
   2) jira
@@ -174,7 +175,6 @@ Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ
          #+begin_example
         ${BUILD_NUMBER} 当前构建的编号
         ${JOB_DESCRIPTION} 项目描述
-        ${SVN_REVISION} svn版本号。还支持Subversion插件出口的SVN_REVISION_n版本
         ${CAUSE} 显示谁、通过什么渠道触发这次构建
         ${CHANGES} -显示上一次构建之后的变化
         ${BUILD_ID}显示当前构建生成的ID
@@ -633,6 +633,12 @@ This may also be found at: /home/john/.jenkins/secrets/initialAdminPassword
    html-module.sonar.projectBaseDir=html_src
    #+end_example
 
+**** SonarQube Scanner for Java
+     #+begin_quote
+     From SonarJava version 4.12 binary files are required for java projects with more than one java file. If not provided properly, analysis will fail with the message.
+     "Please provide compiled classes of your project with sonar.java.binaries property"
+     #+end_quote
+
 * 集成Jenkins
    1) Installation
       - Jenkins Plugin: SonarQube Scanner for Jenkins
@@ -1090,6 +1096,10 @@ UNREACHABLE! => {"changed": false, "msg": "plaintext: HTTPConnectionPool(host='1
     Cloud Native Jenkins, 用于发布基于Kubernetes的应用。
   - Spinnaker
 * TODO 高可用架构
+问题：
+1) Slave的配置环境不一致，难以维护；
+2) Slave资源分配不均衡，有的Slave排队，有的处于空闲状态并且不会释放资源。
+
 ** 主备模式
 平时让Jenkins A机器提供服务，并使用[[https://plugins.jenkins.io/scm-sync-configuration][SCM Sync configuration plugin]]保存数据，JenkinsA机器修改配置后触发Jenins B更新配置，一旦Jenkins A出现问题挂掉后，切换到备机Jenkins B上。
 安装SCM Sync configuration plugin后Jenkins的各种配置有更改时，都会将修改提交到相应的Git库。保证所有的配置信息不会丢失，当Jenkins重新在别的机器上启动后， 从git上将配置下载下来，这样就保证数据一致了。
@@ -1104,11 +1114,59 @@ openshift 提供的方案
 ** Jenkins + Apache Mesos + Marathon
 eBay, DevEx team 使用该方案。
 
+** 共享存储方案
+NFS, GlusterFS, ceph e.g.
+Kubernetes支持的共享存储方案
+#+begin_example
+GCEPersistentDisk
+AWSElasticBlockStore
+AzureFile
+AzureDisk
+FC (Fibre Channel)
+FlexVolume
+Flocker
+NFS
+iSCSI
+RBD (Ceph Block Device)
+CephFS
+Cinder (OpenStack block storage)
+Glusterfs
+VsphereVolume
+Quobyte Volumes
+HostPath (就是刚才说的映射到主机的方式，多个Node节点会有问题)
+VMware Photon
+Portworx Volumes
+ScaleIO Volumes
+StorageOS
+#+end_example
+
+*** ClusterFS
+    GlusterFS，是一个开源的分布式文件系统，具有强大的横向扩展能力，通过扩展能够支持数PB存储容量和处理数千客户端。GlusterFS借助TCP/IP或InfiniBand RDMA网络将物理分布的存储资源聚集在一起，使用单一全局命名空间来管理数据。GlusterFS的Volume有多种模式，复制模式可以保证数据的高可靠性，条带模式可以提高数据的存取速度，分布模式可以提供横向扩容支持，几种模式可以组合使用实现优势互补。
+
+**** 安装
+     1) 在集群服务器上安装
+        #+begin_example bash
+        yum install centos-release-gluster
+        yum install glusterfs-server
+        /etc/init.d/glusterd start
+        #+end_example
+     2) 建立相互信任关系
+        #+begin_example bash
+        gluster peer probe <other-server-ip>
+        gluster peer status
+        #+end_example
+     3) 创建分布式卷
+        #+begin_example bash
+        gluster volume create jenkins_public <ip-of-A>:/path/to/volume <ip-of-B>:/path/to/volume force
+        gluster volume info # Show information of volume
+        gluster volume start jenkins_public # Start distribute volume
+        #+end_example
 * TODO 脚本化
 
 ** 作业配置脚本化
 
 *** Pipeline
+https://www.cnblogs.com/qinghe123/p/9468095.html
 需要Jenkins2.x和安装Pipeline Plugin。
 3种创建方式
 1) Blue Ocean(可视化编辑器)
@@ -1148,14 +1206,30 @@ Jenkins Pipeline就是基于Groovy语言实现的一种DSL。
    #+end_example
 2) 获取日期
    #+begin_example groovy
-   def calender = Calender.getInstance()
-   // 获取当前日期位于本月第几周
-   calendar.get(Calendar.WEEK_OF_MONTH)
+   script {
+       def calendar = Calendar.getInstance()
+       // 获取当前日期位于本月第几周
+       calendar.get(Calendar.WEEK_OF_MONTH)
 
-   def now = new Date()
-   def fmt = 'yyyyMMdd'
-   def format = new SimpleDateFormat(fmt)
-   def date = format.format(now.getTime())
+       def now = new Date()
+       def fmt = 'yyyyMMdd'
+       def format = new java.text.SimpleDateFormat(fmt)
+       def date = format.format(now.getTime())
+   }
+   #+end_example
+   或者
+   #+begin_example groovy
+   import java.text.SimpleDateFormat
+   script {
+       def calendar = Calendar.getInstance()
+       // 获取当前日期位于本月第几周
+       calendar.get(Calendar.WEEK_OF_MONTH)
+
+       def now = new Date()
+       def fmt = 'yyyyMMdd'
+       def format = new SimpleDateFormat(fmt)
+       def date = format.format(now.getTime())
+   }
    #+end_example
 
 **** Declarative Pipeline
@@ -1180,6 +1254,21 @@ https://jenkins.io/zh/doc/book/pipeline/syntax/
        - ~secret-file~, location of file
        - ~username-and-password~, specified as "username:password"
        - ~ssh-with-private-key~, location of the ssh key file and optionally "username:password"
+  - sample
+    #+begin_example groovy
+    pipeline {
+        agent none
+        environment {
+            JENKINS_PATH = sh(script: 'pwd', returnStdout: true)
+            field = func()
+            val = 'Hi'
+        }
+    }
+
+    def func() {
+        return 'Yep'
+    }
+    #+end_example
 - ~input~ (optional), defined at ~stage~ section.
   get input by prompting users. Options as below
   - ~message~ The message to be show to the user.
@@ -1547,7 +1636,7 @@ pipeline {
                 stage('first') {
                     steps {
                         script {
-                            last_started = env.STAGE_NAME
+                            last_started = env.STAGE_NAME // 没有用def定义的变量为全局变量，带def的局部变量
                             echo "in first"
                             def a = 0
                             def b = 10 / a
@@ -1570,55 +1659,236 @@ pipeline {
             }
         }
         #+end_example
-
-**** Scripted Pipeline
-Uses groovy based syntax.
-
-~node~ (required), instruct Jenkins to allocate an executor and workspace for the Pipeline.
+     6) withEnv
+        - 作用：局部范围内修改环境变量。
+        - 使用
+          #+begin_example groovy
+          withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+            sh "mvn clean verify"
+          }
+          #+end_example
+     7) stash/unstash
+        - 作用：在stages和nodes间传递共享构建物
+        - 使用
+          #+begin_example groovy
+          stash excludes: 'target/', name: 'source'
+          unstash 'source'
+          #+end_example
 
 **** Built-in Documentation
 位于 ~${YOUR_JENKINS_URL}/pipeline-syntax~ 中。
 
-**** Jenkins Shared Library
-     1) 目录结构(https://github.com/devopscube/jenkins-shared-library-structure)，并托管到SCM中。
-        #+begin_example yaml
-        jenkins-shared-library/
-          - vars/ # All the files under vars are global functions and variables. The file name is the function name.
-            - gitCheckout.groovy
-          - src/p
-          - resource/
-        #+end_example
-     2) Function file
-        #+begin_example groovy
-        def call(Map stageParams) {
-          checkout([
-              $class: 'GitSCM',
-              branches: [[name: stageParams.branch]],
-              userRemoteConfigs: [[url: stageParams.url]]
-          ])
-        }
-        #+end_example
-     3) 添加Jenkins Shared Library到Jenkins
-        在 Manage Jenkins/Configure System 的 Global Pipeline Libraries 设置 Jenkins Shared Library 的SCM地址。
-        - Name，为在Pipeline Script中引入Jenkins Shared Library的名称
-        - Default version，为默认版本。
-     4) 在Pipeline Script中引用
-        #+begin_example groovy
-        @Library('jenkins-library@master') // 引用名称为 <Name>@<Default version>
+**** TODO Jenkins Shared Library
+     https://testerhome.com/topics/11241
+     独立托管到一个SCM仓库中，然后提供给其它Jenkins Pipeline项目使用;或和Jenkinsfile位于同一个仓库。
 
-        pipeline {
-          stages {
-            stage("Build") {
-              steps {
-                gitCheckout(
-                  branch: 'master',
-                  url: 'https://github.com/fsjohnhuang'
-               )
-              }
-            }
-          }
-        }
-        #+end_example
+***** 模块库方式
+      1) 目录结构(https://github.com/devopscube/jenkins-shared-library-structure)，并托管到SCM中。
+         #+begin_example yaml
+         jenkins-shared-library/
+           - Jenkinksfiles/ # Place all Jenkinsfile.groovy here.
+           - vars/ # All the files with a .groovy extension under vars/ all are global functions and variables. The file name is the function name, so file must be named in camelCased.
+                   # The files with a .txt extension are the documentations in markdown format of the shared library code. The help file can be viewed from <your-jenkins-url>/pipeline-syntax/global page.
+             - gitCheckout.groovy
+           - src/ # It's a regular Groovy source directory(Notice: extension name must be .groovy). It's added to the classpath during every script compilation.
+             - org/test/build
+               - HelloWorld.groovy
+           - resource/ # All the non-groovy files required for your pipelines can be managed in this folder.
+                       # Load the resource by `libraryResource` function. ~def request = libraryResource 'org/test/dummydata.json'~
+             - org/test/
+               - dummydata.json
+         #+end_example
+      2) Library —— HelloWorld.groovy
+         #+begin_example groovy
+         package org.test.build
+
+         // implement Serializable interface to support saving the state if the pipeline is stopped or resumed.
+         class HelloWorld implements Serializable {
+           private String _solutionPath
+
+           HelloWorld(String solutionPath){
+             _solutionPath = solutionPath
+           }
+
+           void build() {
+             println _solutionPath
+           }
+         }
+         #+end_example
+         - 注意
+           - 无法直接使用Jenkins Pipeline中的steps，如git,sh,echo等
+           - 当可从Jenkinsfile传递 ~this~, ~steps~, ~env~ 等过去
+             - 定义
+               #+begin_example groovy
+               package io.fsjohnhuang
+
+               class Utilities {
+                 def env
+                 def steps
+
+                 Utilities(env, steps) {
+                   this.env = env
+                   this.steps = steps
+                 }
+
+                 static mvn(script, args) {
+                   script.sh "{script.tool 'Maven'}/bin/mvn -s ${script.env.HOME}/jenkins.xml -o ${args}"
+                 }
+               }
+               #+end_example
+             - 使用
+               #+begin_example groovy
+               @Library('mylibrary') import io.fsjohnhuang.Utilities
+
+               ...
+               script {
+                 def util = new Utilities(env, steps)
+                 Utilities.mvn this, "clean package"
+               }
+               #+end_example
+      3) Global Variables —— Function file
+         - 定义
+           #+begin_example groovy
+           #!groovy
+           # vars/gitCheckout.groovy
+           import org.test.build.HelloWorld
+
+           def call(Map stageParams) {
+             new HelloWorld('123').build()
+
+             checkout([
+                 $class: 'GitSCM',
+                 branches: [[name: stageParams.branch]],
+                 userRemoteConfigs: [[url: stageParams.url]]
+             ])
+           }
+
+           def say() {
+             return "hi"
+           }
+           #+end_example
+         - 使用
+           #+begin_example groovy
+           @Library("my-shared-library@master") _
+
+           pipeline {
+             ...
+             script {
+               gitCheckout("url/to/repos")
+
+               echo gitCheckout.say()
+             }
+           }
+           #+end_example
+      4) 添加Jenkins Shared Library到Jenkins
+         1) 全局共享库(Global Pipeline Libraries)
+            - 作用域范围：全局可引用，且运行在安全沙盒之外，因此可以运行 Java/Groovy/Jenkins内部API/Jenkins插件/第三方库 的任何方法。
+              #+begin_example groovy
+              #!groovy
+              # 在其它环境运行会提示no permisson。
+              new Date().getTime()
+              #+end_example
+            - 引用第三方Java库 ~@Grab~
+            - 操作
+              在 Manage Jenkins/Configure System 的 Global Pipeline Libraries 设置 Jenkins Shared Library 的SCM地址。
+              - Name，为在Pipeline Script中引入Jenkins Shared Library的名称
+              - Default version，为默认版本。若留空那么 ~@Library(<library-name>)~ 中的 ~<library-name>~ 必须包含版本号 ~@<version>~
+         2) Folder-level Shared Libraries
+            - 作用域范围：当前目录及子目录下的Pipeline，共享库被认为不安全，因此将运行在沙盒中。
+         3) Automatic Shared Libraries
+            其他插件可以增加定义共享库的方法。例如插件github-branch-source提供一个GitHub组织目录项，这个目录项允许脚本不用任何附加配置就可以使用不受信任的库，例如github.com/someorg/somerepo。
+      5) 在Pipeline Script中引用
+         #+begin_example groovy
+         @Library('jenkins-library@master') _ // 引用名称为 <Name>@<Default version>
+         # @Library(['jenkins-library@master', 'other-library@master']) _
+
+         pipeline {
+           stages {
+             stage("Build") {
+               steps {
+                 gitCheckout(
+                   branch: 'master',
+                   url: 'https://github.com/fsjohnhuang'
+                )
+               }
+             }
+           }
+         }
+         #+end_example
+         - ~@Library(<library-name>) _~ 仅引入单个shared library的全局变量和方法(定义在vars下文件的变量和方法)
+         - ~@Library([<library-name>...]) _~ 仅引入多个shared library的全局变量和方法(定义在vars下文件的变量和方法)
+         - ~@Library(<library-name>) import org.test.build.HelloWorld~ 引入单个shared library下的类库(定义在src下文件的类)
+           #+begin_example groovy
+           @Library(<library-name>) import org.test.build.HelloWorld
+
+           pipeline {
+             agent none
+             stages {
+               stage("init") {
+                 steps {
+                   script {
+                     def inst = HellowWorld()
+                     echo inst.build()
+                   }
+                 }
+               }
+             }
+           }
+           #+end_example
+      6) 动态引入SharedLibrary——library指令
+         1) 示例1——基本使用
+            #+begin_example groovy
+            def mvn = library('utils@master').io.fsjohnhuang.Utilities.mvn
+            mvn this, 'clean package'
+            #+end_example
+         2) 示例2——可选版本号
+            #+begin_example groovy
+            properties([parameters([string(name: 'LIB_VERSION', defaultValue: 'master')])])
+            library 'my-shared-library@${params.LIB_VERSION}'
+            #+end_example
+         3) 示例3——动态仓库
+            #+begin_example groovy
+            library identifier: 'custom-lib@master', retriever: modernSCM(
+              [$class: 'GitSCMSource',
+               remote: 'git@git.mycorp.com:my-jenkins-utils.git',
+               credentialsId: 'my-private-key'])
+            #+end_example
+      7) 使用第三方JAR包
+         - 从Maven中心仓库下载、加载JAR包
+           #+begin_example groovy
+           // 在vars文件下调用(因为SharedLibrary运行在沙盒外，被认为完全信任的程序)
+           @Grab('org.apache.commons:commons-math3:3.4.1')
+           import org.apache.commons.math3.primes.Primes
+           #+end_example
+           - JAR包默认被缓存到Jenkins Master节点的 =~/.groovy/grapes/= 下
+
+***** 模板库方式
+      将整个Declarative Pipeline作为共享库
+      1) 共享库
+         #+begin_example groovy
+         #!groovy
+         # vars/callSh.groovy
+         def call(String type, Map map) {
+             pipeline {
+                 agent none
+                 stages {
+                    stage('Test') {
+                       sh label: map.label, script: type + map.script
+                    }
+                 }
+             }
+         }
+         #+end_example
+      2) 使用
+         #+begin_example groovy
+         @Library 'library@master' _
+
+         def map = [:]
+         map.put('label', 'hi')
+         map.put('script', '123')
+         callSh('echo', map)
+         #+end_example
+
 **** 辅助工具
 1) Snippet Generator
    内置工具，用于生成单步的Scripted Pipeline代码，发现插件提供的新步骤，和在指定步骤中实验不同的参数。
@@ -1636,6 +1906,15 @@ Uses groovy based syntax.
 - ~env~
   - ref: ~${YOUR_JENKINS_URL}/pipeline-syntax/globals~
   - sample: ~env.PATH~, ~env.BUILD_ID~, ~env.STAGE_NAME~ (获取当前stage中的label)
+    1) ~env.getEnvironment()~ (获取所有环境变量)
+       #+begin_example groovy
+       script {
+           def fields = env.getEnvironment()
+           fields.each {
+             key, value -> println("${key}=${value}")
+           }
+       }
+       #+end_example
 - ~params~
   expose all parameters defined for the Pipeline as a read-only Map.
   - sample: ~params.MY_PARAM_NAME~
@@ -1690,7 +1969,33 @@ Uses groovy based syntax.
         #+end_example
      2) Jenkins Configuration as Code
 
-*** Jenkins Job Scripts
+*** Jenkins Job Builder
+https://docs.openstack.org/infra/jenkins-job-builder/
+comes from OpenStack infrastructure components.
+define job by yaml to generate Jenkins job xml structure.
+
+jenkins-jobs command
+1) Installation
+   #+begin_example bash
+   pip install --user jenkins-job-builder
+   #+end_example
+2) Usage
+   #+begin_example bash
+   # Generate Jenkins job xml structure to stdout.
+   jenkins-jobs test ./sample1.yml
+
+   # Update the job to Jenkins server.
+   # The default configuration file places in /etc/jenkins_jobs/jenkins_jobs.ini.
+   jenkins-jobs update ./sample1.yml --conf /path/to/jenkins_jobs.ini
+   #+end_example
+
+Reuse and Templating
+1) defaults
+2) templates
+3) macros
+   Let us externalize and parameterize certain sections of a job.
+
+*** Jenkins Job Plugin
 
 ** Jenkins配置脚本化
 https://plugins.jenkins.io/configuration-as-code

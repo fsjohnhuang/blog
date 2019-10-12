@@ -136,3 +136,11 @@ magit Git
 替换 ~^M~ (Mac的换行符号)
 1) 替换： ~m-x replace-string RET c-q c-m RET RET~
 2) 修改为Unix编码： ~c-x RET utf-8-unix RET c-x c-w RET y~
+* 代码格式化
+** 内置方式
+#+begin_example elisp
+M-x mark-whole-buffer ;; 或 C-x h，选中整个缓冲区
+M-x indent-buffer     ;; 格式化
+
+M-x mark-defun        ;; 或 C-M-h，选中当前函数
+#+end_example

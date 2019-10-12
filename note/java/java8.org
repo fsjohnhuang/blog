@@ -40,7 +40,7 @@
       char uniChar = '\u039A'; // Unicode 字符表示形式
       char[] charArray = {'a', 'b'};
       #+END_EXAMPLE
-  
+
   8种基本数据类型的包装类的属性
   - SIZE，返回数据类型所占的位数
   - MIN_VALUE，返回最小值
@@ -51,12 +51,49 @@
   实例方法
   - xxxValue()，从包装类实例中提取内部的基本数据类型变量值
 
-  
-
-  隐式类型转换： ~byte,short,char -> int -> long -> float -> double~ 
+  隐式类型转换： ~byte,short,char -> int -> long -> float -> double~
   显式强制转换需注意内容：
   1) 浮点数转整数会直接舍弃小数，而不是四舍五入
   2) 不能对boolean类型进行类型转换
+
+** 基本数据类型转包装类
+   1) 通过构造函数(除了Character外)
+      #+begin_example java
+      Boolean b1 = new Boolean(true);
+      Boolean b2 = new Boolean("true");
+      Integer i1 = new Integer(1);
+      Integer i2 = new Integer("1");
+      #+end_example
+   2) 通过包装类的valueOf静态方法
+      #+begin_example java
+      Boolean b1 = Boolean.valueOf(true);
+      Boolean b2 = Boolean.valueOf("true");
+      Integer i1 = Integer.valueOf(1);
+      Integer i2 = Integer.valueOf("1", 10); // 第一个参数为字符串时，第二个参数为进制数
+      #+end_example
+
+** 包装类转基本数据类型
+   #+begin_example java
+   Integer i1 = 1;
+   int i2 = i1.intValue();
+   #+end_example
+
+** 字符串转基本数据类型
+   #+begin_example java
+   String str = "123";
+
+   byte b = Byte.parseByte(str);
+   short s = Short.parseShort(str);
+   int i = Integer.parseInt(str);
+   long l = Long.parseLong(str);
+   float f = Float.parseFloat(str);
+   double d = Double.parseDouble(str);
+   #+end_example
+
+** 基本数据类型转字符串
+   #+begin_example java
+   String.valueOf(value)
+   #+end_example
 
 * 局部变量、实例变量和静态变量
   1) 局部变量
@@ -96,13 +133,13 @@
   // 定义容量为5的int数组
   int[] c = new int[5];
   int[] d = {1,2,3,4,5};
-  
+
   String[] strs = new String[]{"a", "b"};
 
   // 2×n的二维数组
   int[][] e = new int[2][];
-  e[0] = new int[2]; 
-  e[1] = new int[3]; 
+  e[0] = new int[2];
+  e[1] = new int[3];
   e[0][0] = 1;
   e[0][1] = 2;
   e[1][0] = 4;
@@ -203,7 +240,7 @@
 
    System.out.printf("%d", edn - start);
    #+END_EXAMPLE
-   
+
 ** ~Calendar~ 实例
    可单独提取、增加、减少日期时间年、月、日等组件值。
    #+BEGIN_EXAMPLE java
@@ -235,7 +272,7 @@
     cale.setTime(date);
     #+END_EXAMPLE
 
-* TODO 货币处理 
+* TODO 货币处理
 NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 
 * IO
@@ -348,7 +385,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        enum FreshJuiceSize { SMALL, MEDIUM, LARGE }
        FreshJuiceSize size;
      }
-     
+
      public class FreshJuiceTest {
        public static void main(String []args) {
          FreshJuice juice = new FreshJuice();
@@ -361,32 +398,32 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      // 枚举类Sex
      public enum Sex {
        MALE(1, "男性"), FEMALE(2, "女性"); // 枚举值MALE和FEMALE
-  
+
        private int id;
        private String name;
-       
+
        // 枚举的构造方法始终为private，因此可以省略访问控制符
        private Sex(int id, String name){
          this.id = id;
          this.name = name;
        }
-  
+
        public int getId(){
          return this.id;
        }
-  
+
        public void setId(int id){
          this.id = id;
        }
-  
+
        public String getName(){
          return this.name;
        }
-  
+
        public void setName(String name){
          this.name = name;
        }
-  
+
        public static Sex getSex(int id){
          if (id == 1){
            return MALE;
@@ -394,7 +431,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
          else if (id == 2){
            return FEMALE;
          }
-  
+
          return null;
        }
      }
@@ -412,14 +449,14 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
            return this.id + 2;
          }
        };
-       
+
 
        protected int id;
 
        Sex(int id){
          this.id = id;
        }
-       
+
        public abstract int getId();
      }
      #+END_EXAMPLE
@@ -430,7 +467,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        MALE, FEMALE;
        public static int count = 1;
        private int c;
-       
+
        // 在枚举常量构建后执行静态代码块
        static {
          for(Sex sex : Sex.values()){
@@ -444,7 +481,6 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      | 方法                                         | 描述                               |
      |----------------------------------------------+------------------------------------|
      | toString()                                   | 返回枚举常量的名称                 |
-     | toName()                                     | 返回枚举常量的名称                 |
      | int ordinal()                                | 返回枚举常量的的序列位置，从0开始  |
      | int compareTo(Enum<E> other)                 | 通过序列位置比较两个枚举常量       |
      | static T valueOf(class<T> type, String name) | 根据名称获取枚举常量               |
@@ -453,6 +489,23 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      | int hashCode()/protected void finanlize()    |                                    |
      | protected Object clone()                     | 抛出cloneNotSupportedException异常 |
   6) 枚举类不能通过继承父类，因为默认继承Enum类了，但可以实现接口。
+  7) 枚举在switch中的case子句中时，不能使用全限定名称
+     #+begin_example java
+     public class T {
+         public enum E {
+           A, B
+         }
+
+         public int get(E e) {
+             switch(e) {
+                 case A: // 不能写 T.E.A 或 E.A
+                     return 1;
+                 case B: // 不能写 T.E.B 或 E.B
+                     return 2;
+             }
+         }
+     }
+     #+end_example
 
 * 源文件声明规则
 1) 一个源文件中只能有一个public类
@@ -475,7 +528,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
    #+BEGIN_EXAMPLE java
    import static org.john.Test.StaticMethod; // 引入静态方法StaticMethod
    import staitc org.john.Test.*; // 引入Test类下的所有静态方法和成员变量
-   
+
    public class TestC{
      public void print(){
        StaticMethod(StaticMember);
@@ -620,7 +673,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     // 入参类型和返回值类型采用泛型
     public <E> E print(E a){
       System.out.println(a);
-      
+
       return a;
     }
 
@@ -628,7 +681,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     public <E, T> T forceCast(E a){
       return (T)a;
     }
-    
+
     // 有界泛型，通过extends或implements设置泛型必须为某类或接口的派生类
     public <T extends Comparable<T>> T maximum(T x, T y){
       T max = x;
@@ -668,16 +721,16 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        注意：实现某接口也是用 ~extends~
        #+BEGIN_EXAMPLE java
        void printNumber(List<? extends Number> data){
-         System.out.println(data.get(0) + 1);       
+         System.out.println(data.get(0) + 1);
        }
        #+END_EXAMPLE
     3) 带 ~super~ 的有界泛型通配符，用于对不关心应类型参数具体值但需要限制为某类及父类、基类类型，如Object类型
        #+BEGIN_EXAMPLE java
        void printNumber(List<? super Number> data){
-         System.out.println(data.get(0) + 1);       
+         System.out.println(data.get(0) + 1);
        }
        #+END_EXAMPLE
-   
+
 *** 底层原理
     类型擦写(type erasure)：编译器在编译时会将所有类型参数信息擦除掉，在运行时不存在任何类型参数相关的信息。如 ~List<String>~ 在运行时只剩下 ~List~ ，这样就能兼容Java5之前版本的二进制类库，因此称Java的泛型为伪泛型。
     由于类型参数信息对JVM来说是不可见的，因此无法避免在运行时出现的类型转换异常的情况，但也不会出现真泛型中的类型膨胀问题。
@@ -692,7 +745,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     // 返回true
     System.out.println(list1.getClass() == list2.getClass());
     #+END_EXAMPLE
-    
+
     问题示例2——运行时反射方法调用
     #+BEGIN_EXAMPLE java
     ArrayList<String> list1 = new ArrayList<String>();
@@ -701,8 +754,8 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     Method m = list1.getClass().getMethod("add", Object.class);
     m.invoke(list1, 123); // 运行正常
     #+END_EXAMPLE
-    
-**** 显式和隐式声明类型变量    
+
+**** 显式和隐式声明类型变量
      #+BEGIN_EXAMPLE java
      public class App{
        public static <T> T add(T x, T y){
@@ -712,10 +765,10 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        public static void main(String[] args){
          Integer i = App.add(1, 2); // 隐式声明类型变量为Integer
          Float d = App.add(1, 2.1); // 隐式声明类型变量为Float
-         
+
          Integer i = App.<Integer>add(1, 2); // 显式声明类型变量为Integer
          Float d = App.<Float>add(1, 2.1); // 显式声明类型变量为Float
-         
+
          // Integer i = App.<Integer>add(1, 2.1); // 编译报错
          Number n = App.<Number>add(1, 2.1);
        }
@@ -738,7 +791,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
         #+BEGIN_EXAMPLE java
         public <T> T get(T a){ return a; }
         Integer a = <Integer>get(1);
-        
+
         // 编译后的代码逻辑如下
         public Object get(Object a){ return a; }
         Object oA = get(1);
@@ -863,7 +916,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     1) 不型变(invariance): ~List<Orange>~ 和 ~List<Fruit>~ 两者没有任何关系；
     2) 协变(covariance): ~List<Orange>~ 为 ~List<Fruit>~ 的子类型；
     3) 逆变(cotravariance): ~List<Fruit>~ 为 ~List<Orange>~ 的子类型；
-    
+
     *子类(Subclass)* 和 *子类型(Subtype)* 不是一个概念，子类一定是子类型，但子类型不一定是子类。如 ~List<Orange>~ 是 ~List<? extends Fruit>~ 的子类型，但不是子类。
 
 **** Java中的协变
@@ -885,13 +938,13 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      *特点：*
      1) 禁止向泛型类执行写入操作
      2) 允许安全地从泛型类中读取数据
-     
+
 **** Java中的逆变
      #+BEGIN_EXAMPLE java
      List<? super Fruit> superFruitList = new LinkedList<Object>();
      superFruitList.add(new Orange());
      superFruitList.add(new Fruit());
-     
+
      Object o = superFruitList.get(0);
      Fruit f = (Fruit)superFruitList.get(1);
      #+END_EXAMPLE
@@ -971,7 +1024,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
         String[] b = null;
         test("abc", b); // String
       }
-    }    
+    }
     #+END_EXAMPLE
 
 *** 反射
@@ -994,13 +1047,13 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
    作用：
    1) 当要实现的接口方法与当前类的方法签名冲突时，可通过内部类实现接口方法(内部类可访问外部类所有成员)；
    2) 通过内部类继承其它类型，达到多继承的效果；
-    
+
 *** 分类
     1) 成员内部类
        #+BEGIN_EXAMPLE java
        public class Fruit {
          private double price = 100;
-        
+
          private class InnerPrice implements Price{
            public double getPrice(){
              // discount 在Price接口中定义
@@ -1025,7 +1078,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
            return new InnerPrice();
          }
        }
-      
+
        // 调用
        Fruit f = new Fruit();
        // 通过private或protected隐藏内部类，调用则只需调用接口或父类约定的方法即可
@@ -1044,7 +1097,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        #+BEGIN_EXAMPLE java
        public static class Fruit {
          private static double price = 100;
-        
+
          public static class InnerTimeToMarket extends TTM {
            private static double price = 200;
 
@@ -1104,7 +1157,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
        - ~java.lang.Error~ 包括虚拟机错误和线程死锁，无法被程序员捕获处理，因此一旦抛出Error异常程序则会挂掉。
        - ~java.lang.Exception~ 可被获取和处理
          - ~java.lang.Runtime~ 运行时异常
-         
+
   2) 异常分类
      1) unchecked exception(非检查性异常)
         Error类型异常、Runtime类型及其派生类异常。这类异常在编译时不被提发现和提示，开发人员应该通过修改代码的方式来杜绝这类异常，而不是依赖异常处理器处理(~try...catch~)处理。
@@ -1139,7 +1192,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
   3) 异常处理器
      #+BEGIN_EXAMPLE java
      try{
-       
+
      }
      catch(IOException e){
        // catch 语句块所捕获的顺序为自上而下，因此异常类型的顺序为子类到父类
@@ -1153,7 +1206,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      return "something";
      #+END_EXAMPLE
   4) 自定义异常
-     #+BEGIN_EXAMPLE java 
+     #+BEGIN_EXAMPLE java
      public class MyException extends Exception{
        public MyException(String message){
          super(message);
@@ -1213,7 +1266,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 *** ~java.util.BitSet~ (位集合)
     实现了一组可单独设置和清除的位标识。
 
-*** ~java.util.Vector~   
+*** ~java.util.Vector~
     动态数组，功能和ArrayList类似，但有如下区别：
     1) Vector是线性安全
     2) Vector包含很多不属于集合框架的方法
@@ -1243,7 +1296,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
    1) 提供高性能的集合操作
    2) 对不同类型的集合采用类似的方式操作
    3) 对某个集合的扩展和适应必须简单
-   
+
    组成：
    1) 接口
       1) Collection
@@ -1293,7 +1346,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
            2) 插入、删除效率低
          - 线性安全改造
            #+BEGIN_EXAMPLE java
-           List<String> unsafeList = new LinkedList();
+           List<String> unsafeList = new ArrayList();
            List<String> safeList = Collections.synchronizedList(unsafeList);
            #+END_EXAMPLE
       6) Vector
@@ -1303,7 +1356,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
       8) AbstractSet
          继承AbstractCollection和Set，并实现大部分Set接口的方法。
       9) HashSet
-         存储一组唯一、无序的元素。         
+         存储一组唯一、无序的元素。
       10) LinkedHashSet
           具有可预知迭代顺序的Set接口的hash和linkedlist的实现
       11) TreeSet
@@ -1352,7 +1405,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 ** 使用示例
    #+BEGIN_EXAMPLE java
    Map<String, String> map = new HashMap<String, String>();
-   
+
    // 遍历键
    for (String key : map.keySet()){}
    // 遍历值
@@ -1369,7 +1422,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      System.out.printf("key: %s, value: %s", entry.getKey(), entry.getValue());
    }
    #+END_EXAMPLE
-  
+
 * 比较器
 
 ** Comparable接口
@@ -1383,7 +1436,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      int compareTo(T other);
    }
    #+END_EXAMPLE
-   
+
 *** 示例
     1) 整数属性比较
        #+BEGIN_EXAMPLE java
@@ -1443,7 +1496,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      - ~<T, U extends <Comparable<? super U>>> Comparator<T> Comparator.comparing(Function<T, U> keyExtractor)~ 生成Comparator实例，会自动提取入参的属性进行后续比较。
 
 * 注解
-  
+
 ** 注解元素
    即传递给注解的键值对，如JUnit4中的 ~@Test(timeout=1000)~ 。
 
@@ -1469,7 +1522,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 
 ** 注解声明
    注解一般分为 *声明* 和 *类型用途* 两类
-   
+
 *** 声明注解
     注解可以出现的地方
     1) 类(包括enum)和接口(宝库注解接口)
@@ -1502,8 +1555,8 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     #+END_EXAMPLE
 
 *** 注解类型用途
-    注解可以出现的地方    
-    1) 
+    注解可以出现的地方
+    1)
 
 * TODO 打包发布
   jar、ear和war的差别
@@ -1542,47 +1595,47 @@ public Class{
 - 反射的对象
   #+BEGIN_EXAMPLE java
   package com.john;
-  
+
   public interface Animal{}
-  
+
   public class User{
     public String say(String suffix){
       return "User: " + suffix;
     }
   }
-  
+
   public class Student extends User implements Animal{
     private String name;
     public int age;
-  
+
     public void getName(){
       return this.name;
     }
-  
+
     private void setName(String name){
       this.name = name;
     }
-  
+
     public static final String JOB = "student";
     public static String GET_JOB(){
       return JOB:
     }
-  
+
     public Student(){
     }
-  
+
     public Student(String name, int age){
       this.name = name;
       this.age = age;
     }
-  
+
     @Override
     public String say(String suffix){
       return "Student: " + suffix;
     }
   }
   #+END_EXAMPLE
-- 反射操作  
+- 反射操作
   #+BEGIN_EXAMPLE java
   // 数组类型类实例的getName()返回的是早期虚拟机使用的全限定类名形式
   // 通过Class.forName()获取数组类型时，需要使用这个早期的全限定类名形式
@@ -1595,7 +1648,7 @@ public Class{
   // 获取全限定类名
   Student student = new Student();
   student.getClass().getName(); // 返回com.john.Student
-  
+
   // 3种获取类型类实例的方法
   Class<?> cObj1 = Student.class;
   Class<?> cObj2 = student.getClass();
@@ -1604,7 +1657,7 @@ public Class{
   // 实例化
   Student student1 = (Student)cObj1.newInstance(); // 调用无参构造方法
   Student student2 = (Student)cObj1.newInstance("john", 25); // 调用含参构造方法
-  
+
   // 获取接口的Class类实例
   Class<?>[] interfaces = cObj1.getInterfaces();
 
@@ -1613,9 +1666,9 @@ public Class{
 
   // 获取所有构造方法
   Constructor<?>[] cs = cObj1.getConstructors();
-  
+
   // 获取当前类(不含父类和接口)所有方法(包含public、protected、default、private)
-  Method[] fs = cObj1.getDeclaredMethods(); 
+  Method[] fs = cObj1.getDeclaredMethods();
   // 获取当前类及从父类继承而来的所有公共方法
   Method[] fs1 = cObj1.getMethods();
   for (Method f : fs1){
@@ -1644,7 +1697,7 @@ public Class{
   // 调用静态方法
   Method mGetJob = cObj1.getMethod("GET_JOB");
   String ret1 = (String) mGetJob.invoke(null);
-  
+
   // 访问privat字段
   Field field = cObj1.getDeclaredField("name");
 
@@ -1653,7 +1706,7 @@ public Class{
   * 默认JVM没有安全管理器，可以通过这种方式解锁访问private和protected成员
   * 若有安全管理器，则不能这样处理了
   */
-  field.setAccessible(true); 
+  field.setAccessible(true);
   field.set(student, "set by reflect");
   String name = (String)field.get(student);
 
@@ -1702,7 +1755,7 @@ public Class{
        Type[] lower = t.getLowerBounds(); // ? super ... & ...
        if (lower.length > 0){
          lower[0].getTypeName(); // 返回T
-       }       
+       }
      }
    }
    #+END_EXAMPLE
@@ -1743,15 +1796,15 @@ public Class{
     实际代码中一般是通过 ~YourClass.class.getResourceAsStream(String name)~ 来调用，通过委托底层依然是调用ClassLoader的该方法。
   - ~public static URL getSystemResource(String name)~ 静态方法调用该方法获取classpath下的资源。
   - ~public static InputStream getSystemResourceAsStream(String name)~ 静态方法调用该方法获取classpath下的资源。
- 
+
 ** 示例
    #+BEGIN_EXAMPLE java
    package com.test;
-   
+
    public class App {
      public static void main(String[] args){
        Class<?> clazz = App.class;
-       
+
        clazz.getResource(""); // 返回当前.class文件所在目录的绝对URI，如file:///d:\workspace\john\bin\com\test
        clazz.getResource("/"); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
        clazz.getClassLoader().getResource(""); // 返回当前.class文件所在classpath的绝对URI，如file:///d:\workspace\john\bin\
@@ -1776,7 +1829,7 @@ public Class{
 *** properties文件
     1) 行注释: 以 ~#~ 开头
     2) 编码: ~ISO-8859-1~, 该编码不支持中文，中文需转换为Unicode编码才行。
-       
+
 * ClassLoader(类加载器)
   类文件可以存放在文件系统、JAR文件里、远程某个位置或者在内存中动态构建。而类加载器就是负责加载字节流，并且在虚拟机中将它们转化为一个类或接口。
 
@@ -1814,13 +1867,13 @@ public Class{
    - 问题示例
      #+BEGIN_EXAMPLE java
      package com.john;
-  
+
      class T {
        public void load(String name){
          Class.forName(name);
        }
      }
-  
+
      class Main {
        public void plugin(){
          URL[] urls = {
@@ -1835,13 +1888,13 @@ public Class{
    - 解决办法——上下文类加载器
      #+BEGIN_EXAMPLE java
      package com.john;
-  
+
      class T {
        public void load(String name){
          Class.forName(name, true, Thread.currentThread().getContextClassLoader());
        }
      }
-  
+
      class Main {
        public void plugin(){
          URL[] urls = {
@@ -1909,7 +1962,7 @@ public Class{
      将名称和对象联系起来，让我们可以通过名称访问对象。
   2) 目录服务
      基于命名服务上作增强，使得对象不仅有名称还有属性。
-  
+
   JNDI组成
   1) 应用编程接口(API)
   2) Naming Manager
@@ -1917,7 +1970,7 @@ public Class{
   4) LDAP服务提供者、NIS服务提供者、文件系统服务提供者等
 
   优点：通过名称引用Java对象或资源，而不必知道对象或资源的物理位置。
-   
+
   JNDI现在可访问的命名和目录服务有
   1) DNS
   2) XNam
@@ -1929,7 +1982,7 @@ public Class{
   8) RMI
   9) DSML v1&v2
   10) NIS
-  
+
   在J2EE环境下，JNDI的主要用途
   1) 获得Java事务API中的UserTransaction接口的引用
   2) 获得如JDBC、JMS等连接到资源工厂
@@ -1970,7 +2023,7 @@ public Class{
 
 ** LDAP(Light Directory Access Protocol)
    相当于简易版本的RDBMS，以树状的层次结构存储数据，适用于读多写少的场景。（优化过读取操作）
-   
+
 *** 概念
     1) DN(Distinguished Name)
        标记记录路径的唯一标识。其中Base DN为基准DN，即从哪个DN开始搜索(搜索范围分为One Level和Subtree)。而RDN为叶子节点本身的标识。
@@ -1980,14 +2033,14 @@ public Class{
        组织单元
     4) CN/UID
        记录的名字
-   
+
 *** 运维工具
     1) GUI查看工具 —— Free LDAP Browser
-   
+
 *** TODO 示例
 
 * 单元测试
-  
+
 ** JUnit3
    针对JDK1.5之前不支持注解的版本
    #+BEGIN_EXAMPLE java
@@ -1995,7 +2048,7 @@ public Class{
      public AppTest(){
        // 执行BeforeClass的逻辑
      }
-   
+
      @Override
      protected void setUp() throws Exception{
        // 每个testXxx执行前执行
@@ -2024,7 +2077,7 @@ public Class{
      // 在所有测试用列和所有@After标识的方法执行后执行一次
      @AfterClass
      public static void afterClass() throws Exception{}
-     
+
      @Before
      public void setUp() throws Exception{}
 
@@ -2073,7 +2126,7 @@ public Class{
       // 场景参数
       int a;
       int b;
-      
+
       // 通过@Parameters标记返回值为Collection的静态方法来设置场景参数生成方法
       @Parameters
       public static Collection<int[]> init(){
@@ -2083,13 +2136,13 @@ public Class{
           {5,6}
         });
       }
-      
+
       // 必须定义带参数的构造方法来构造特定场景的测试用例
       public AppTest(int a, int b){
         this.a = a;
         this.b = b;
       }
-      
+
       @Test
       public void testXxx(){
         assertEquals(this.a, this.b);
@@ -2097,14 +2150,27 @@ public Class{
     }
     #+END_EXAMPLE
 
+*** 断言方法
+    | Method                                                  | Description                                            |
+    |---------------------------------------------------------+--------------------------------------------------------|
+    | assertNull(Object obj)                                  | 检查对象是否为空                                       |
+    | assertNotNull(Object obj)                               | 检查对象是否不为空                                     |
+    | assertEquals(long expected, long actual)                | 检查long类型的值是否相等                               |
+    | assertTrue(boolean condition)                           | 检查条件是否为真                                       |
+    | assertFalse(boolean condition)                          | 检查条件是否为假                                       |
+    | assertSame(Object expected, Object actual)              | 检查两个对象引用是否引用同一个对象(即对象是否相同)     |
+    | assertNotSame(Object expected, Object actual)           | 检查两个对象引用是否引用不同一个对象(即对象是否不相同) |
+    | assertArrayEquals(Object[] expecteds, Object[] actuals) | 数组长度相同，对应位置上的元素相同则为真               |
+    | fail([String message])                                  | 让测试失败，并显示指定信息                             |
+
 ** TODO JUnit5
    包含JUnit Jupiter、JUnit Platform和JUnit Vintage。
    https://www.ibm.com/developerworks/cn/java/j-introducing-junit5-part1-jupiter-api/index.html
 
-** 断言库
+** TODO 断言库
 
 * Java8新特性
-  
+
 ** Lambda表达式
    由编译器提供支持。
    lambda表示函数参数，而带有参数变量的表达式被称为lambda表达式。
@@ -2120,7 +2186,7 @@ public Class{
 
      return Integer.compare(aLen + 1, bLen);
    }
-   
+
    // 参数列表为空时
    Runnable task = () -> {
      for (int i = 0; i < 1000; i++){
@@ -2242,7 +2308,7 @@ public Class{
    String content = new String(Files.readAllBytes(Paths.get("alice.txt")), StandardCharsets.UTF_8);
    // 非字母作为分隔符，拆分单词
    List<String> words = Arrays.asList(content.split("\PL+"));
-   
+
    long count = words
        .stream()                            // 创建初始流
        .filter(word -> word.length() > 12)  // 将初始流转换为其他流程的中间操作
@@ -2273,7 +2339,7 @@ public Class{
     1) ~Stream<T> filter(Predicate<T> pred)~ 过滤元素构造新的流
     2) ~Stream<R> map(Function<T, R> function)~ 加工元素构造新的流
     3) ~Stream<R> flatMap(Function<T, Stream<R>> function)~ 每个元素生成新的流，然后将素有流合并成为新的流
- 
+
 *** 提取子流和组合流
     1) ~Stream<?> limit(int n)~ 返回包含n个元素的流
     2) ~Stream<?> skip(int n)~ 返回丢弃前n个元素的流
@@ -2281,7 +2347,7 @@ public Class{
 
 *** 其他转换
     1) ~Stream<?> distinct()~ 返回一个元素顺序相同当消除重复元素的流
-    2) ~Stream<?> sorted()~ 
+    2) ~Stream<?> sorted()~
 
 *** 归约(reduction)
     归约作为终止操作，可以将流归为一个可以在程序中使用的非流值。
@@ -2319,7 +2385,7 @@ public Class{
         // 从Stream元素中提取名字和年龄作为键值对，当出现重复键值时抛出IllegalStateException
         Map<String, Integer> idToAge = stream.collect(
           Collections.toMap(Person::getName, Person::getAge));
-        
+
         // 从Stream元素中提取名字和元素自身作为键值对，当出现重复键值时抛出IllegalStateException
         Map<String, Integer> idToEntity = stream.collect(
           Collections.toMap(Person::getName, Function.identity()));
@@ -2328,7 +2394,7 @@ public Class{
         Stream<Locale> locales = Stream.of(Locale.getAvailableLocales());
         Map<String> languageNames = locales.collect(
           Collections.toMap(Locale::getDisplayName, Locale::getDisplayName, (existingValue, newValue) -> existingValue));
-        
+
         // 汇总重复键的值
         Map<String> languageNames = locales.collect(
           Collections.toMap(Locale::getDisplayCountry
@@ -2338,7 +2404,7 @@ public Class{
                               union.addAll(newValue);
                               return union;
                             }));
-                  
+
         // 指定Map构造方法
         Map<String> languageNames = locales.collect(
           Collections.toMap(Locale::getDisplayName
@@ -2347,7 +2413,7 @@ public Class{
                             , TreeMap::new));
         #+END_EXAMPLE
     11) ~Collection.toConcurrentMap~ 和 ~Collection.toMap~ 用于一致但会生成并发Map
-    
+
 *** 分组和分片
     1) 分组 ~Collections.groupingBy(Function<T, R> function)~ 或 ~Collections.groupingByConcurrent(Function<T, R> function)~
        根据某个条件将流分为多个组
@@ -2367,7 +2433,7 @@ public Class{
        根据某个条件将流分为两个组
        #+BEGIN_EXAMPLE java
        Map<Boolean, List<Locale>> enAndOtherLocales = locales.collect(
-         Collections.partitioningBy(l -> l.getLanguage().equals("en"));       
+         Collections.partitioningBy(l -> l.getLanguage().equals("en"));
        Lis<Locale> englsh = enAndOtherLocales.get(true);
        #+END_EXAMPLE
 
@@ -2418,11 +2484,11 @@ public Class{
 
 ** Optional类
    在非完全测试的程序中返回null，会导致空指针异常，因此Optional类是一种更好的表明缺少返回值的方式。
-   
+
 *** 使用
     #+BEGIN_EXAMPLE java
     Optinal<String> os = Stream.of(new String[]{"123"}).filter(x -> x == "321").findFirst();
-    
+
     // 若没有值则返回默认值
     os.orElse("default value");
     // 若没有值则返回默认值
@@ -2467,7 +2533,7 @@ public Class{
 * [[https://www.projectlombok.org/features/all][Lombok]]
   通过注解在编译时自动附加代码，从而简化Java代码和加速开发效率。
 
-** 使用  
+** 使用
    1) ~@Data~
       - 可用于：类
       - 作用：为类的所有属性生成setter/getter(若属性为final则不生成setter)、equals、canEqual、hashCode、toString方法
@@ -2484,11 +2550,11 @@ public Class{
         public class Test {
           private final String a;
           private String b;
-         
+
           public String getA(){ return a;}
           public String getB(){ return b;}
           public void setB(String b){ return this.b = b;}
-         
+
           @Override
           public boolean equals(Object o){
             if (o == this) rerturn true;
@@ -2499,7 +2565,7 @@ public Class{
             if (this.getB() == null ? other.getB() != null : !this.getB().equals(other.getB())) return false;
             return true;
           }
-         
+
           @Override
           public int hashCode(){
             final int PRIME = 59;
@@ -2512,7 +2578,7 @@ public Class{
             return result;
           }
 
-          @Override 
+          @Override
           public String toString() {
             return "Test(" + this.getA() + ", " + this.getB() + ")";
           }
@@ -2531,7 +2597,7 @@ public Class{
           @Getter
           @Setter
           private int age = 10;
-         
+
           @Setter(AccessLevel.PROTECTED)
           private String name;
         }
@@ -2617,6 +2683,11 @@ public Class{
 * 反编译工具
   Java Decompiler - http://java-decompiler.github.io/
 
+* TODO 正则表达式
+  ~int java.util.regex.Matcher#groupCount()~ 返回的是分组数量，并不是匹配成功的分组数量。
+  ~void java.util.regex.Matcher#matches()~ 从字符串的0位置开始匹配
+  ~void java.util.regex.Matcher#find()~ 从字符串的end+1位置开始匹配
+  注意：调用 ~String java.util.regex.Matcher#group(int index)~ 前必须调用 ~matches~ 或 ~find~ 方法，否则回抛出 ~No match found~ 异常。
 * QA
 1) CopyOnWrite
 2) 泛型
@@ -2625,5 +2696,3 @@ public Class{
 5) AQS
 6) JVM
 7) 实现java.io.Serializable接口的类需要定义 ~private static final long serialVersionUID~ ?
- 
-

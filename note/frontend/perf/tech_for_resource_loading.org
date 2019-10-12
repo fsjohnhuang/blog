@@ -71,7 +71,6 @@ body>div
 | 1.js       | Fetch   |           | Excution  |                  |
 | 2.js       | Fetch   |           | Excution  |                  |
 
-
 ** 动态异步script
 特点：
 1. 效果和sync一致
@@ -98,7 +97,6 @@ body>div
   (when (seq urls)
     (recur (next urls))))
 #+end_src
-
 
 ** Prebrowsing
 开发者告诉浏览器某些资源在不久的将来将会使用，可以在空闲时预加载。

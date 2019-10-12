@@ -491,6 +491,10 @@ ssh root@168.1.2.3 "pwd; cat hello.txt"
 # 官方解释："Force pseudo-terminal allocation.  This can be used to execute arbitrary screen-based programs on a remote machine, which can be very useful, e.g. when implementing menu services.  Multiple -t options force tty allocation, even if ssh has no local tty."
 ssh -t root@168.1.2.3 "sudo ls /etc"
 
+# 当执行的为持续运行或本应以守护进程执行的命令时，
+# ssh <user>@<ip> <command> 将无法退出，必须通过 ssh <user>@<ip> nohup <command> 1>/dev/null 2>&1 &
+# 注意：执行 ssh <user>@<ip> cd /path/to/working_directory; nohup <command> 1>/dev/null 2>&1 & 也无法退出
+
 # 执行本地脚本文件
 ssh root@168.1.2.3 < test.sh
 # 执行可传参数的本地脚本文件

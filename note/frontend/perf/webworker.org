@@ -20,13 +20,13 @@
 ;; in main thread
 ;; 异步创建线程和加载资源
 ;;Webkit中会在内核在JSBindings层构造WebCore::JSWorker和对应的WebCore::Worker对象
-(let [worker (new js/Worker 
+(let [worker (new js/Worker
                   "longtimejob.js"                        ; 必选入参, worker线程执行的脚本
                   #js {:name "the name of worker thread"} ; 可选配置项,为worker实例命名
              )]
   ;; 线程间通过message cloning
   (.addEventListener worker
-                     "message" 
+                     "message"
                      (fn [evt] (print (.-data evt))))
   ;; 消息通信是值传递,因此会对数据先进行序列化,复制传输到目标线程,然后再反序列.
   ;; 因此当序列化失败时就会触发messageerror事件了.
@@ -53,7 +53,7 @@
 
 ;; in worker thread
 (importScripts js/self "otherjs.js" "anotherjs.js") ; worker线程内部同步阻塞加载其他脚本
-(.addEventListener js/self 
+(.addEventListener js/self
                    "message"
                    (fn [evt] (print (.-cmd evt))))
 (.addEventListener js/self
@@ -68,7 +68,7 @@
 所以工作线程要保存端口,以便后续通信.
 #+begin_src cljs
 ;; in main thread
-(let [shared-worker (new js/SharedWorker 
+(let [shared-worker (new js/SharedWorker
                          "sharedworker.js"
                          "name of worker")
       port (.-port shared-worker)]

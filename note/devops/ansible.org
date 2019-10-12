@@ -77,6 +77,7 @@ Ansible编排引擎组成：
       - PyYAML
       - Jinja2
       - httplib2
+      - pywinrm
     - 源码安装devel开发版本
       #+BEGIN_EXAMPLE bash
       # 安装依赖项

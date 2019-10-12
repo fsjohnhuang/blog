@@ -1,17 +1,16 @@
-** 请求报文结构
+* 请求报文结构
 Request Line(请求行)
 Header(头部)
 CRLF
 [Message] Body(数据体)
 
-** 响应报文结构
+* 响应报文结构
 Status Line(状态行)
 Header(头部)
 CRLF
 [Message] Body(响应正文)
 
-
-** Chrome中出现“Provisional headers are shown”
+* Chrome中出现“Provisional headers are shown”
 根本原因是：请求并没有真正发生，所以Header里显示的是伪信息，直到服务器真的有响应返回，Header才会被更新为真实的。但有可能请求被插件屏蔽，或启用缓存导致没有真实的HTTP响应。
 
 具体引发形式多样：
@@ -22,8 +21,7 @@ CRLF
 *** 通过chrome://net-internals排查网络问题
 Net Internals是一套工具集，通过监听DNS,Sockets,SPDY,Caches等事件和数据帮助诊断网络请求和访问方面的问题。
 
-
-** KeepAlive模式
+* KeepAlive模式
 普通模式（非KeepAlive模式）：每个请求/应答均需要新建一个连接。
 KeepAlive模式（又称为持久模式/连接重用）：多个请求/应答均在同一个连接上，避免TCP连接的重建。
 
@@ -36,7 +34,7 @@ HTTP1.1默认为KeepAlive模式，需要在请求头部中加入Connection: clos
 *** 优点
 RFC 2612:https://tools.ietf.org/html/rfc2616
 1. By opening and closing fewer TCP connections, CPU time is saved in routers and hosts(clients, servers, proxys, gateways, tunnels, or caches), and memory used for TCP protocol control blocks can be saved in hosts.
-2. 
+2.
 
 Keep-Alive让发送者提示连接信息，可用于设置连接超时和请求数上限。
 #+begin_src
@@ -53,3 +51,15 @@ https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive
 https://www.byvoid.com/zht/blog/http-keep-alive-header
 http://www.nowamagic.net/academy/detail/23350305
 
+* 缓存
+
+请求
+If-Match
+If-Modified-Since
+If-None-Match
+
+响应
+Last-Modified: Mon, 10 Jul 2017 15:50:06 GMT
+Expires: Mon, 10 Jul 2017 15:50:06 GMT
+
+* 断点续传

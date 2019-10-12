@@ -1,0 +1,149 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/repos/blog/note/arch/load_balance/nginx.org
+
+
+* 静态资源服务
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2019-10-04 Fri 09:12
+  :ARCHIVE_FILE: ~/repos/blog/note/arch/load_balance/nginx.org
+  :ARCHIVE_CATEGORY: nginx
+  :END:
+1) ~sendfile on | off;~
+   - 作用：启用Linux的零拷贝
+   - 默认值： ~sendfile off~
+   - 上下文：http,server,location
+2) ~tcp_nopush on | off;~
+   - 作用：启用网络缓存，当发送的消息大小达到一定量时才统一发送出去。对于传输大文件而言有优势。
+   - 默认值： ~tcp_nopush off~
+   - 上下文：http,server,location
+   - 注意：仅在 ~sendfile on~ 时生效
+3) ~tcp_nodelay on | off;~
+   - 作用：和 ~tcp_nopush~ 作用相反，启用时立即向网络发送消息。
+   - 默认值： ~tcp_nodelay on~
+   - 上下文：http,server,location
+   - 注意：当连接为keepalive时才生效。
+4) ~gzip on | off;~
+   - 作用：启用gzip压缩
+   - 默认值： ~gzip off~
+   - 上下文：http,server,location
+5) ~gzip_comp_level level~
+   - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
+   - 默认值： ~gzip_comp_level 1~
+   - 上下文：http,server,location
+6) ~gzip_http_version 1.0|1.1~
+   - 作用：设置压缩对应的HTTP协议版本，若HTTP版本与之不匹配则不启用GZip压缩。
+   - 默认值： ~gzip_http_version 1.1~
+   - 上下文：http,server,location
+   - 注意：值为1.1则1.0不压缩，值为1.0则1.0和1.1均启用压缩。
+7) ~gzip_types <mine> <mine>*;~
+   - 作用：设置被压缩的文件的MIME类型，如 ~text/plain~, ~application/x-javascript~
+   - 上下文：http,server,location
+   - 示例
+     #+begin_example
+     gzip_types text/plain application/x-javascript;
+     #+end_example
+8) ~gzip_disable "regex"~
+   - 作用：匹配正则表达式的请求，返回非压缩版本
+   - 示例
+     #+begin_example
+     # IE6及以下的返回非压缩版本
+     gzip_disable "MSIE [1-6]\.";
+     #+end_example
+9) ~gzip_vary on | off;~
+   - 作用：给CDN和反向代理服务器使用，针对相同的URL，根据请求头字段Accept-Encoding来决定返回压缩还是非压缩版本的资源。
+   - 默认值： ~gzip_vary off~
+   - HTTP响应头Vary
+     - 通过指明哪些请求头字段值可以作为缓存有效与否的依据，从而告知缓存代理服务器，其缓存的资源是fresh还是stale。
+     - 详解：
+       1) 用户代理请求A资源，缓存服务器转发请求到应用服务器，然后设置响应头Vary值为Accept-Encoding和User-Agent；(~Vary: Accept-Encoding,User-Agent~)
+       2) 缓存服务器将A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，缓存A资源；
+       3) 用户代理再次请求A资源时，缓存服务器则通过A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，试图读取A资源的缓存副本。
+     - 特点：
+       1) 内容来自请求头，如Accept-Encoding,User-Agent等
+       2) 用户代理会将Vary的值也作为缓存是否有效的依据之一，若缓存中Vary值与服务器返回Vary值不同，则表示缓存失效
+       3) Vary值为*时，表示任何请求都是唯一并且非缓存的
+10) ~gzip_min_length size~
+    - 作用：设置启用压缩的资源最小字节数，建议设置为 ~gzip_min_length 2k~
+    - 默认值： ~gzip_min_length 0~
+11) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
+    - 作用：作为反向代理时,当后端服务响应头包含Via时，启用或关闭后端服务返回的结果。
+    - 默认值： ~gzip_proxied off;~ 关闭所有代理结果数据的压缩
+    - 值解释
+      - expired 若Header中包含Expires信息，则启用压缩
+      - no-cache 若Header中包含Cache-Control: no-cache信息，则启用压缩
+      - no-store 若Header中包含Cache-Control: no-store信息，则启用压缩
+      - private 若Header中包含Cache-Control: private信息，则启用压缩
+      - no_last_modified 若Header中不包含Last-Modified信息，则启用压缩
+      - no_etag 若Header中不包含ETag信息，则启用压缩
+      - auth 若Header中包含Authorization信息，则启用压缩
+      - any 无条件启用压缩
+    - 请求/响应头Via
+      - 作用：用于记录请求从客户端发送到应用服务的过程中，经过的代理服务的信息
+      - 详解：
+        1) 请求经过代理服务A，那么代理服务A转发请求时会在请求头Via上追加服务A的信息；
+        2) 请求经过代理服务B，那么代理服务A转发请求时会在请求头Via上追加服务B的信息，这是Via中包含A和B的信息；
+        3) 请求到达应用服务，那么应用服务即可通过请求头的Via得知经过的代理服务信息，然后在将信息原封不动地写入响应头Via返回；
+        4) 响应返回到用户代理，那么用户代理也知道经过的代理服务信息。
+12) ~gzip_buffers number size~
+    - 作用：设置系统获取多少个多少字节的存储单元用于存储gzip压缩结果
+    - 默认值：申请和未压缩资源的大小申请
+    - 示例
+      #+begin_example
+      # 申请以8kB为存储单元大小，申请16个存储单元
+      gzip_buffers 16 8k;
+      #+end_example
+13) ~http_gzip_static_module~ 内置模块
+    - 作用：读取任何文件时均会先读取相同目录下的 ~.gz~ 文件，若没有才动态压缩或读取原文件。
+    - 语法： ~gzip_static on | off;~
+    - 默认值： ~gzip_static off;~
+    - 注意：
+      1) 该功能不受 ~gzip_types~ 设置的限制
+      2) ~.gz~ 文件需要自行预先制作并放置好才行
+         #+begin_example bash
+         gzip -c 9 /path/to/uncompressed /path/to/compressed
+         #+end_example
+14) ~http_gunzip_module~
+    - 作用：对于不支持gzip的用户代理，提供另一种压缩方式。一般不用。
+15) ~expires~
+    - 作用：添加响应头Cache-Control和Expires
+    - 语法：
+      1) ~expires time;~
+         - time
+           - 正数
+             1) 当前系统时间+time作为Expires的值
+             2) 将time转换为秒数，作为 ~Cache-Control: max-age=<time>~ 的值
+           - 负数
+             1) 当前系统时间+time作为Expires的值
+             2) 设置 ~Cache-Control: no-cache~
+         - 示例
+           1) ~expires 30s;~ 缓存30秒
+           2) ~expires 30m;~ 缓存30分钟
+           3) ~expires 2h;~ 缓存2小时
+           4) ~expires 30d;~  缓存30天
+      2) ~expires epoch | max | off;~
+         - epoch 则为将Expires设置为 ~1 January 1970 00:00:01 GMT~
+         - max 则为将Expires设置为 ~31 December 2037 23:59:59 GMT~ ，而Cache-Control设置为10年
+    - 默认值： ~expires off;~
+    - 上下文：http,server和location
+    - 示例
+      #+begin_example bash
+      # 缓存有效期为24小时
+      expires 24h;
+      #+end_example
+16) ~add_header name value [always];~
+    - 作用：添加自定义响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
+    - 上下文：server,location, if in location
+    - 示例
+      #+begin_example bash
+      location ~ .*\.html?$ {
+          add_header Access-Control-Allow-Origin http://www.jesonc.com;
+          add_header Access-Control-Allow-Method GET,POST,PUT,DELETE,OPTIONS;
+          root /opt/app/code;
+      }
+
+      #+end_example
+
+** QA
+1) 同时启用 ~tcp_nopush~ 和 ~tcp_nodelay~ 是什么意思？

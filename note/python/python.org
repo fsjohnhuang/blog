@@ -1,6 +1,6 @@
 * 代码中文乱码问题
-在Python2.X中需要指定文件的编码方式，否则中文会出现乱码。
-而Python3则无这个需求。
+在Python2默认系统编码为ASCII，因此需要指定文件的编码方式，否则中文会出现乱码。
+而Python3默认系统编码为UTF-8，因此无需指定文件的编码方式。
 
 2种设置方式：
 1) ~#coding=utf-8~ 注意： ~=~ 两边不能存在空格
@@ -870,6 +870,7 @@ BaseException为所有异常的基类，Exception为常规异常的基类。
     试图访问一个还未被设置的局部变量，基本上是由于另有一个同名的全局变量，导致你以为正在访问它
 12) ValueError 值错误
     传入一个调用者不期望的值，即使值的类型是正确的。
+13) NotImplementedError
 
 ** 捕获异常
    1) Python2.x
@@ -1085,9 +1086,12 @@ filename = '/path/to/file'
 raise FileNotFoundError(errno.ENOENT, os.stderror(errno.ENOENT), filename)
 #+END_EXAMPLE
 
-** TODO raise主动抛出异常
+** raise主动抛出异常
    #+BEGIN_EXAMPLE python
    raise [Exception [, args [, traceback]]]
+
+   raise NotImplementError
+   raise NotImplementError('message')
    #+END_EXAMPLE
 
 * TODO 迭代器/游标
@@ -2791,6 +2795,104 @@ from __future__ import (
 )
 #+END_EXAMPLE
 
+** reduce函数
+   #+begin_example python
+   # Python2中reduce位于顶层作用域中，可直接使用；
+   # Python3中则位于functools中。
+   if 'reduce' not in dir(__builtins__):
+       from functools import reduce
+   #+end_example
+
+** map函数和filter函数
+   #+begin_example python
+   # Python2中map和filter执行结果为list
+   # Python3中map执行结果为map实例，而filter执行结果为filter实例
+   result = map(str, [1,2,3])
+   if not isinstance(result, list):
+       result = list(result)
+
+   result = filter(lambda x: True, [1,2,3])
+   if not isinstance(result, list):
+       result = list(result)
+   #+end_example
+
+** dict实例
+   #+begin_example python
+   # Python2中包含has_key方法
+   # Python3中没有提供has_key方法
+   kvs = {"a":1}
+   print('a' in kvs.keys())
+   #+end_example
+
+** urllib模块
+   Python内置模块
+   #+begin_example python
+   # Python2下的urlopen直接作为urllib的属性
+   # Python3下的urlopen则作为urllib.request的属性
+   import urllib
+   if not hasattr(urllib, 'urlopen'):
+       import urllib.request as urllib
+   #+end_example
+
+** 防止中文乱码
+   #+begin_example python
+   import sys
+   # 仅Python2需要设置
+   if 'reload' in dir(__builtins__):
+       reload(sys)
+       sys.setdefaultencoding('utf-8')
+   #+end_example
+
+*** 为什么要设置系统编码
+    - encode:就是将unicode转换为字节流
+    - decode:就是将字节流转换为unicode
+    - str.encode会先按系统默认编码方式decode为unicode对象，然后在对unicode对象进行encode。
+    - 示例
+      #+begin_example python
+      #-*- coding: utf-8 -*-
+      s = '中文'
+      s.encode('gb2312')
+      # 由于Python2中默认的系统编码为ASCII，因此中文解码时会出问题;
+      # 但Python3中默认的系统编码就是UTF-8
+
+      # Python2中显式解码
+      s.decode('utf-8').encode('gb2312')
+      #+end_example
+
+*** 为什么需要 ~reload(sys)~ ？
+    因为Python运行时首先加载site.py，而site.py中存在如下代码
+    #+begin_example python
+    if hasattr(sys, 'setdefaultencoding'):
+        del sys.setdefaultencoding
+    #+end_example
+    因此需要通过reload重新导入sys才能调用setdefaultencoding设置系统编码。
+
+** apply函数
+   使用 ~function(*args, **kwargs)~ 语法调用函数，代替apply函数。
+
+** urllib
+   Python2中的 ~urllib.urlopen~ 支持GET方式，URL中包含认证信息。
+   #+begin_example python
+   import urllib
+
+   url = 'http://root:mypassword@localhost:8080/index.html'
+   urllib.urlopen(url)
+   #+end_example
+
+   Python3中的 ~urllib.request.urlopen~ 不直接支持GET方式，URL中包含认证信息；必须按如下方式实现
+   https://www.cnblogs.com/zhangxinqi/p/9170312.html
+   #+begin_example python
+   from urllib.request import HTTPPasswordMgrDefaultRealm, HTTPBasicAuthHandler, build_opener
+   username = 'root'
+   password = 'mypassword'
+   url = 'http://localhost:8080/index.html'
+   p = HTTPPasswordMgrDefaultRealm()
+   p.add_password(None, url, username, password)
+   auth_handler = HTTPBasicAuthHandler(p)
+   opener = build_opener(auth_handler)
+   opener.open(url)
+   #+end_example
+
 * TODO 单元测试
 
 ** unittest2模块进行单元测试
@@ -3021,7 +3123,6 @@ if __name__ == '__main__':
          #+END_EXAMPLE
 
 
-
 *** Fixture
     用于初始化数据和测试对象。
     使用场景如下：
@@ -3129,7 +3230,6 @@ https://pypi.org/project/pytest-xdist/
 
 
 
-
 *** 配置文件pytest.ini
   https://docs.pytest.org/en/latest/customize.html#command-line-options-and-configuration-file-settings
 
@@ -3181,23 +3281,137 @@ https://pypi.org/project/pytest-xdist/
         doctest.testfile('doctest_test.txt') # 测试某文件中的测试用例。
     #+END_EXAMPLE
 
-* str, unicode和bytes
+* TODO str, unicode和bytes
+  https://pycoders-weekly-chinese.readthedocs.io/en/latest/issue5/unipain.html
+  http://www.joelonsoftware.com/articles/Unicode.html
+
+  1) 采用单个byte存储，最多只能表示256种符号的字符编码集
+     - ~ASCII~ 中1个byte代表95种符号的一种。只使用十六进制的20~7F的byte。
+     - ~ISO Latin 1~ 或 ~ISO 8859-1~ 对 ASCII 进行了扩展。只剩下十六进制的00~1F和80~9F的byte留空。
+     - ~Windows-1252~ 或 ~CP-1252~ 在ISO 8859-1的基础上增加27种字符。只剩下十六进制的00b~1F留空。
+  2) 采用两个byte存储，但也仅能表示部分符号而已
+     - ~Shift-JIS~
+     - ~GB2312~
+     - ~Big5~
+  3) Unicode标准
+     - 目标：表示所有符号的字符编码集合。
+     - 编码标准：每种符号对应一个code point，形如 ~U+xxxx~ 其中的x为十六机制字符。总共能表示110万个符号，现在已有11万个符号在册。
+     - 传播和存储的编码方式：
+       通过bytes编码来表示code point，被称为encoding。
+       - ~UTF-8~
+         最流程的对Unicode进行传播和存储的编码方式。 UTF-8为ASCII的超集，且ASCII的符号只用1个byte存储，其它符号按需用2个、3个或4个byte存储。
+       - ~UTF-16~
+       - ~UTF-32~
+       - ~UCS-2~
+       - ~UCS-4~
+
   unicode类型为字符型数据；bytes为字节型数据。
-  而Python2中str等价于bytes；Python3中str等价于unicode。
 
-** Python3的bytes和str
-   str类型为unicode编码字符串，bytes类型为二进制数据。
-   两者不能进行隐式转换，必须采用显式转换。
-   #+begin_src
-   # str类型转bytes类型
-   str_var = "hello world"
-   bytes_var = str_var.encode("utf-8")
+** Python2
+   1) str等价于bytes，表示一组字节；
+   2) unicode表示一组code point，每个code point形如 ~\u210c~ 。
+   3) bytes -> unicode
+      #+begin_example python
+      # -*- coding: utf-8 -*-
 
-   # bytes类型转str类型
-   bytes_var = b"\xe2\xac20"
-   str_var = bytes_var.decode("utf-8")
-   #+end_src
-   str类型是文本抽象表示，即对文本的操作（分割、切片、拼接和搜索）均不用关心底层（如一个字符要多少个字节表示等）。
+      byte_str = '中文' # 采用UTF-8编码 "中文" 生成一组byte "\xe4\xb8\xad\xe6\x96\x87"
+      unicode_str1 = byte_str.decode() # 等价于 import sys; byte_str.decode(sys.getdefaultencoding())
+      unicode_str2 = byte_str.decode('utf-8')
+      #+end_example
+   4) unicode ->  bytes
+      #+begin_example python
+      # -*- coding: utf-8 -*-
+
+      unicode_str = u'中文'
+      byte_str1 = unicode_str.encoding() # 等价于 import sys; unicode_str.encode(sys.getdefaultencoding())
+      byte_str2 = unicode_str.encoding('utf-8')
+      #+end_example
+   5) 在bytes和unicode相互转换时，若编码(codec)选择错误，则会抛出UnicodeDecodeError或UnicodeEncodeError
+      #+begin_example python
+      # -*- coding: utf-8 -*-
+      import sys
+      print(sys.getdefaultencoding()) # ASCII，Python2默认系统编码为ASCII
+
+      ##
+      ## 中文抛出UnicodeErrors
+      ##
+      # 由于文件编码为utf-8(通过#-*- coding: utf-8 -*-)设置，因此必须以UTF-8解码才能正常运行；
+      # 若字符串是由shell传递进来的，则以shell的编码方式编码。
+      bytes_str = '中文'
+
+      # 抛出异常
+      bytes_str.encode('utf-8')
+      # 等价于如下两步操作
+      bytes_str.decode(sys.getdefaultencoding()) # 以ASCII编码集解码时报错
+               .encode('utf-8')
+
+      # 抛出异常
+      # 等价于unicode(bytes_str, sys.getdefaultencoding())
+      # 等价于 bytes_str.decode(sys.getdefaultencoding())
+      unicode(bytes_str)
+
+      ##
+      ## 中文正常
+      ##
+      # 显式解码
+      bytes_str.decode('utf-8')
+               .encode('utf-8')
+      unicode(bytes_str, 'utf-8')
+
+      # 定义为unicode类型
+      unicode_str = u'中文'
+      unicode_str.encode('utf-8')
+      #+end_example
+   6) encode和decode通过第二参数设置编码、解码失败的处理方式
+      1) encode中
+         - strict 默认值，抛出异常
+         - replace 用?号替换无法处理的符号
+         - xmlcharrefreplace 用HTML/XML字符替代，如 ~u01B4~ 被替换为 ~&#436~
+         - ignore 直接丢弃不能解码的bytes
+      2) decode中
+         - strict 默认值，抛出异常
+         - replace 用U+FFFD替换无法处理的bytes
+         - ignore 直接丢弃不能解码的bytes
+   7) 隐式转换——bytes会自动解码为Unicode
+      #+begin_example python
+      unicode_str = u'Hello '
+      bytes_str = 'world'
+      unicode_result = unicode_result + bytes_str
+      # 等价于 unicode_result = unicode_result + bytes_str.decode()
+      # 因此若bytes_str中保存的为非ASCII编码的内容时，则会抛出UnicodeDecodeError
+
+      bytes_tpl = 'Title: %s'
+      unicode_tpl = u'Title: %s'
+
+      unicode_tpl_result1 = bytes_tpl % u'中文'
+      unicode_tpl_result2 = unicode_tpl % u'中文'
+      #+end_examplepp
+
+** Python3
+   Python3中str等价于unicode，
+   1) 不支持bytes字符串和unicode字符串相连接时，对bytes字符串进行自动解码
+      #+begin_example python
+      bytes_str = b'a'
+      unicode_str = 'a'
+      bytes_str + unicode_str # 抛出TypeError异常
+
+      bytes_str == unicode_str # 返回 False
+
+      d = {"Hello": "world"}
+      d[b'Hello'] # 抛出KeyError
+      #+end_example
+   2) 读取文件
+      1) ~open(file, 'r')~ 或 ~open(file)~ 会自动采用 ~locale.getpreferencoding()~ 作为codec对文件内容进行解码为Unicode字符串。(若在Windows中则为cp1252)
+         - 若要返回值为unicode，请显式指定codec
+           #+begin_example python
+           open(file, 'r', encoding='utf-8')
+           #+end_example
+      2) ~open(file, 'rb')~ 才会返回bytes字符串。
+   3) 何时用bytes，何时用unicode
+      1) 输入接收bytes并马上解码为unicode(如输出到terminal、文件或网络中)
+      2) 程序内部使用unicode
+      3) 输出时将unicode编码为bytes后才输出
+   4) 通过type和repr输出字符串的类型和编码字符串
 
 ** 类型不同导致正则匹配失败
 #+BEGIN_EXAMPLE python
@@ -6682,7 +6896,7 @@ if '__main__' == __name__:
      c is d # False
      c == d # True
      #+END_EXAMPLE
-* b文件IO
+* 文件IO
 主要通过os,os.path,shutil来处理文件。
 os模块提供对系统环境、文件、目录等操作系统级的接口函数
 
@@ -7003,6 +7217,8 @@ for tag, i1, i2, j1, j2 in s:
   data = types.SimpleNamespace(addr=('127.0.0.1', 1080), inb=b'', outb=b'')
   #+END_EXAMPLE
 * TODO Unicode和UTF-8
+  unicode作为一种编码标准，具体实现可能为utf-8,utf-16和gbk等等。
+
   UTF-8是Unicode的一种编码方式，常作为网络传输的字符编码方式。
   其他BOM(byte order mark)，数据起始字节指定字节顺序的编码方式也常作为网络传输的字符编码方式。
 
@@ -7063,3 +7279,92 @@ document.characterSet :: String
 #+end_src
 
 * TODO FFI
+
+* TODO 静态类型检查
+
+** 历史
+   1) 2006年的PEP-3107,Python推出函数注解的功能，并于Python3.0实现
+       #+begin_example python
+       def clip(text: str, max_len: 'int > 0' = 80) -> str:
+           end = None
+           if len(text) > max_len:
+               end = end[:end]
+
+           return end
+       #+end_example
+      - 注解仅会在函数的字典类型的__annotations__属性中添加注解的信息
+   2) 2014年引入PEP-483
+   3) 在Python3.5引入静态类型检查的语法(PEP-484,type hints)
+   4) PEP-526和PEP-544对类型检查的规范逐步丰富
+
+** 静态类型检查工具
+
+*** mypy
+    - 所属组织：Python官方
+    - 特点：
+      1) 最早推出，用户基数大，文档恶化社区经验最丰富
+
+*** pytype
+    - 所属组织：Google
+    - 特点：
+      1) 标记常见错误，如拼写错误、函数调用错误
+      2) 加强自定义的类型注解
+      3) 支持对pyi文件生成类型注解
+
+*** pyre-check
+    - 所属组织：Facebook
+
+*** pyright
+    - 所属组织：微软
+    - 特点：
+      1) 性能比mypy和其它工具快5倍或以上
+      2) 支持PEP-484,PEP-526,PEP-544规范，和条件、循环语句的数据类型
+* 命名规范
+1) 变量名要有描述性，不能太宽泛
+   #+begin_example python
+   # BAD
+   day, host, card, temp
+   # GOOD
+   day_of_week, hosts_to_reboot, expired_cards
+   #+end_example
+2) 变量名要让人猜出类型
+   - bool 约定俗成如下为bool类型
+     1) 以is_开头 ~is_superuser~
+     2) 以has_开头 ~has_error~
+     3) 以allow_开头 ~allow_vip~
+     4) 以use_开头 ~use_msgpack~
+     5) debug
+   - int/float
+     1) 释义为数字的所有单词 ~age,port,radius~
+     2) 以_id结尾 ~user_id,host_id~
+     3) 以length/count开头或结尾 ~length_of_username,max_length,users_count~
+   - str
+     1) 以str_开头 ~str_age~
+   - list/tuple/dict
+     1) 通过 document string 标注类型
+   - 自定义类型
+     采用匈牙利命名法
+     - 示例 ~pl_students~ 表示变量的类型为 ~List<Person>~
+3) 保证名称最多由3个单词组成
+4) 不要使用带否定含义的名称
+   - 示例 用 ~is_special~ 代替 ~is_not_normal~
+5) 保持命名一致性
+   - 示例 在某方法中采用image作为图片变量名，那么在其他方法中也要采用image作为图片变量名
+6) 若后续代码中不会引用该变量，那就不要定义
+   #+begin_example python
+   def demo_boring():
+       a = 1
+       b = 2
+       c = {
+         'a': a,
+         'b': b,
+       }
+       return c
+
+   # 应该修改为
+   def demo():
+       return {
+         'a': a,
+         'b': b,
+       }
+   #+end_example
