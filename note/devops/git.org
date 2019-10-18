@@ -78,10 +78,11 @@
   git blame <file>
 
   # 带注释的标签，git会创建一个tag对象保存注释和其指向的commit
-  git tag -a
+  git tag -a <tag_name> -m <message>
+  # 删除标签
+  git tag -d <tag_name>
   # 不带注释的标签，tag直接指向commit id，不会创建tag对象
   git tag
-
 
   # 分离头指针(detached head)，即HEAD指向一系列的提交并且没有与某分支关联，git会将其当成垃圾清理掉
   # 为分离头指针建立关联分支
@@ -112,12 +113,33 @@
   git merge --abort
 
   # GitHub的合并策略
-  # merge commits，将target branch合并到base branch中并创建一个commit。merge commit有两个父commit，因此删除target branch后依然可以找到target branch的提交记录
-  # squash merging，将target branch上的commit合并为一个commit，并将该commit存放到base branch中
-  # rebase merging，将target branch上的commit逐个添加到base branch上
+  # 1. merge commits，将target branch合并到base branch中并创建一个commit。merge commit有两个父commit，因此删除target branch后依然可以找到target branch的提交记录
+  #    特点：保留所有提交记录，但会污染base branch的历史记录
+  # 2. squash merging，将target branch上的commit合并为一个commit，并将该commit存放到base branch中
+  #    特点：保持base branch干净，但author为该分支的maintainer，而不是target branch的owner
+  git merge --squash <target branch> # 然后base branch中的缓冲区会出现一个提交，这里就是target branch合并的内容，提交的author为当前提交人
+  # 3. rebase merging，修改target branch的提交历史，然后在合并到base branch上
+  #    特点：保持base branch干净，且保留提交的owner
+  #    注意：
+  #        由于在本地对target branch执行变基操作，因此有可能会导致本地target branch不仅仅只比远端分支多几个提交而已，从而导致执行 git push 时失败。
+  #        由于git push实际是采用Fast-forward方式合并本地分支到远端分支，而Fast-forward方式仅使用于target_branch和base_branch的区别仅为target_branch比base_branch多几个提交。
+  #        当target branch仅一人开发时可使用git push --force <remote_repos> <target_branch>，将本地分支的提交记录强行覆盖远端分支；
+  #        当target branch多人开发时使用git push --force-with-lease <remote_repos> <target_branch>，当远端分支上存在其他人提交的commit时则覆盖失败。
+  git rebase -i <base_branch>
+  git push --force-with-lease <remote_repos> <target_branch>
+  git checkout <base_branch>
+  git merge <target_branch>
 
   # 修改最新commit的日志消息
-  git commit --amend
+  git commit --amend # 然后输入日志消息后保存，即会修改最新commit的日志消息
+  # 提交修改但不新增提交记录
+  # 注意：
+  #     1. 执行以下语句和rebase一样会导致无法执行git push合并当前分支到远端分支，需要采用和rebase一样的方式处理；
+  #     2. 分支A和分支B完全相同，在分支A执行如下命令后，在分支B中执行合并时，由于分支A和分支B并非多几个提交的关系，从而无法执行Fast-forward操作，需采用Non-fast-forward操作。
+  git commit --amend --no-edit
+
+
+
   # 修改前第n个commit的日志消息，注意<n+1-commit-id>为前n+1个提交的id
   # 打开交互界面，显示的提交记录以顺序方式排列（第一行为前第n个提交）
   # 修改第一行第一个单词pick修改为reword，然后保存退出就可以修改日志消息了
@@ -134,9 +156,9 @@
   # 在交互界面中，将不连续的提交重新排版让它们相邻，然后和执行将一系列变更合并为一个操作一样即可
   git rebase -i <n+1-commit-id>
 
-  # 对当前分支的每个提交以指定分支的最后一个提交作基础进行变基
+  # 当target branch的最新提交不在当前分支时，对当前分支的每个提交以指定分支的最后一个提交作基础进行变基
   # 若出现冲突那么解决冲突后执行 git rebase --continue
-  git rebase <branch>
+  git rebase <target branch>
 
   # 比较工作目录和暂存区所有文件的差异
   git diff
@@ -161,7 +183,7 @@
   git checkout -- <file>...
 
   # 回滚提交（会造成提交丢失）
-  # 将HEAD指向某个commit，并且恢复工作目录，暂存区和该commit内容一致
+  # 将HEAD指向某个commit，并且恢复工作目录，暂存区至与该commit内容一致
   git reset --hard <commit-id>
   # 恢复工作目录，暂存区和版本历史当前提交内容一致
   git reset --hard HEAD
@@ -212,6 +234,13 @@
   git push --set-upstream <remote-repo-name> --all
   # 强制推送，即使存在冲突．应该禁止此操作
   git push -f <remote-repo-name> <local-branch-name>
+  # 删除远端仓库分支
+  git push <remote-repo-name> --delete <branch>
+
+  # 推送本地标签到远端仓库
+  git push --tags
+  # 删除远端分支
+  git push origin --delete tag <tag_name>
 
   # 在已经执行fetch后，以远端仓库为基础创建本地分支
   # remote-branch形如origin/feat-1
@@ -220,6 +249,7 @@
 
   # 删除远端仓库已删除，但本地依然存在的分支
   git remote prune <remote-repo>
+
 
   # 从远端仓库拉取，remote-repo-name默认为origin
   git fetch [remote-repo-name]
@@ -349,9 +379,7 @@ git clone --bare <repo-uri> <repo>
    3) 有一套有效的特性切换实施机制
    4) 采用组件化开发方式，即各组件间关联性小
 
-   | commit 1 | commit 2 | commit 3 | commit 4 |
-   |          |          |          | master   |
-   |          |          |          | HEAD     |
+   | branch: master: | commit 1 | commit 2 | commit 3 | commit 4 |
 
 ** Git Flow
    适用因素：
@@ -363,11 +391,9 @@ git clone --bare <repo-uri> <repo>
    1) 基于特性分支开发
    2) 集成到主分支时则可发布
 
-   | commit 1 | commit 2 | commit 3 |           |           |           | commit 4 |
-   |          |          |          | commit-a1 | commit-a2 |           |          |
-   |          |          |          |           | feat-a    |           |          |
-   |          |          |          | commit-b1 | commit-b2 | commit-b3 |          |
-   |          |          |          |           |           | feat-b    |          |
+   | branch: master | commit 1 | commit 2 | commit 3  |           |           | commit 4 |
+   | branch: feat-a |          |          |           | commit-a1 | commit-a2 |          |
+   | branch: feat-b |          |          | commit-b1 | commit-b2 | commit-b3 |          |
 
 ** GitLabFlow
    适用因素：
@@ -378,7 +404,7 @@ git clone --bare <repo-uri> <repo>
    适用因素：
    1) 多个发布版本分支长期存在，当通用特性变更后通过cherry pick同步文件到对应的发布版本分支上
 
-* Code Review
+* TODO Code Review
 Git Review + Gerrit
 流程：
 1) 本地Git提交代码review到Gerrit
@@ -468,3 +494,5 @@ Git Review + Gerrit
 
 * TODO http://www.git-legit.org/
 Git Workflow for Humans
+
+* TODO Fast forward

@@ -1,5 +1,27 @@
 Python社区中还没出现如Maven/Gradle那样不仅管理依赖，还能初始化项目目录、测试、生成文档等。
 
+* 管理多版本Python
+pyenv用于Python版本管理，可让一台机器安装多个Python版本，并流畅切换。
+https://github.com/pyenv/pyenv
+
+** 安装
+https://github.com/pyenv/pyenv#basic-github-checkout
+
+** 使用
+#+begin_example bash
+# 查看已安装的Python版本
+pyenv versions
+
+# 安装多个指定版本的Python
+pyenv install <version> ...
+
+# 设置默认版本号，当执行python则执行对应版本的Python解释器
+pyenv global <version>
+
+# 仅在当前目录下设置默认版本号，在当前下执行python则执行对应版本的Python解释器
+pyenv local <version>
+#+end_example
+
 * 虚拟环境
 
 ** 限制pip必须在一个激活的虚拟环境中执行安装
@@ -41,8 +63,10 @@ pipenv --two
 # 创建Python3的虚拟环境
 pipenv --three
 
-# 安装第三方依赖
+# 安装运行时依赖
 pipenv install jenkins-job-builder
+# 安装开发阶段的依赖
+pipenv install jenkins-job-builder --dev
 
 # 卸载第三方依赖
 pipenv uninstall jenkins-job-builder
@@ -53,6 +77,9 @@ pipenv uninstall --all
 # 安装当前目录下Pipfile内的生产依赖，并更新Pipfile.lock
 # 若没有上述文件则根据当前目录下的requirements.txt生成Pipfile和Pipfile.lock在安装
 pipenv install
+
+# 安装Pipefile.lock中所有的包
+pipenv sync
 
 # 安装requirements.txt内的依赖
 pipenv install -r requirements.txt
@@ -262,5 +289,3 @@ docker-py提供docker支持
 	#+end_src
    7) Virtual Environment Support, and
    8) Much more!
-
-** Mgit

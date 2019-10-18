@@ -3,6 +3,28 @@
 ** Groovy Shell
 
 
+* Swtich中使用枚举
+和Java不同的是，case子句中必须使用枚举实例的全限定名。(Java中只能使用实例名称而已)
+#+begin_example groovy
+
+class Person {
+  enum SEX {
+    FEMALE,
+    MALE
+  }
+
+  static boolean isMale(Person.SEX sex) {
+      switch(sex){
+          case Person.SEX.FEMALE:
+              return false
+          case Person.SEX.MALE:
+              return true
+      }
+  }
+}
+#+end_example
+
+** Jenkins Pipeline不支持枚举，可使用类加静态方法来处理
 
 * 单元测试
 官方文档：http://docs.groovy-lang.org/docs/latest/html/documentation/core-testing-guide.html

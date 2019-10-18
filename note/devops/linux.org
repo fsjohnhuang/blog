@@ -111,6 +111,7 @@ tail -f <filepath>
    find -type f -exec mv {} /test \;
    #+end_example
 
+** TODO xargs
 ** ifconfig
 用于设置或显示网络接口的程序，最小化安装时默认不安装。其和netstat、whois等命令都包含在net-tools下，因此需要手动安装net-tools。
 
@@ -492,7 +493,7 @@ ssh root@168.1.2.3 "pwd; cat hello.txt"
 ssh -t root@168.1.2.3 "sudo ls /etc"
 
 # 当执行的为持续运行或本应以守护进程执行的命令时，
-# ssh <user>@<ip> <command> 将无法退出，必须通过 ssh <user>@<ip> nohup <command> 1>/dev/null 2>&1 &
+# ssh <user>@<ip> <command> 由于标准输出和标准错误文件描述符并不会关闭，因此将无法退出，必须通过 ssh <user>@<ip> nohup <command> 1>/dev/null 2>&1 &
 # 注意：执行 ssh <user>@<ip> cd /path/to/working_directory; nohup <command> 1>/dev/null 2>&1 & 也无法退出
 
 # 执行本地脚本文件
@@ -700,3 +701,43 @@ ssh root@168.1.2.3 '/path/to/script.sh' helloworld
      tar -cvf xxx.tar xxx
      xz -z xxx.tar
      #+end_example
+* TODO 软链接和硬链接
+** 软链接
+创建一个指向目标文件/目录的快捷方式，特点如下：
+1) 目标文件/目录被删除，软链接失效；
+2) 能够跨文件系统(分区)建立软链接。
+
+命令
+1) 建立
+   #+begin_example bash
+   ln -s /path/to/target /path/to/link
+   #+end_example
+2) 查看
+   #+begin_example bash
+   # 可以看到 /path/to/link -> /path/to/target 的信息
+   ls -l /path/to/link
+   #+end_example
+
+** 硬链接
+特点如下：
+1) 目标文件/目录被删除，硬链接依然有效；
+2) 不能够跨文件系统(分区)建立硬链接。
+
+命令
+1) 建立
+   #+begin_example bash
+   ln /path/to/target /path/to/link
+   #+end_example
+2) 查看
+   #+begin_example bash
+   # 获取inode编号，通过inode编号在家目录下查找硬链接关联的文件
+   ls -i /path/to/link | awk "{print $1}" | xargs -I {} find ~/ -inum {}
+   #+end_example
+
+* ~#!/usr/bin/env bash~ 和 ~#!/usr/bin/bash~ 的区别
+1) ~#!/usr/bin/env bash~
+   1) 优点：由于不同系统的bash程序位置并不尽相同，因此通过 ~/usr/bin/env~ 只需环境变量 ~$PATH~ 中包含程序路径即可执行
+   2) 缺点：在多用户系统中，若别人在 ~$PATH~ 中放置其他bash的路径则会有问题
+2) ~#!/usr/bin/bash~
+   1) 优点：指定bash的绝对路径，确保执行版本
+   2) 缺点：不够灵活

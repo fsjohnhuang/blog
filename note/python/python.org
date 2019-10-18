@@ -2700,6 +2700,9 @@ logger.addHandler(fh)
    根logger的类型为logging.RootLogger
    非根类型的类型为logging.Logger
 
+** TODO syslog
+https://www.jianshu.com/p/abb6148c15b4
+
 * TODO 调试/性能优化
 pdb和ipdb
 追踪模块trace用于追踪打印运行路径， ~python -m trace --trace foo.py~ 。
@@ -3286,21 +3289,28 @@ https://pypi.org/project/pytest-xdist/
   http://www.joelonsoftware.com/articles/Unicode.html
 
   1) 采用单个byte存储，最多只能表示256种符号的字符编码集
-     - ~ASCII~ 中1个byte代表95种符号的一种。只使用十六进制的20~7F的byte。
+     - ~ASCII（American national Standard Code for Information Interchange，美国国家标准信息交换码）~ 中1个byte代表95种符号的一种。只使用十六进制的20~7F的byte。
      - ~ISO Latin 1~ 或 ~ISO 8859-1~ 对 ASCII 进行了扩展。只剩下十六进制的00~1F和80~9F的byte留空。
      - ~Windows-1252~ 或 ~CP-1252~ 在ISO 8859-1的基础上增加27种字符。只剩下十六进制的00b~1F留空。
   2) 采用两个byte存储，但也仅能表示部分符号而已
      - ~Shift-JIS~
      - ~GB2312~
      - ~Big5~
-  3) Unicode标准
-     - 目标：表示所有符号的字符编码集合。
+  3) Unicode编码标准
+     - 目标：表示所有符号的字符编码集。
      - 编码标准：每种符号对应一个code point，形如 ~U+xxxx~ 其中的x为十六机制字符。总共能表示110万个符号，现在已有11万个符号在册。
      - 传播和存储的编码方式：
-       通过bytes编码来表示code point，被称为encoding。
-       - ~UTF-8~
-         最流程的对Unicode进行传播和存储的编码方式。 UTF-8为ASCII的超集，且ASCII的符号只用1个byte存储，其它符号按需用2个、3个或4个byte存储。
+       Unicode为一套揽括ASCII、GB2312等编码的编码标准，但在实际存储和传播时的编码规则。而UTF8等为通过bytes编码来表示Unicode中的每个code point，被称为encoding。
+       - ~UTF-8(8-bit Unicode Transformation Format)~
+         - 作为最流程的对Unicode进行传播和存储的编码方式，采用可变长的编码方式，以单字节为编码单元
+           1) 英文采用1个字节表示，即ASCII
+           2) 汉字采用3个字节表示
+           3) 生僻字采用4-6个字节表示
+         - Unicode和UTF-8转换时机和用法
+           - 在文件存储和网络传播时将Unicode转换为UTF-8
+           - 从文件和网络读取到内存时，将UTF-8转换为Unicode
        - ~UTF-16~
+         以两个字节为编码单元
        - ~UTF-32~
        - ~UCS-2~
        - ~UCS-4~
@@ -3323,8 +3333,8 @@ https://pypi.org/project/pytest-xdist/
       # -*- coding: utf-8 -*-
 
       unicode_str = u'中文'
-      byte_str1 = unicode_str.encoding() # 等价于 import sys; unicode_str.encode(sys.getdefaultencoding())
-      byte_str2 = unicode_str.encoding('utf-8')
+      byte_str1 = unicode_str.encode() # 等价于 import sys; unicode_str.encode(sys.getdefaultencoding())
+      byte_str2 = unicode_str.encode('utf-8')
       #+end_example
    5) 在bytes和unicode相互转换时，若编码(codec)选择错误，则会抛出UnicodeDecodeError或UnicodeEncodeError
       #+begin_example python
@@ -3439,6 +3449,90 @@ unmatched
 因此：
 1) 不要用print调试；
 2) 字符串都用unicode类型的。
+
+** BOM(byte order mark，字节顺序标记)
+   BOM(byte-order mark)，对于多字节编码字符集，不同的系统拥有不同的BOM（大端和小端两种字节序列）用于解释字符编码的字节序列，位于最前几个字节中。
+   对于大部分编辑器而言，由于他们能识别Unicode编码，因此会自动处理掉BOM。但当程序无法自动处理BOM时，则会将BOM作为正文的一部分来进行解释，从而造成乱码。
+   UTF-8为单字节编码字符集，因此BOM在UTF-8中并没有标识字节序列的作用，甚至可以省略。而UTF-8 with BOM(即utf-8-sig)中的BOM的作用变为告知编辑器/浏览器，当前文本采用UTF-8编码而已。
+   | 编码                   | 十六进制    | Unicode    |
+   |------------------------+-------------+------------|
+   | UTF-8                  | EF BB BF    | \uefbbbf   |
+   | UTF-16 (Big Endian)    | FE FF       | \ufeff     |
+   | UTF-16 (Little Endian) | FF FE       | \ufffe     |
+   | UTF-32 (Big Endian)    | 00 00 FE FF | \u0000feff |
+   | UTF-32 (Little Endian) | FF FE 00 00 | \ufffe0000 |
+   | Unicode标准压缩        | 0E FE FF    | \u0efeff   |
+
+*** 各操作系统的规则
+    - Windows 建议所有Unicode文本均应该以BOM开头，用于识别文件使用的编码和字节顺序
+      - 使用Windows系统自带文本编辑器以UTF-8编码方式保存文本时，会自动在文本最开始位置插入BOM
+      - 使用第三方编辑器(如editplus)以UTF-8编码方式保存文本时，不会自动在文本最开始位置插入BOM
+    - Linux/UNIX 不使用BOM
+
+*** 检测并消除BOM
+    #+begin_example python
+    import codecs
+
+    with open('path/to/file', 'rb') as f:
+        data = f.read()
+        if data[:3] == codecs.BOM_UTF8:
+           return data[:3]
+        else:
+           return data
+    #+end_example
+
+** 字节顺序——大端和小端
+   *Big Endian*: 指低地址存放最高有效字节(MSB, Most Significant Bit)
+   *Little Endian*: 指低地址存放最低有效字节(LSB, Least Significant Bit)
+
+   示例——存放0x123456
+   | 字节 |   BE |   LE |
+   | 0x12 | 0x00 | 0x02 |
+   | 0x34 | 0x01 | 0x01 |
+   | 0x56 | 0x02 | 0x00 |
+
+** 获取文件的编码
+   #+begin_example python
+   import cchardet # 通过第三方库来获取
+
+   encoding = ''
+   with open('path/to/file', 'rb') as f:
+       encoding = cchardet.detect(f.read())['encoding']
+   #+end_example
+
+** 文件读写
+*** 内置方法
+    #+begin_example python
+    # python2
+    #-*- coding: utf-8 -*-
+
+    # 写文件
+    str_content = '哈哈'
+    uni_content = u'哈哈'
+
+    with open('/path/to/file', 'a') as f:
+        f.write(str_content)
+        f.write(uni_content)
+        # f.write的第一个入参类型为str，
+        # 第二句中会对uni_content进行encode('ascii')然后再执行decode('ascii')则会报编码失败
+        # 要改写为 f.write(uni_content.encode('utf-8'))
+
+
+    # 读取文件时，指定字符编码
+    open("filepath", encoding="utf-8")     # UTF8
+    open("filepath", encoding="utf-8-sig") # UTF-8 with BOM
+    #+end_example
+
+*** 通过第三方codecs库
+    #+begin_example python
+    # python2
+    #-*- coding: utf-8 -*-
+    import codesc
+
+    uni_content = u'哈哈'
+    with codesc.open('path/to/file', 'a', 'utf-8') as f:
+      f.write(uni_content)
+    #+end_example
 
 * TODO 时间和日期
 挂钟时间(Wall clock time)：以某个固定时间为起点到现在的时间间隔。
@@ -7216,67 +7310,6 @@ for tag, i1, i2, j1, j2 in s:
   #+BEGIN_EXAMPLE python
   data = types.SimpleNamespace(addr=('127.0.0.1', 1080), inb=b'', outb=b'')
   #+END_EXAMPLE
-* TODO Unicode和UTF-8
-  unicode作为一种编码标准，具体实现可能为utf-8,utf-16和gbk等等。
-
-  UTF-8是Unicode的一种编码方式，常作为网络传输的字符编码方式。
-  其他BOM(byte order mark)，数据起始字节指定字节顺序的编码方式也常作为网络传输的字符编码方式。
-
-** \ufeff是什么？
-BOM(byte-order mark)，对于多字节编码字符集，不同的系统拥有不同的BOM（大端和小端两种字节序列）用于解释字符编码的字节序列，位于最前几个字节中。
-
-UTF-8为单字节编码字符集，因此BOM在UTF-8中并没有标识字节序列的作用，甚至可以省略。而UTF-8 with BOM(即utf-8-sig)中的BOM的作用变为告知编辑器/浏览器，当前文本采用UTF-8编码而已。
-UTF-8的BOM
-
-| 编码                   | 十六进制    |
-| UTF-8                  | EF BB BF    |
-| UTF-16 (Big Endian)    | FE FF       |
-| UTF-16 (Little Endian) | FF FE       |
-| UTF-32 (Big Endian)    | 00 00 FE FF |
-| UTF-32 (Little Endian) | FF FE 00 00 |
-| Unicode标准压缩        | 0E FE FF    |
-
-Big Endian: 指低地址存放最高有效字节(MSB, Most Significant Bit)
-Little Endian: 指低地址存放最低有效字节(LSB, Least Significant Bit)
-
-存放0x123456
-| 字节 |   BE |   LE |
-| 0x12 | 0x00 | 0x02 |
-| 0x34 | 0x01 | 0x01 |
-| 0x56 | 0x02 | 0x00 |
-
-** Python操作编码
-#+begin_src
-# 通过第三方库chardet，获取文件的字符编码
-import cchardet
-
-encoding = ""
-with open("filepath", "rb") as fp:
-    encoding = cchardet.detect(fp.read())["encoding"]
-#+end_src
-
-#+begin_src
-# 读取文件时，指定字符编码
-open("filepath", encoding="utf-8")
-open("filepath", encoding="utf-8-sig")
-#+end_src
-
-** HTML文件的编码
-*** 设置网页编码
-#+begin_src
-<meta charset="utf-8"/>
-<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
-
-// HTTP Response
-Content-Type: text/html; charset=utf-8
-#+end_src
-
-*** 获取当前页面的字符编码
-#+begin_src
-// 获取当前页面的字符编码
-document.charset :: String
-document.characterSet :: String
-#+end_src
 
 * TODO FFI
 

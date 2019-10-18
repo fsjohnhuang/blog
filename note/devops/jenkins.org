@@ -639,7 +639,7 @@ This may also be found at: /home/john/.jenkins/secrets/initialAdminPassword
      "Please provide compiled classes of your project with sonar.java.binaries property"
      #+end_quote
 
-* 集成Jenkins
+p* 集成Jenkins
    1) Installation
       - Jenkins Plugin: SonarQube Scanner for Jenkins
       - Sonar Client: sonar-scanner
@@ -1755,7 +1755,7 @@ pipeline {
 
            def call(Map stageParams) {
              new HelloWorld('123').build()
-
+             // 函数中可以直接调用steps的方法
              checkout([
                  $class: 'GitSCM',
                  branches: [[name: stageParams.branch]],
@@ -1765,6 +1765,18 @@ pipeline {
 
            def say() {
              return "hi"
+           }
+
+           class T {
+             myCheckout(this, steps){
+                 // 类方法中必须通过Jenkinsfile传递steps实例过来，才能调用steps的方法
+                 // 而this就是Jenkinsfile全局对象，可通过this.env引用环境变量，this.params引用入参
+                 steps.checkout([
+                     $class: this.env.REPOS,
+                     branches: [[name: stageParams.branch]],
+                     userRemoteConfigs: [[url: stageParams.url]]
+                 ])
+             }
            }
            #+end_example
          - 使用
@@ -1903,9 +1915,15 @@ pipeline {
 4) 语法检查工具？？
 
 **** 内置的全局变量
-- ~env~
-  - ref: ~${YOUR_JENKINS_URL}/pipeline-syntax/globals~
-  - sample: ~env.PATH~, ~env.BUILD_ID~, ~env.STAGE_NAME~ (获取当前stage中的label)
+https://opensource.triology.de/jenkins/pipeline-syntax/globals
+
+- ~steps~
+  可以引用所有在steps块下的指令，如 ~steps.sh~
+- ~symbols~
+- ~global~
+  - ~env~
+    - ref: ~${YOUR_JENKINS_URL}/pipeline-syntax/globals~
+    - sample: ~env.PATH~, ~env.BUILD_ID~, ~env.STAGE_NAME~ (获取当前stage中的label)
     1) ~env.getEnvironment()~ (获取所有环境变量)
        #+begin_example groovy
        script {
@@ -1915,13 +1933,47 @@ pipeline {
            }
        }
        #+end_example
-- ~params~
-  expose all parameters defined for the Pipeline as a read-only Map.
-  - sample: ~params.MY_PARAM_NAME~
-- ~currentBuild~
-  discover information about the currently execution Pipeline.
-  - sample: ~currentBuild.result~, ~currentBuild.displayName~
+  - ~params~
+    expose all parameters defined for the Pipeline as a read-only Map.
+    - sample: ~params.MY_PARAM_NAME~
+  - ~currentBuild~
+    discover information about the currently execution Pipeline.
+    - sample:
+      - ~currentBuild.getBuildCauses()~ returns ~List<hudson.model.Cause$UserIdCause>~
+        - fields of ~hudson.model.Cause$UserIdCause~
+          1) ~String shortDescription~ .e.g Started by user 黄8958
+          2) ~String userId~ .e.g huangza
+          3) ~String userName~ .e.g 黄8958
+      - ~currentBuild.result~
+      - ~currentBuild.displayName~
+      - ~currentBuild.rawBuild~ returns instance of ~hudson.model.Run~
+        - REF https://javadoc.jenkins-ci.org/hudson/model/Run.html
+        - Constraints
+          1) only for trusted libraries or administrator-approved scripts outside the sandbox.
+          2) the instance of ~hudson.model.Run~ is not be ~java.io.Serializable~, so only access it inside a method marked @NonCPS.
+        - Get user who aborted a build
+          #+begin_example groovy
+          /**
+          * Get user's informantion who abort this build.
+          * @return user's id and display name
+          */
+          @NonCPS
+          def getAbortUser() {
+          def causee = [:]
+          def actions = currentBuild.rawBuild.getActions(jenkins.model.InterruptedBuildAction)
+          for (action in actions) {
+          def causes = action.getCauses()
 
+          for (cause in causes) {
+          def user = cause.getUser()
+          causee.id = user.getId()
+          causee.displayName = user.getDisplayName()
+          }
+          }
+
+          return causee
+          }
+          #+end_example
 **** QA
 1) What is "Durability level: MAX_SURVIVABILITY"
 2) sh执行失败
@@ -1946,8 +1998,14 @@ pipeline {
        sh 'JENKINS_NODE_COOKIE=dontkillme nohup python3 app.py > /var/log/app.py.log 2>&1 &'
      }
      #+end_example
+4) Jenkinsfile不支持enum
+5) Jenkinsfile不支持new
 
-**** 开发方式
+**** TODO Jenkinsfile的限制
+由于script security和sandboxing
+
+
+**** TODO 开发方式
      1) Jenkins Job DSL Plugin
         用于脚本化Pipeline Job的创建
         #+begin_example groovy
@@ -1987,6 +2045,13 @@ jenkins-jobs command
    # Update the job to Jenkins server.
    # The default configuration file places in /etc/jenkins_jobs/jenkins_jobs.ini.
    jenkins-jobs update ./sample1.yml --conf /path/to/jenkins_jobs.ini
+   #+end_example
+3) jenkins_jobs.ini
+   #+begin_example
+   [jenkins]
+   user=jenkins
+   password=password
+   url=http://localhost:8081/jenkins
    #+end_example
 
 Reuse and Templating
