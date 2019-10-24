@@ -32,14 +32,59 @@
   git config --global alias.co checkout
   git config --global alias.br branch
   git config --global alias.st status
+  git config --global alias.ci commit
   git config --global alias.type cat-file -t
   git config --global alias.dump cat-file -p
-  git config --global alias.hist "log --pretty=format:'%h %ad | %s%d [%a]' --graph"
+  git config --global alias.hist "log --pretty=format:'%C(yellow)%h %C(bold blue)%ad%Cred%d%Creset | %s' --graph --date=format:'%y/%m/%d %H:%M:%S'"
   #+END_EXAMPLE
+
+* ~git log --pretty=format~
+%H: commit hash
+%h: 缩短的commit hash
+%T: tree hash
+%t: 缩短的 tree hash
+%P: parent hashes
+%p: 缩短的 parent hashes
+%an: 作者名字
+%aN: mailmap的作者名字 (.mailmap对应，详情参照git-shortlog(1)或者git-blame(1))
+%ae: 作者邮箱
+%aE: 作者邮箱 (.mailmap对应，详情参照git-shortlog(1)或者git-blame(1))
+%ad: 日期 (--date= 制定的格式)
+%aD: 日期, RFC2822格式
+%ar: 日期, 相对格式(1 day ago)
+%at: 日期, UNIX timestamp
+%ai: 日期, ISO 8601 格式
+%cn: 提交者名字
+%cN: 提交者名字 (.mailmap对应，详情参照git-shortlog(1)或者git-blame(1))
+%ce: 提交者 email
+%cE: 提交者 email (.mailmap对应，详情参照git-shortlog(1)或者git-blame(1))
+%cd: 提交日期 (--date= 制定的格式)
+%cD: 提交日期, RFC2822格式
+%cr: 提交日期, 相对格式(1 day ago)
+%ct: 提交日期, UNIX timestamp
+%ci: 提交日期, ISO 8601 格式
+%d: ref名称
+%e: encoding
+%s: commit信息标题
+%f: sanitized subject line, suitable for a filename
+%b: commit信息内容
+%N: commit notes
+%gD: reflog selector, e.g., refs/stash@{1}
+%gd: shortened reflog selector, e.g., stash@{1}
+%gs: reflog subject
+%Cred: 切换到红色
+%Cgreen: 切换到绿色
+%Cblue: 切换到蓝色
+%Creset: 重设颜色
+%C(...): 制定颜色, as described in color.branch.* config option
+%m: left, right or boundary mark
+%n: 换行
+%%: a raw %
+%x00: print a byte from a hex code
+%w([[,[,]]]): switch line wrapping, like the -w option of git-shortlog(1)
 
 * 本地操作
   #+BEGIN_EXAMPLE shell
-
   # 初始化仓库
   # git仓库中存在目录.git，用于存放元数据
   git init
@@ -74,6 +119,8 @@
   git log --oneline --graph
   # 查看某文件的提交日志（含对比信息）
   git log -p <file>
+  # 查看所有分支的日志
+  git log --all
   # 查看某文件的提交日志（仅含sha码）
   git blame <file>
 
@@ -90,8 +137,10 @@
   # 或者执行如下命令
   git checkout -b <new-branch>
 
-  # 查看所有分支
+  # 查看所有分支(远端分支和本地分支)，和分支最新提交id和日志
   git branch -av
+  # 查看所有分支(远端分支和本地分支)，分支最新提交id和日志，以及本地分支和远端分支的追踪关系
+  git branch -avv
   # 基于当前分支/指定分支/提交，创建并切换到新分支
   git checkout -b <new-branch> [<original-branch>|<commit-id>]
   # 删除分支
@@ -137,8 +186,6 @@
   #     1. 执行以下语句和rebase一样会导致无法执行git push合并当前分支到远端分支，需要采用和rebase一样的方式处理；
   #     2. 分支A和分支B完全相同，在分支A执行如下命令后，在分支B中执行合并时，由于分支A和分支B并非多几个提交的关系，从而无法执行Fast-forward操作，需采用Non-fast-forward操作。
   git commit --amend --no-edit
-
-
 
   # 修改前第n个commit的日志消息，注意<n+1-commit-id>为前n+1个提交的id
   # 打开交互界面，显示的提交记录以顺序方式排列（第一行为前第n个提交）
@@ -246,10 +293,13 @@
   # remote-branch形如origin/feat-1
   git checkout -b <new-branch> <remote-branch>
   git checkout --track <remote-branch>
+  # 设置本地分支追踪远端分支
+  git branch -set-upstream <local-branch> <remote-branch>
+  # 设置当前本地分支追踪远端分支
+  git branch -u <remote-branch>
 
   # 删除远端仓库已删除，但本地依然存在的分支
   git remote prune <remote-repo>
-
 
   # 从远端仓库拉取，remote-repo-name默认为origin
   git fetch [remote-repo-name]
@@ -265,11 +315,18 @@
   # 更新所有submodule内容
   git submodule foreach git pull
 
-  # 下载仓库，将帐号密码附加到URL中，git clone http://<user>:<pass>@<repo>
-  git clone <repo> <dir>
-  # 下载带submodule的仓库方式1
+  # 全量克隆仓库(克隆所有分支)，会自动创建追踪origin/master的本地master分支
+  # 将帐号密码附加到URL中，git clone http://<user>:<pass>@<repo>
+  git clone <repo> [dir]
+  # 单一克隆下载仓库(仅仅克隆指定的分支)，会自动创建追踪origin/branch的本地branch分支
+  git clone -b <branch> --single-branch <repo> [dir]
+  # 局部克隆(克隆最近N次提交的历史)
+  git clone --depth=10 <repo> [dir]
+  git clone --depth=10 -b <branch> --single-branch <repo> [dir]
+
+  # 克隆带submodule的仓库方式1
   cd <dir> && git submodule init && git submodule update --recursive
-  # 下载带submodule的仓库方式2
+  # 克隆带submodule的仓库方式2
   git clone <repo> <dir> --recursive
 
   # 在父项目中修改子项目代码时用subtree效果更好，subtree命令比submodule命令出来要晚
@@ -496,3 +553,81 @@ Git Review + Gerrit
 Git Workflow for Humans
 
 * TODO Fast forward
+* TODO 内部
+
+#+begin_example bash
+<branchName> # 可能会有歧义
+refs/heads/<branchName>
+
+<remoteRepos>/<branchName> # 可能会有歧义
+refs/remotes/<remoteRepos>/<branchName>
+
+<tagName> # 可能会有歧义
+refs/tags/<tagName>
+#+end_example
+
+* Git Hooks
+Git Hooks就是在Git执行特定事件前后触发运行的脚本。
+分类：
+1) 本地Hooks
+   1) commit hooks
+      - pre-commit
+        - 用途：用于检查commit message是否有拼写错误、符合规范，若脚本的return exit code不为0则会终止提交。
+        - 触发时机：执行提交前
+        - 参数：无
+        - 绕过方式： ~git commit -m 'message' --no-verify~
+      - prepare-commit-msg
+        - 用途：用于设置默认commit message
+        - 触发时机：执行提交后尚未进入 commit message 编辑器时
+        - 参数：
+          1) 被提交的文件路径
+          2) commit类型(message, template, merge, squash)
+          3) 用于commit的SHA1值
+      - commit-msg
+        - 用途：用于检查被提交的文件路径是否合规
+        - 参数：被提交的文件路径
+        - 绕过方式： ~git commit -m 'message' --no-verify~
+      - post-commit
+        - 用途：在提交执行完成后发送通知等信息
+        - 触发时机：提交完成后
+        - 参数：无
+   2) e-mail hooks(执行 ~git am~ 会触发如下Git Hooks)
+      - applypatch-msg
+      - pre-applypatch
+      - post-applypatch
+   3) other hooks
+      - pre-rebase
+        - 触发时机：执行rebase前
+      - post-checkout
+        - 用途：用于为自己的项目设置合适的工作区，比如自动生成文档、移动一些大型二进制文件等，也可以用于检查版本库的有效性。
+        - 触发时机：执行 ~git checkout~ 或 ~git clone~ 后
+        - 参数：
+          1) 之前HEAD指向的引用
+          2) 当前HEAD指向的引用
+          3) 是否检出分支的标识(0为文件检出，1为分支检出)
+        - 绕过方式： ~git clone <repos url> --no-checkout~
+      - post-merge
+        - 用途：用于对一些Git无法记录的数据的恢复，比如文件权限、属主、ACL等。
+        - 触发时机：合并成功后
+        - 参数：是否压缩合并的标识
+2) 服务端Hooks，如receive等
+   - pre-receive
+     - 用途：分支保护
+     - 触发时机：服务端合并客户端推送前
+   - post-receive
+     - 用途：触发自动化集成、发布
+     - 触发时机：服务端合并客户端推送后
+
+Git Hooks 所在位置：
+1) 普通仓库的位于 ~/.git/hooks/~ 下(普通仓 ~git init /path/to/repos.git~)
+2) 裸仓库的位于 ~./hooks/~ 下(普通仓 ~git init --bare /path/to/repos.git~)
+
+
+** 配置GitLab的Git Hooks
+https://docs.gitlab.com/ee/administration/custom_hooks.html
+1) 登录GitLab所在服务器
+2) 将钩子脚本部署到 ~/var/opt/gitlab/git-data/repositories/root/xxx.git/hooks/post-receive~
+3) 对钩子脚本授予git用户的可执行权力
+
+** 配置GitLab的Web Hooks
+GitLab Web Hooks 的说明文档 http://gitlab.com/help/user/project/integrations/webhooks

@@ -849,10 +849,29 @@ Nexus IQ Server
 3) 运行 ~./nexus run~
 
 ** 配置
-tag.gz源码包解压后会在当前目录出现应用目录和数据目录（称为Sonatype Work目录）
+tag.gz源码包解压后会在当前目录出现应用目录(如nexus-3.16.0-01)和数据目录(sonatype-work)
 默认端口为8081，端口可以在/usr/local/nexus-3.7.0-04/etc/nexus-default.properties中修改
 
-Blob Stores：文件存储的地方。
+*** 数据目录结构
+    | 目录/文件           | 作用                                                           |
+    |---------------------+----------------------------------------------------------------|
+    | blobs/              | Blob Stores，构建件存放的地方                                  |
+    | cache/              |                                                                |
+    | db/                 |                                                                |
+    | elasticsearch/      |                                                                |
+    | etc/                |                                                                |
+    | generated-bundles/  |                                                                |
+    | instances/          |                                                                |
+    | kar/                |                                                                |
+    | keystores/          |                                                                |
+    | lock                |                                                                |
+    | log/                |                                                                |
+    | orient/             |                                                                |
+    | port                |                                                                |
+    | restore-from-backup |                                                                |
+    | tmp                 | groovy-classes，存放的是Groovy Script中的类编译出来的class文件 |
+    |                     |                                                                |
+
 
 ** 帐号管理
    默认帐号密码：admin/admin123
@@ -935,12 +954,27 @@ QA:
 *** PYPI Repository
 *** NPM Repository
 *** Docker Repository
+** 日常运维
+   1) 定时移除被删除的构建件
+      - 原因：通过Nexus网页删除构建件后，Nexus仅仅会将该构建件标记为已删除，但并没有执行物理删除。因此需要设置定时任务处理。
+      - 操作：
+        1) 登录Nexus
+        2) 进入Server Administration and Configuration界面
+        3) 进入Task菜单，创建类型为 ~Admin-Compact blob store~ 周期性任务。
+      - 创建失败：可能Nexus所在的磁盘空间已经满了，需要腾出空间才能创建任务。
 
 ** Jenkins集成
    1) Nexus Platform Plugin for Jenkins
       只支持Maven
    2) Nexus Artifact Uploader
       支持Nexus2/3的非Maven项目的构建物上传。
+
+** TODO Groovy Script开发
+   https://support.sonatype.com/hc/en-us/articles/115015812727-Nexus-3-Groovy-Script-development-environment-setup
+   Nexus3开始支持运行Groovy Script。
+   脚手架： ~git clone https://github.com/sonatype-nexus-community/nexus-scripting-examples~
+   运行环境：
+
 
 * TODO 凭证
 9 凭证管理112
@@ -1244,6 +1278,25 @@ https://jenkins.io/zh/doc/book/pipeline/syntax/
   - label, The Pipeline will run in any available node whose name mentioned. ~agent {lable 'my label name for node'}~
   - node, Like label but with more options. ~agent {node 'my label name'}~
   - docker, The Pipeline will run in docker environment. ~agent {docker {image 'python:0.1' label 'my label name' arg '--port 3000:80'}}~
+- ~triggers~ Typical build trigger, defined at ~pipeline~ section.
+  - ~cron~ Build job will run in regular interval.
+    #+begin_example
+    triggers {
+      cron('H * * * *')
+    }
+    #+end_example
+  - ~pollSCM~ Check for the changes in SCM in regular interval to run the build job
+    #+begin_example
+    triggers {
+      pollSCM("H * * * *")
+    }
+    #+end_example
+  - ~upstream~ Upstreaming the other build job
+    #+begin_example
+    triggers {
+      upstream(upstreamProjects: 'job1,job2', threshold: hudson.model.Result.SUCCESS)
+    }
+    #+end_example
 - ~stages~ directive(required), contains one or more ~stage~ tag.
 - ~stage~ (rquired), contains ~steps~, ~agent~ section and other directives.
 - ~steps~ directive(required), a set of commands to complete the continuous delivery process.
@@ -1434,25 +1487,6 @@ https://jenkins.io/zh/doc/book/pipeline/syntax/
       triggeredBy "SCMTrigger"
     }
     #+end_example
-  - ~triggers~ Typical build trigger, defined at ~pipeline~ section.
-    - ~cron~ Build job will run in regular interval.
-      #+begin_example
-      triggers {
-        cron('H * * * *')
-      }
-      #+end_example
-    - ~pollSCM~ Check for the changes in SCM in regular interval to run the build job
-      #+begin_example
-      triggers {
-        pollSCM("H * * * *")
-      }
-      #+end_example
-    - ~upstream~ Upstreaming the other build job
-      #+begin_example
-      triggers {
-        upstream(upstreamProjects: 'job1,job2', threshold: hudson.model.Result.SUCCESS)
-      }
-      #+end_example
   - ~post~ Execute some command after the ~stage~ or ~steps~ as per the condition.
     - ~always~ Execute no matter what current completion status is.
     - ~changed~  Execute when current completion status is different with previous one.
@@ -1678,7 +1712,7 @@ pipeline {
 **** Built-in Documentation
 位于 ~${YOUR_JENKINS_URL}/pipeline-syntax~ 中。
 
-**** TODO Jenkins Shared Library
+**** Jenkins Shared Library
      https://testerhome.com/topics/11241
      独立托管到一个SCM仓库中，然后提供给其它Jenkins Pipeline项目使用;或和Jenkinsfile位于同一个仓库。
 
@@ -1924,15 +1958,15 @@ https://opensource.triology.de/jenkins/pipeline-syntax/globals
   - ~env~
     - ref: ~${YOUR_JENKINS_URL}/pipeline-syntax/globals~
     - sample: ~env.PATH~, ~env.BUILD_ID~, ~env.STAGE_NAME~ (获取当前stage中的label)
-    1) ~env.getEnvironment()~ (获取所有环境变量)
-       #+begin_example groovy
-       script {
-           def fields = env.getEnvironment()
-           fields.each {
-             key, value -> println("${key}=${value}")
-           }
-       }
-       #+end_example
+    - ~env.getEnvironment()~ (获取所有环境变量)
+      #+begin_example groovy
+      script {
+          def fields = env.getEnvironment()
+          fields.each {
+            key, value -> println("${key}=${value}")
+          }
+      }
+      #+end_example
   - ~params~
     expose all parameters defined for the Pipeline as a read-only Map.
     - sample: ~params.MY_PARAM_NAME~
@@ -1959,21 +1993,42 @@ https://opensource.triology.de/jenkins/pipeline-syntax/globals
           */
           @NonCPS
           def getAbortUser() {
-          def causee = [:]
-          def actions = currentBuild.rawBuild.getActions(jenkins.model.InterruptedBuildAction)
-          for (action in actions) {
-          def causes = action.getCauses()
+              def causee = [:]
+              def actions = currentBuild.rawBuild.getActions(jenkins.model.InterruptedBuildAction)
+              for (action in actions) {
+                  def causes = action.getCauses()
 
-          for (cause in causes) {
-          def user = cause.getUser()
-          causee.id = user.getId()
-          causee.displayName = user.getDisplayName()
-          }
-          }
+                  for (cause in causes) {
+                      def user = cause.getUser()
+                      causee.id = user.getId()
+                      causee.displayName = user.getDisplayName()
+                  }
+              }
 
-          return causee
+              return causee
           }
           #+end_example
+        - Get build log
+          #+begin_example groovy
+          @NonCPS
+          def getBuildLog() {
+              return currentBuild.rawBuild.log
+          }
+          #+end_example
+
+**** ~@NonCPS~ 的作用
+     Jenkinsfile和SharedLibrary脚本中使用的对象都应该可序列化对象(实现 ~java.io.Serializable~ 接口)，因为 Jenkins 必须能够序列化脚本中的对象，以便可以暂停流程并存储在磁盘上。
+     当在方法中调用不可序列化对象时，为告知 Jenkins 该方法必须一次性完整执行而不能中途暂停，我们需要在方法上添加注解 ~@NonCPS~ 。
+     被 ~@NonCPS~ 标记的方法
+     1) 方法入参和返回值必须为序列化对象；
+     2) 方法内的局部变量可为不可序列化对象；
+     3) 方法内部不能调用非 ~@NonCPS~ 方法 和 Pipeline steps；
+
+     https://github.com/jenkinsci/workflow-cps-plugin/blob/master/README.md
+     #+begin_quote
+     Unlike a regular Groovy program run from a command line, the complete state of Pipeline build's program is saved to disk every time an asynchronous operation is performed, which includes most Pipeline steps. Jenkins may be restarted while a build is running, and will resume running the program where it left off. This is not intended to be efficient, and so should be limited to high-level 'glue' code directly related to Jenkins features; your project's own build logic should be run from external programs on a build node, in a ~sh~ or ~bat~ step.
+     #+end_quote
+
 **** QA
 1) What is "Durability level: MAX_SURVIVABILITY"
 2) sh执行失败
@@ -1998,69 +2053,182 @@ https://opensource.triology.de/jenkins/pipeline-syntax/globals
        sh 'JENKINS_NODE_COOKIE=dontkillme nohup python3 app.py > /var/log/app.py.log 2>&1 &'
      }
      #+end_example
-4) Jenkinsfile不支持enum
-5) Jenkinsfile不支持new
+4) 从GitLab下载源码，并且采用triggers/pollSCM时，无论是否有更新都会因为polling log总返回found changes，而触发任务执行。
+   - 原因：这是Jenkins Pipeline的问题，若采用Freestyle Project则polling log返回结果是正常的。
+   - 解决办法：
+     若采用git或svn则通过hooks触发Jenkins任务执行，若采用gitlab则采用web hooks出发Jenkins任务执行。
+     - GitLab + Jenkins Pipeline + GitLab Hooks Plugin
+       - Jenkinsfile部分
+         1) 移除Jenkinsfile中的 ~triggers~ 块
+         2) 通过Jenkins Job Builder脚本设置trigger(https://docs.openstack.org/infra/jenkins-job-builder/triggers.html)
+            #+begin_example yaml
+            triggers:
+              - gitlab:
+                  trigger-push: true
+                  trigger-merge-request: false
+                  branch-filter-type: RegexBasedFilter
+                  target-branch-regex: '.*sit.*' # 仅分支名称正则匹配的推送才会触发该任务执行
+                  secret-token: '123' # 必须设置Token，否则会报403错误
+            #+end_example
+       - 项目仓库部分
+         1) 登录项目所在的GitLab仓库
+         2) 在Settings/Integrations中
+            - URL输入Jenkins任务的触发URL，形如： ~${JENKINS_URL}project/${JOB_NAME}~
+            - Secret Token输入 ~secret-token~ 的值
+            - Trigger 下勾选GitLab发起上述请求的触发器
 
 **** TODO Jenkinsfile的限制
 由于script security和sandboxing
 
-
-**** TODO 开发方式
-     1) Jenkins Job DSL Plugin
-        用于脚本化Pipeline Job的创建
-        #+begin_example groovy
-        pipelineJob('test') {
-            definition {
-              cpsScm {
-                  scm {
-                      git {
-                          remote {
-                              url('/path/to/repos')
-                          }
-                          branch('*/master')
-                      }
-                  }
-                  lightweight()
-              }
-            }
-        }
-        #+end_example
-     2) Jenkins Configuration as Code
+不支持enum和new
 
 *** Jenkins Job Builder
 https://docs.openstack.org/infra/jenkins-job-builder/
 comes from OpenStack infrastructure components.
 define job by yaml to generate Jenkins job xml structure.
 
-jenkins-jobs command
-1) Installation
-   #+begin_example bash
-   pip install --user jenkins-job-builder
-   #+end_example
-2) Usage
-   #+begin_example bash
-   # Generate Jenkins job xml structure to stdout.
-   jenkins-jobs test ./sample1.yml
+**** jenkins-jobs command
+ 1) Installation
+    #+begin_example bash
+    pip install --user jenkins-job-builder
+    #+end_example
+ 2) Usage
+    #+begin_example bash
+    # Generate Jenkins job xml structure to stdout.
+    jenkins-jobs test ./sample1.yml
+    # Generate Jenkins job xml structure to /path/to/output
+    jenkins-jobs test -o /path/to/output ./sample1.yml
 
-   # Update the job to Jenkins server.
-   # The default configuration file places in /etc/jenkins_jobs/jenkins_jobs.ini.
-   jenkins-jobs update ./sample1.yml --conf /path/to/jenkins_jobs.ini
-   #+end_example
-3) jenkins_jobs.ini
-   #+begin_example
-   [jenkins]
-   user=jenkins
-   password=password
-   url=http://localhost:8081/jenkins
-   #+end_example
+    # Update the job to Jenkins server.
+    # The default configuration file places in /etc/jenkins_jobs/jenkins_jobs.ini.
+    jenkins-jobs --conf /path/to/jenkins_jobs.ini update ./sample1.yml
+    # Update the jobs within ./jobs directory
+    jenkins-jobs --conf /path/to/jenkins_jobs.ini update ./jobs
 
-Reuse and Templating
-1) defaults
-2) templates
-3) macros
-   Let us externalize and parameterize certain sections of a job.
+    # Delete the job by job-id.
+    jenkins-jobs --conf /path/to/jenkins_jobs.ini delete <job-id>
+    #+end_example
+ 3) jenkins_jobs.ini
+    #+begin_example
+    [jenkins]
+    user=jenkins
+    password=password
+    url=http://localhost:8081/jenkins
+    #+end_example
 
-*** Jenkins Job Plugin
+**** 脚本编写
+     1) Job
+        用于定义具体的任务
+        #+begin_example yaml
+        - job:
+            name: job-name
+            display-name: display-name
+            project-type: pipeline
+            defaults: global
+            description: ''
+            disabled: false
+            concurrent: true
+        #+end_example
+     2) Job Template
+        用于定义任务模板，然后通过project节点实例化任务。其中变量通过 ~{name}~ 引用，若要输入花括号则输入 ~{{~ 或 ~}}~ 。
+        #+begin_example yaml
+        - job-template:
+            name: '{name}-unit-tests' # project节点会通过 {name}-unit-tests 引用模板，然后以变量name的实际值替换并实例化任务
+            display-name: display-name
+            project-type: pipeline
+            defaults: global
+            description: ''
+            disabled: false
+            concurrent: true
+        #+end_example
+     3) Job Group
+        用于将任务模板归类，Job Group的name仅为分组名称供project引用而已，并不会作为name变量值传递给旗下的Job Template。
+        #+begin_example yaml
+        - job-template:
+            name: '{name}-unit-tests'
+            display-name: '{display-name}'
+        - job-template:
+            name: '{name}-perf-tests'
+            display-name: '{display-name}'
+        - job-group:
+            name: '{name}-tests'
+            jobs:
+              - '{name}-unit-tests':
+                  display-name: a
+              - '{name}-pef-tests':
+                  display-name: b
+        - project:
+            name: project-name
+            jobs:
+            - '{name-tests}'
+        # 实例化出project-name-unit-tests和project-name-perf-tests两个任务
+        #+end_example
+     4) Project
+        用于调用Job Template或Job Group实例化任务
+        #+begin_example yaml
+        - job:
+            name: '{name}-tests-{branch}'
+            display-name: '{display-name}'
+
+        - project:
+            name: project-name
+            branch:
+              - dev:
+                  display-name: 'dev-name'
+              - master:
+                  display-name: 'master-name'
+            jobs:
+              - '{name}-tests-{branch}'
+
+        # 实例化出 project-name-tests-dev 和 project-name-tests-master两个任务
+        #+end_example
+     5) Macro
+        用于定义代码片段
+        - 定义
+          #+begin_example yaml
+          - builder:
+              name: git-prep
+              builders:
+                - shell: "/slave_scripts/git-prep.sh"
+
+          - builder:
+              name: docs
+              builders:
+                - shell: "/slave_scripts/run-docs.sh"
+
+          - publisher:
+              name: console-log
+              publishers:
+                - scp:
+                    site: 'scp-server'
+                    files:
+                      - target: 'logs/$JOB_NAME/$BUILD_NUMBER'
+                        copy-console: true
+                        copy-after-failure: true
+          #+end_example
+        - 使用
+          #+begin_example yaml
+          - job:
+              name: a
+              builder:
+                - git-prep
+          #+end_example
+     6) Defaults
+        用于定义全局默认变量值
+        #+begin_example yaml
+        - defaults:
+            name: global # name属性必须为global
+            arch: 'i386'
+        #+end_example
+
+**** Openstack的JJB目录结构
+     #+begin_example yaml
+     jobs/
+       - defaults.yaml # 全局默认配置
+       - macros.yaml # 宏
+       - <project-name>.yaml # 某项目的Job、Job Template 和 Job Group
+       - projects.yaml # 实例化所有项目的任务
+     #+end_example
 
 ** Jenkins配置脚本化
 https://plugins.jenkins.io/configuration-as-code

@@ -701,11 +701,72 @@ ssh root@168.1.2.3 '/path/to/script.sh' helloworld
      tar -cvf xxx.tar xxx
      xz -z xxx.tar
      #+end_example
-* TODO 软链接和硬链接
-** 软链接
+* 符号链接和硬链接
+链接都是为文件起别名。
+
+** inode(索引节点)
+   文件存储分为
+   1) inode，存放文件元数据
+      - 元数据
+        - 文件大小(单位：数据块)
+          - 数据块：硬盘的最小存储单位为扇区(Sector)，每个扇区存储空间为512B。当操作系统读取硬盘时并不是以扇区作为读写单位，而是以多个连续扇区组成的数据块作为读写单位，常见的数据块大小为4KB。
+        - 文件的数据块在磁盘中的起始位置
+        - 文件拥有者的User ID
+        - 文件所属组的Group ID
+        - 文件的读、写、执行权限
+          - 读，读取文件在数据区中对应的数据块内容
+          - 写，写入文件在数据区中对应的数据块内容
+          - 执行，读取文件inode信息
+        - 链接数，即多少文件名指向该inode
+        - ctime 最近一次变动时间
+        - mtime 最近一次内容变动时间
+        - atime 最近一次被打开访问的时间
+      - 存储位置：inode table
+      - 大小：128B或256B，每个文件系统中的inode数量在格式化时已经确定，一般是每1KB或2KB设置一个inode。
+        - 示例：对于容量为1GB的硬盘，若inode大小为128B，每1KB设置一个inode，那么inode table的大小则为128MB，占硬盘的12.8%。
+        - 因此有可能inode table已满而无法创建新文件，但数据区还有空间的问题。
+      - inode编号，操作系统内部使用inode编号操作inode，而不是通过文件名操作inode。
+      - 命令
+        #+begin_example bash
+        # 查看指定文件的inode信息
+        stat /path/to/file
+
+        # 查看每个文件系统的inode总数、已用数量
+        df -i
+
+        # 查看每个inode节点的大小
+        sudo dumpe2fs -h /dev/hda1 | grep inode
+
+        # 显示文件的inode编号
+        ls -i /path/to/file
+        #+end_example
+      - 通过文件名打开文件的底层实现
+        1) 目录在数据区对应的数据块中存储的是一个个由文件名称和inode编号组成的记录，因此系统会通过文件名称找到对应的inode编号
+        2) 然后通过inode编号到inode table中找到inode信息
+        3) 最后从inode中获取文件数据块所在的位置
+      - inode的特殊作用
+        1) 当文件名称包含特殊字符，导致无法正常删除。那么可以通过删除inode来执行文件删除操作；
+        2) 移动或重命名文件，只是改变其所在目录的内容，并不会影响inode编号；
+        3) 系统无法通过inode编号获取文件名称。
+   2) block，文件内容数据块
+      - 存储位置：数据区
+
+** 符号/软链接(Symbolic link)
+符号链接相当于一个指向文件名字的指针，当通过符号链接访问文件时，实质是转向通过其指向的文件名字访问数据块。
+| inode table |    | data block             |
+|-------------+----+------------------------|
+| inode1      | -> | /path/to/file1, inode2 |
+|             |    | /path/to/file2, inode1 |
+|-------------+----+------------------------|
+| inode2      | -> | file content           |
+|-------------+----+------------------------|
+
+因此通过 ~java -jar application.jar~ 启动服务，若application.jar为application-v0.0.0.1.jar的符号链接，那么jar包内部获取的文件名字为application-v0.0.0.1.jar。
+
 创建一个指向目标文件/目录的快捷方式，特点如下：
 1) 目标文件/目录被删除，软链接失效；
-2) 能够跨文件系统(分区)建立软链接。
+2) 能够跨文件系统(分区)建立软链接；
+3) 支持相对路径。
 
 命令
 1) 建立
@@ -718,20 +779,31 @@ ssh root@168.1.2.3 '/path/to/script.sh' helloworld
    ls -l /path/to/link
    #+end_example
 
-** 硬链接
-特点如下：
-1) 目标文件/目录被删除，硬链接依然有效；
-2) 不能够跨文件系统(分区)建立硬链接。
+** 硬链接(Hard link)
+硬链接就是同一个inode对应多个文件名称。
+| inode table |    | data block             |
+|-------------+----+------------------------|
+| inode1      | -> | /path/to/file1, inode2 |
+|             |    | /path/to/file2, inode2 |
+|-------------+----+------------------------|
+| inode2      | -> | file content           |
+|-------------+----+------------------------|
 
-命令
-1) 建立
+- *特点*
+  1) 目标文件被删除，硬链接依然有效；
+  2) 由于实现上采用inode不能够跨文件系统(分区)建立硬链接；
+  3) 目录下默认会创建两个硬链接目录 ~.~ 和 ~..~ ；
+  4) 不支持用户创建硬链接目录。
+
+- *命令*
+  1) 建立
    #+begin_example bash
    ln /path/to/target /path/to/link
    #+end_example
-2) 查看
+  2) 查看
    #+begin_example bash
    # 获取inode编号，通过inode编号在家目录下查找硬链接关联的文件
-   ls -i /path/to/link | awk "{print $1}" | xargs -I {} find ~/ -inum {}
+   ls -i /path/to/link | awk "{print $1}" | xargs find ~/ -inum
    #+end_example
 
 * ~#!/usr/bin/env bash~ 和 ~#!/usr/bin/bash~ 的区别
