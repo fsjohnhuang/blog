@@ -112,11 +112,94 @@ tail -f <filepath>
    #+end_example
 
 ** TODO xargs
-** ifconfig
+** TODO ifconfig
 用于设置或显示网络接口的程序，最小化安装时默认不安装。其和netstat、whois等命令都包含在net-tools下，因此需要手动安装net-tools。
 
-** ss
+** TODO ss
 查看端口
+
+** tcpdump
+tcpdump使用libpcap库来抓取网络报，而这个库几乎所有Linux/Unix都内置。
+
+1) 安装
+   #+begin_example bash
+   sudo yum -y install tcpdump*
+   dnf -y install tcpdump
+   apt-get -y install tcpdump
+   #+end_example
+2) 选项
+   #+begin_example bash
+   # -s <number> 设置内容截取的字节数，0为截取所有；默认截取前96字节内容
+   # -a 表示强制将IP显示为网络名称，默认开启
+   # -n 表示不解析域名，直接显示IP
+   # -nn 表示不解析域名和端口号
+   # -S 表示显示绝对的序列号(sequence number)，默认显示相对编号
+   # -i <interface name> 监听指定的网卡，默认为any即监听所有网卡
+   # -c <number> 截取number个报文就结束
+   # -X 同时使用hex和ascii显示报文的内容
+   # -XX 同时使用hex和ascii显示报文的内容，并显示以太网头部
+   # -A 只使用ascii打印报文的全部数据，不能和-X一起使用
+   # -v,-vv,-vvv 显示更多详细信息
+   # -t 输出可读的时间戳
+   # -tttt 输出最大程度可读的时间戳
+   # -D 显示可用的网络接口
+   # -F <file> 读取文件内容作为过滤器表达式
+   # -w <file> 拦截内容输出到文件中
+   # -r <file> 读取文件中的数据报文，显示到屏幕上。如 tcpdump -nXr capture_file.pcap 'host web30'
+   # pcap格式的文件通过vim或cat等命令出现乱码，必须使用特定软件来执行
+   #+end_example
+3) 过滤器
+   - 设置protocol：ether, fddi, ip, arp, rarp, decnet, lat, sca, moprc, mopdl, tcp, icmp
+     - 默认为所有协议
+   - 设置direction：src, dst, src and dst, src or dst
+     - 默认为 ~src or dst~, 例如设置过滤器 ~host 10.2.2.2~ 和 ~src or dst host 10.2.2.2~ 是等价的
+   - 设置host：net, port, host, portrange
+     - net 为网段(采用CIDR模式)，例如 ~net 10.200.0.0/16~
+     - port 为端口号，例如 ~port 8080~
+     - host 为ip，例如 ~host 10.1.1.1~ 等价于 ~src host 10.1.1.1~
+     - portrange 为端口范围，例如 ~portrange 2000-2500~
+     - 默认为 ~host~, 例如设置过滤器 ~src 10.2.2.2~ 和 ~src host 10.2.2.2~ 是等价的
+   - 数据包字节大小
+     - less 或 ~<~, 例如 ~less 32~ 或 ~< 32~
+     - greater 或 ~>~, 例如 ~greater 32~ 或 ~> 32~
+     - 或 ~<=~
+     - 或 ~>=~
+   - 逻辑运算符：not, and, or
+     - 例如 ~(not tcp port 3128) and tcp port 23~
+   - TCP标识
+     - 通过 ~tcp[header offset]~ 决定从TCP header中偏移开始运算，通过运算结果筛选
+       #+begin_example bash
+       tcpdump 'tcp[13] & 32 != 0' # 拦截URGENT(URG)包
+       tcpdump 'tcp[13] & 16 != 0' # 拦截ACKNOWLEDGE(ACK)包
+       tcpdump 'tcp[13] & 8 != 0' # 拦截PUSH(PSH)包
+       tcpdump 'tcp[13] & 4 != 0' # 拦截RESET(RST)包
+       tcpdump 'tcp[13] & 2 != 0' # 拦截SYNCHRONIZE(SYN)包
+       tcpdump 'tcp[13] & 1 != 0' # 拦截FINISH(FIN)包
+       tcpdump 'tcp[13] = 18' # 拦截SYNCHRONIZE/ACKNOWLEDGE(SYNACK)包
+       tcpdump 'tcp[32:4] = 0x47455420' # 拦截HTTP GET数据
+       tcpdump 'ip[8] < 10' # 拦截TTL小于10的包（通常情况下是存在问题或者在使用traceroute）
+       tcpdump 'tcp[(tcp[12]>>2):4] = 0x5353482D' # 拦截SSH连接
+       #+end_example
+     - 通过更可读的方式设置
+        #+begin_example bash
+        tcpdump 'tcp[tcpflags] == tcp-syn' # 拦截SYN报文
+        tcpdump 'tcp[tcpflags] == tcp-rst' # 拦截RST报文
+        tcpdump 'tcp[tcpflags] == tcp-fin' # 拦截FIN报文
+        #+end_example
+4) 输出内容（然后可通过wireshark、Snort进行分析）
+   - TCP报文中Flags的含义
+     - ~[S]~ SYN(开始连接)
+     - ~[.]~ 没有Flag
+     - ~[P]~ PSH(推送数据)
+     - ~[F]~ FIN(结束连接)
+     - ~[R]~ RST(重置连接)
+     - ~[S.]~ SYN-ACK(SYN报文的应答报文)
+5) 示例
+   #+begin_example bash
+   tcpdump -nvv -C 20 'src port 80 and src net 10.25.1.0/25'
+   #+end_example
+
+
 * 定时任务
 
 ** at
@@ -648,6 +731,95 @@ ssh root@168.1.2.3 '/path/to/script.sh' helloworld
                #+BEGIN_EXAMPLE bash
                systemctl restart sshd
                #+END_EX
+
+** TODO Samba
+Samba为在Linux/Unix系统中实现微软的SMB/CIFS协议，从而实现Linux/Unix与Windows共享的文件服务。
+
+SMB(Server Message Block，服务消息块)和CIFS(Common Internet File System，通用互联网文件系统)是微软为实现主机间文件通信、打印机共享而设计的私有网络通信协议。
+
+*** 服务端
+- 安装
+  1) 安装软件
+     #+begin_example
+     sudo apt-get install samba samba-common
+     #+end_example
+  2) 创建共享目录
+     #+begin_example bash
+     mkdir -p ~/share
+     chmod 777 ~/share
+     #+end_example
+  3) 添加samba用户
+     #+begin_example bash
+     # 在交互中设置samba用的密码
+     sudo smbpasswd -a <user>
+     #+end_example
+  4) 在/etc/samba/smb.conf中添加
+     #+begin_example
+     [share]
+     comment = share folder
+     browseable = yes
+     path = /home/john/share
+     create mask = 0700
+     directory mask = 0700
+     valid users = john
+     force user = john
+     force group = john
+     public = yes
+     available = yes
+     writable = yes
+     #+end_example
+  5) 重启samba服务
+     #+begin_example bash
+     # 或者 sudo /etc/init.d/smb restart
+     sudo service smb restart
+     #+end_example
+- smbd服务
+  - 功能：负责为客户机提供服务器中共享资源(目录和文件)的访问。
+  - 监听端口：
+    - 139，SMB协议
+    - 445，CIFS协议
+- nmdb服务
+  - 功能：负责提供基于NetBIOS协议的主机名称解析，以便Windows网络中的主机进行查询服务。
+  - 监听端口：
+    - 137/138，NetBIOS协议
+- 配置文件/etc/samba/smb.conf
+  - 配置检查工具 ~testparm~
+
+*** Windows客户端
+1) Win+R 中输入 ~\\<samba server ip>~
+   - 若不能访问共享目录，那是因为组织的安全策略阻止未经身份验证的来宾访问。
+     - 解决方式：
+       1) Win+R 输入gpedit进入 *本地组策略编辑器*
+       2) 依次进入 ~计算机配置~, ~管理模板~, ~Lanman工作站~, ~启用不安全的来宾登录~
+       3) 设置为 ~已启用~ 即可
+   - 若提示当前服务端smb服务为1.0，要求提供2.0版本服务从而导致访问失败
+     - 解决方式1：
+       1) 依次进入 ~控制面板~, ~程序~, ~程序和功能~, ~启用或关闭Windows功能~
+       2) 安装 ~SMB 1.0/CIFS 文件共享支持~ 的 ~SMB 1.0/CIFS 客户端~ 即可
+
+*** Linux客户端
+1) 通过mount挂载
+   #+begin_example bash
+   sudo mount -t cifs -o username=<username>,password=<password>,vers=1.0 //<ip>/<username> <mount point>
+
+   # 例如
+   # sudo mount -t cifs -o username=root,password=123,vers=1.0 //10.16.25.167/root /mnt/smb
+   #+end_example
+2) 通过cifs-utils挂载(http://www.jinbuguo.com/man/mount.cifs.html)
+   #+begin_example bash
+   # 安装
+   sudo apt-get -y install cifs-utils
+   # 挂载
+   sudo mount.cifs //<ip>/<username> <mount point> -o username=<username>,password=<password>
+
+   # 例如
+   # sudo mount.cifs -o username=root,password=123 //10.16.25.167/root /mnt/smb
+   #+end_example
+   - 开机自动挂载，在 ~/etc/fstab~ 添加一行
+     #+begin_example bash
+     //<ip>/<username> <mount point> cifs username=<username>,password=<password> 0 0
+     #+end_example
+
 * TODO 压缩/解压
 ** 压缩格式
 1) Gzip

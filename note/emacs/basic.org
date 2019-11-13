@@ -1,3 +1,16 @@
+* TODO 包仓库
+  中国大陆镜像：http://elpa.emacs-china.org/
+
+** QA
+   1) 若使用gnu仓库时报如下问题
+      - 问题描述
+        #+begin_quote
+        Failed to verify signature archive-contents.sig: (\"No public key for 474F05837FBDEF9B created at 2014-09-29T07:20:03-0700 using DSA
+        #+end_quote
+      - 解决办法
+        为Emacs版本问题，需要在init.el中添加 ~(setq package-check-signature nil)~ 即可。
+
+
 * 目录/文件操作
 通过 ~C-x d~ 进入 Dired Mode，屏幕显示当前目录的文件和子目录。
 - 光标移动到对应的文件/目录上
@@ -144,3 +157,41 @@ M-x indent-buffer     ;; 格式化
 
 M-x mark-defun        ;; 或 C-M-h，选中当前函数
 #+end_example
+* emacs后台服务模式运行
+在.zshrc中欧给你加入
+#+begin_example bash
+# alias emacs
+alias emacsd='emacs --daemon'
+alias e='emacsclient -t'
+alias ec='emacsclient -c'
+
+# run emacs daemon
+[[ -z $(ps -C 'emacs --daemon' -o pid=) ]] && emacsd
+
+# add kill emacs function
+function kill-emacs(){
+    emacsclient -e "(kill-emacs)"
+    emacs_pid=$( ps -C 'emacs --daemon' -o pid= )
+    if [[ -n "${emacspid}" ]];then
+        kill -9 "${emacs_pid}"
+    fi
+}
+#+end_example
+~emacsd~ 运行后台服务
+~ec~ 新建一个图形化窗口(frame)编辑，若连接不到X Server则打开一个新虚拟终端编辑
+~e~ 在当前终端编辑
+~kill-emacs~ 关闭后台服务
+* Ternimal Emulation
+https://www.gnu.org/software/emacs/manual/html_node/emacs/Terminal-emulator.html#Terminal-emulator
+
+** eshell
+退出时会自动切换到最近一个buffer。
+
+** ansi-term
+模拟终端功能比其他全面。
+https://www.emacswiki.org/emacs/AnsiTermHints
+
+1) line-mode 可以像文本编辑一样移动光标
+   - 切换热键 ~C-c C-j~
+2) char-mode 终端模式
+   - 切换热键 ~C-c C-k~

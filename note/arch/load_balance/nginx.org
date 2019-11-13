@@ -333,8 +333,8 @@ NIO是ORACLE发明的
    - 默认值： ~proxy_redirect default;~
    - 上下文：http,server,location
 
-** 响应头设置
-   - ~proxy_set_head header value;~
+** 设置发送给后端服务的请求头
+   - ~proxy_set_header header value;~
      - 作用：设置发送给应用服务的请求头
      - 上下文：http,server,location
      - 示例
@@ -385,6 +385,18 @@ NIO是ORACLE发明的
    ~slice size~
    - 默认值： ~slice 0~
    - 上下文：http,server,lcation
+
+** 跨域设置
+#+begin_example
+server {
+    location / {
+        if ( $requeset_method = 'OPTIONS' ) {
+            add_header Access-Control-Allow-Origin "$http_origin";
+            add_header
+        }
+    }
+}
+#+end_example
 
 * if in location
 #+begin_example bash
@@ -745,6 +757,7 @@ useradd -r -g nginx -M nginx
 ** 示例
 #+BEGIN_EXAMPLE
 # 工作进程的启用用户，当工作进程被黑掉时也只能操作nobody用户能操作的文件而已
+# 若设置user则master process必须用root，即要以root身份启动nginx
 user nobody;
 # 工作进程数，默认为auto，和CPU物理核数相同
 worker_processes 1;
@@ -1190,7 +1203,6 @@ shared memory
           }
         }
         #+end_example
-
 
 * 测试工具
 ** ab

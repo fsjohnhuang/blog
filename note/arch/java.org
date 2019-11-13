@@ -1,7 +1,0 @@
-* 命令
-#+BEGIN_EXAMPLE shell
-# 检查是否安装JDK并配置好了
-jps
-#+END_EXAMPLE
-
-一个Java线程需要1.5M内存

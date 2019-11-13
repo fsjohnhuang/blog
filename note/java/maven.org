@@ -2,8 +2,7 @@ JAR，用于Java程序发布的包
 WAR，用于网站发布的包
 [[http://maven.apache.org/][官网]]
 
-* Ant,Maven和Gradle对比
-
+* TODO Ant,Maven和Gradle对比
 
 * 依赖下载流程
 1) 本地仓库
@@ -28,6 +27,7 @@ WAR，用于网站发布的包
          1) 一个respository最多配置一个mirror
        - 示例
        #+BEGIN_EXAMPLE xml
+       <!-- 设置远程仓库的镜像信息 -->
        <mirrors>
          <mirror>
            <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
@@ -45,19 +45,32 @@ WAR，用于网站发布的包
            <mirrorOf>central</mirrorOf>
          </mirror>
        </mirrors>
+       <!-- 设置远程仓库的帐号密码 -->
+       <servers>
+         <server>
+           <id>alimaven</id>
+           <username></username>
+           <password></password>
+         </server>
+       </servers>
+
+       <profile>
+       </profile>
        #+END_EXAMPLE
     2) 在项目的 ~pom.xml~ 中设置
        #+BEGIN_EXAMPLE xml
-       <repositories>
-         <repository>
-           <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
-           <id>alimaven</id>
-           <!-- 仓库描述 -->
-           <name>aliyun maven</name>
-           <!-- 仓库地址 -->
-           <url>https://maven.aliyun.com/repository/central</url>
-         </repository>
-       </repositories>
+       <project>
+         <repositories>
+           <repository>
+             <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
+             <id>alimaven</id>
+             <!-- 仓库描述 -->
+             <name>aliyun maven</name>
+             <!-- 仓库地址 -->
+             <url>https://maven.aliyun.com/repository/central</url>
+           </repository>
+         </repositories>
+       </project>
        #+END_EXAMPLE
   - 配置下载依赖的源码和javadoc
     #+BEGIN_EXAMPLE xml
@@ -111,7 +124,57 @@ WAR，用于网站发布的包
 Maven遵循“约定优于配置”的策略(convention over configuration)
 1) 任务compile，默认从src/main/java下编译所有java文件，并把输出的class文件存放到target/classes中；
 
+** Maven SNAPSHOT(快照)
+版本号形如 ~1.0.0-SNAPSHOT~ 的快照版本，用于表示当前项目处于快速开发阶段，Maven仓库中该快照版本对应的构建物将不定时被更新，而依赖该项目的其他项目在每次构建时都必须从Maven仓库中重新下载最新的JAR包。
+1) 非SNAPSHOT版本的特点：
+   1) 若每次发布新功能都要更新版本号，则需要通知依赖该项目的其他项目更新pom.xml从而下载最新JAR包；
+   2) 若每次发布新功能都不更新版本号，则需要通知依赖该项目的其他项目清理已经下载的JAR包，并重新下载
+      #+begin_example bash
+      # 清理已下载的所有JAR包
+      mvn dependency:purge-local-repository
+      # 下载依赖并构建、打包项目
+      mvn clean package
+      #+end_example
+2) SNAPSHOT版本的特点：
+   每次发布新功能都要不需要更新版本号，也不必通知依赖该项目的其他项目组，他们在每次构建项目时Maven会自动去下载最新版的JAR包。显式要求Maven去下载最新版的SNAPSHOT版本也是可以的 ~mvn clean package -U~ 。
+
 * pom.xml详解
+Maven在执行任务或目标时，会在当前目录查找并读取pom.xml，然后根据配置信息执行目标。
+pom.xml中包含如下信息
+1) 项目依赖
+2) 插件
+3) 执行目标
+4) 项目构建profile
+5) 项目版本
+6) 项目开发者列表
+7) 相关邮件信息
+
+** 模板
+#+begin_example xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instane"
+         xsi:schemaLoaction="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion> <!-- POM模型版本，当前固定为4.0.0 -->
+
+    <!-- 公司或组织的唯一标识，并且作为包生成规则。
+         如groupId为io.fsjohnhuang.devops，Maven会在src/main/java下执行mkdir -p io/fsjohnhuang/devops
+      -->
+    <groupId>io.fsjohnhuang.devops</groupId>
+    <artifactId>cmdb</artifactId> <!-- 项目的唯一标识 -->
+    <version>1.0.0-SNAPSHOT</version> <!-- 项目版本号 -->
+    <!--
+      groupId:artifactId:version 统称为POM坐标，例如 io.fsjohnhuang.devops:cmdb:1.0.0-SNAPSHOT
+      -->
+
+    <dependencies>
+     <!-- 通过POM坐标声明依赖项，并由Maven统一下载更新和管理-->
+    </dependencies>
+</project>
+#+end_example
+
+** Super POM(父 POM)
+所有POM默认都会继承
 
 ** 依赖声明
 #+begin_example xml
@@ -283,6 +346,20 @@ mvn dependency:sources
 
 # 下载javadoc
 mvn dependency:resolve -Dclassifier=javadoc
+
+# 清理并重新解析当前项目相关的本地仓库依赖
+# 1. 重新解析当前项目的整棵依赖树；2. 清理本地仓库；3. 根据远端仓库重新解析依赖树
+mvn dependency:purge-local-repository
+# 仅解析直接依赖，而不是包含间接依赖的整棵依赖树
+mvn dependency:purge-local-repository -DactTransitively=false
+# 仅清理和重新解析指定依赖
+mvn dependency:purge-local-repository -Dinclude=org.slf4j:slf4j-api,org.slf4j:log4j-over-slf4j
+mvn dependency:purge-local-repository -Dinclude=org.slf4j -DresolutionFuzziness=groupId -Dverbose=true
+# 不清理和重新解析指定依赖
+mvn dependency:purge-local-repository -Dexclude=org.slf4j:slf4j-api,org.slf4j:log4j-over-slf4j
+
+# 清理并重解析当前项目相关的本地仓库依赖，清理不再解析非当前项目的本地依赖
+mvn dependency:purge-local-repository -DmanualInclude=org.apache:apache
 #+END_EXAMPLE
 
 * TODO Maven Wrapper
@@ -320,6 +397,7 @@ Maven包含3个相互独立的生命周期
 
 * Maven 插件(goal)
   Maven的插件称为goal，一个goal可以对应0～N个生命周期阶段，一个生命周期阶段可以对应0~N个goal。
+
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express
   #+BEGIN_EXAMPLE xml
@@ -392,3 +470,33 @@ Maven包含3个相互独立的生命周期
   </configuration>
 </plugin>
 #+END_EXAMPLE
+* QA
+1) 执行 ~mvn site~ 报异常 ~java.lang.NoClassDefFoundError: org/apache/maven/doxia/siterenderer/DocumentContent~
+   - 解决方法：在pom.xml中添加
+     #+begin_example xml
+     <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-site-plugin</artifactId>
+          <version>3.7</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.apache.maven.doxia</groupId>
+              <artifactId>doxia-site-renderer</artifactId>
+              <version>1.8</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+     #+end_example
+2) 执行编译时报org/apache/maven/shared/filtering/MavenFilteringException
+   - 原因：本地仓库中的resource plugin没有下载，一定是download resource插件时Maven私服上没有这个版本的插件
+   - 解决办法：在pom.xml中添加
+     #+begin_example xml
+     <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-resources-plugin</artifactId>
+         <version>2.4.3</version>
+         <configuration>
+             <encoding>${project.build.sourceEncoding}</encoding>
+         </configuration>
+     </plugin>
+     #+end_example

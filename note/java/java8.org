@@ -1,3 +1,15 @@
+
+* 基础概念
+1) JDK和JRE的区别
+   JRE(Java Runtime Environment)仅包含Java程序运行时必要的虚拟机和核心库组件；而JDK(Java Development Kit)除了包含JRE外，还包含一系列开发、诊断工具(如jps等)。
+2) J2SE、J2EE和J2ME的区别
+   1998年JDK1.2版本发布时，将Java技术体系拆分为J2SE、J2EE和J2ME三大技术体系。
+   - J2SE(Java 2 Standard Edition)，包含Java语言核心库(如数据库连接、网络编程、接口定义等)，主要用于桌面应用软件的编程；
+   - J2EE(Java 2 Enterprise Edition)，除了包含J2SE的内容，还包含如Servlet、JSP、EJB等组件，主要用于分布式网络程序的开发；
+   - J2ME(Java 2 Micro Edition)，只包含J2SE的一部分，主要用于手机、PDA等消费类电子产品软件开发。
+3) J2SE和Java SE的区别
+   JDK1.6发布时更名为JDK6，同时J2SE更名为Java SE 6。
+
 * 8种基本数据类型
   - byte, 1byte signed integer
     - default 0
@@ -1495,7 +1507,7 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
    - 静态方法
      - ~<T, U extends <Comparable<? super U>>> Comparator<T> Comparator.comparing(Function<T, U> keyExtractor)~ 生成Comparator实例，会自动提取入参的属性进行后续比较。
 
-* 注解
+* TODO 注解(Annotation)
 
 ** 注解元素
    即传递给注解的键值对，如JUnit4中的 ~@Test(timeout=1000)~ 。

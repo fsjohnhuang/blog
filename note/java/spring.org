@@ -70,7 +70,7 @@
          <servlet-name>dispatcer</servlet-name>
          <url-pattern>/</url-pattern>
        </servlet-mapping>
-       
+
        <listener>
          <!-- 加载Root WebApplicationContext，然后由它再启动Servlet WebApplicationContext的加载，因此没有个配置时无法启用Spring MVC -->
          <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
@@ -100,7 +100,7 @@
        </property>
      </bean>
 
-     <!-- 
+     <!--
          /WEB-INF/views下的文件默认不能通过URL直接访问，必须通过Controller进行映射。
          但对于Controller没有任何逻辑，为执行映射编写一个Controller显然是徒劳的，因此可通过<mvc:view-controller path=""/>简化映射操作
      -->
@@ -119,7 +119,7 @@
 
      public class HelloController implements Controller {
          private static final Log logger = LogFactory.getLog(HelloController.class);
-        
+
          // 返回一个包含视图名称或视图名称和模型的ModelAndView对象
          @Override
          public ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response){
@@ -130,7 +130,7 @@
              // 设置逻辑视图名，视图解析器会解析到具体的视图页面
              // 将视图页面存放在/WEB-INF/views下，那么就不能通过URL直接访问视图页面
              mv.setViewName("welcome");
-            
+
              return mv;
          }
      }
@@ -170,7 +170,7 @@
      @Controller
      public class HelloController {
          private static final Log logger = LogFactory.getLog(HelloController.class);
-        
+
          // 返回一个包含视图名称或视图名称和模型的ModelAndView对象
          @RequestMapping("/hello")
          public ModelAndView showMessage(
@@ -182,12 +182,12 @@
              // 设置逻辑视图名，视图解析器会解析到具体的视图页面
              // 将视图页面存放在/WEB-INF/views下，那么就不能通过URL直接访问视图页面
              mv.setViewName("welcome");
-            
+
              return mv;
          }
-     }     
+     }
      #+END_EXAMPLE
-     
+
 *** DispatcherServlet作用
     1) org.springframework.web.servlet.DispatcherServlet内部操作
        #+BEGIN_EXAMPLE java
@@ -255,7 +255,7 @@
        import org.springframework.stereotype.Controller;
        import org.springframework.web.bind.annotation.RequestMapping;
        import org.springframework.ui.Model;
-       
+
        @Controller
        public class HelloController {
            @RequestMapping("/hello")
@@ -329,7 +329,7 @@
                mm.addAttribute("user", user);
                mv.addObject("user", user);
            }
-           
+
            @RequestMapping("/hello")
            public ModelAndView login(Model model, ModelMap mm, ModelAndView mv){
                User user1 = (User) model.asMap().get("user");
@@ -440,7 +440,7 @@
                 // 返回值将作为Model实例属性name的值
                 return username;
             }
-            
+
             @ModelAttribute
             public User getUser(){
                 // 若没有指定属性名称，且返回值为某实例，那么会自动对类名作小写转换作为Model的属性名称
@@ -511,7 +511,7 @@
            <servlet-name>default</servlet-name>
            <url-pattern>*.css</url-pattern>
        </servlet-mapping>
-       
+
        <!-- DispatcherServelt 配置 -->
        #+END_EXAMPLE
        - *注意: 静态资源不能位于WEB-INF下，必须位于Web Application根目录下。*
@@ -576,9 +576,9 @@
     </bean>
     #+END_EXAMPLE
 
-    
+
 **** 接收JSON数据
-     
+
 
 **** 响应JSON数据
 
@@ -597,7 +597,7 @@
     3) CookieLocaleResolver
 
     资源文件路径规则： ~<basename>_<locale>.properties~ ，如 message_zh_CN.properties 和 message_en_US.properties。
-    
+
 **** AcceptHeaderLocaleResolver实例
      1) 配置国际化资源文件
         #+BEGIN_EXAMPLE xml
@@ -668,7 +668,7 @@
             <bean class="org.springframework.web.servlet.i18n.LocaleChangeInterceptor"/>
         </mvc:interceptors>
         <bean id="localeResolver" class="org.springframework.web.servlet.i18n.SessionLocaleResolver"/>
-        #+END_EXAMPLE        
+        #+END_EXAMPLE
      2) 在Controller中设置语言环境信息
         #+BEGIN_EXAMPLE java
         @RequestMapping("/{formName}")
@@ -676,7 +676,7 @@
             @PathVariable String formName,
             @RequestParam("request_locale") String request_locale,
             HttpServletRequest request){
-            
+
             if (request_locale != null){
                 if (request_locale.equals("zh_CN")){
                     Locale locale = new Locale("zh", "CN");
@@ -688,7 +688,7 @@
                                           LocaleContextHolder.getLocale());
                 }
             }
-            
+
             return formName;
         }
         #+END_EXAMPLE
@@ -709,7 +709,7 @@
             @RequestParam("request_locale") String request_locale,
             HttpServletRequest request,
             HttpServletResponse response){
-            
+
             if (request_locale != null){
                 if (request_locale.equals("zh_CN")){
                     Locale locale = new Locale("zh", "CN");
@@ -719,7 +719,7 @@
                     (new CookieLocaleResolver()).setLocale(request, response, LocaleContextHolder.getLocale());
                 }
             }
-            
+
             return formName;
         }
         #+END_EXAMPLE
@@ -778,12 +778,12 @@
 
 **** 数据校验
 
-*** RESTful API    
+*** TODO RESTful API
 
-*** WebService
+*** TODO WebService
 
 *** 文件上传下载
-    
+
 **** 文件上传
      Spring MVC 使用 Apache Commons FileUpload 技术实现一个 MultipartResolver 实现类 CommonMultipartResolver。
      示例：
@@ -795,7 +795,7 @@
            <property name="maxUploadSize">
                <value>10485760</value>
            </property>
-           <!-- 请求的编码格式，必须和JSP的pageEncoding属性一致，以便正确读取表单的内容，默认为ISO-8859-1 -->           
+           <!-- 请求的编码格式，必须和JSP的pageEncoding属性一致，以便正确读取表单的内容，默认为ISO-8859-1 -->
            <property name="defaultEncoding">
                <value>UTF-8</value>
            </property>
@@ -821,12 +821,12 @@
              // 上传文件名
              String filename = file.getOriginalFilename();
              File filepath = new File(path, filename);
-             
+
              // 若父路径不存在则创建
              if (!filepath.getParentFile().exists()) {
                   filepath.getParentFile().mkdirs();
              }
-             
+
              // 将上传文件保存到目标路径中
              file.transferTo(new File(path + File.separator + filename));
              return "success";
@@ -834,7 +834,7 @@
          return "error";
      }
      #+END_EXAMPLE
-    
+
 **** 文件下载
      #+BEGIN_EXAMPLE java
      @GetMapping("/download")
@@ -861,7 +861,7 @@
       该方法在请求处理之后渲染之前依据它声明顺序倒序依次被调用(链式调用)，因此可以在这个方法中对Controller处理后返回的ModelAndView实例进行操作。
     - ~void afterCompletion(HttpServeltRequest request, HttpServeltResponse response, Object handle, Exception exception)~
       该方法在DispatcherServlet渲染对应的视图后执行，主要用于资源清理。
-    
+
     示例：
     #+BEGIN_EXAMPLE xml
     <!-- dispatcher-servlet.xml -->
@@ -882,7 +882,7 @@
         @Override
         public boolean preHandle(HttpServletRequest request, HttpServeltResponse response, Object handle) {
             boolean flag = false;
-            
+
             String servletPath = request.getServletPath();
             for (String uri : IGNORE_URI){
                 flag = IGNORE_URI.contains(uri);
@@ -962,7 +962,7 @@
          /* 从ApplicationContext容器中获取Bean实例
             @param name - 为Bean组件的id或name
             Object getBean(String name)
-            
+
             @param requiredType - Bean实例所属类型
             <T> getBean(Class<T> requiredType)
          */
@@ -1029,7 +1029,7 @@
      - spring-webmvc-x.x.x.jar
 ** Bean的配置和实例化
    通过配置文件(XML或Properties文件)注册并管理Bean之间的依赖关系。
-   
+
    Bean组件属性/子元素
    | 属性/子元素 | 说明                                                                                                     |
    |-------------+----------------------------------------------------------------------------------------------------------|
@@ -1044,7 +1044,7 @@
        #+BEGIN_EXAMPLE java
        // Bean对应的实现类
        public class UserInfo{}
-       
+
        // 使用Spring容器创建Bean实例
        ApplicationContext context = ClassPathXmlApplicationContext(contextConfigLocation);
        UserInfo userInfo = (UserInfo) context.getBean("useInfo");
@@ -1057,7 +1057,7 @@
        #+BEGIN_EXAMPLE java
        // Bean对应的实现类
        public class UserInfo{}
-       
+
        public static class StaticUserInfoFactory{
            public static UserInfo createBean(){
                return new UserInfo();
@@ -1076,7 +1076,7 @@
        #+BEGIN_EXAMPLE java
        // Bean对应的实现类
        public class UserInfo{}
-       
+
        public class UserInfoFactory{
            public UserInfo createBean(){
                return new UserInfo();
@@ -1232,8 +1232,8 @@
     3) 通过属性 ~autowire=""~ 启用Annotation装配
        - 值
          - default 由 ~<beans>~ 的属性default-autowire的值决定
-         - byName 根据Bean的id值装配
-         - byType 根据Bean的class值装配
+         - byName 根据变量名匹配Bean的id值装配，可通过附加 ~@Qulifier(newid)~ 根据newid匹配Bean的id值装配
+         - byType 根据Bean的class值装配，若匹配结果为多个时则会通过Bean的id来匹配
          - constructor 根据构造方法参数的数据类型，进行byType模式的自动装配
          - no 不使用自动装配，必须使用ref元素定义
        - 注意：成员变量必须提供setter方法，否则无法实现。
@@ -1266,7 +1266,7 @@
        #+END_EXAMPLE
 
 ** Spring AOP
-  
+
 *** 术语
     - Aspect(切面), 封装用于横向插入系统功能(如日志、事任等)的类。
     - Joinpoint(链接点), 程序运行过程中的函数/方法调用。
@@ -1276,7 +1276,7 @@
     - Proxy(代理), 将Advice应用到Target Object后，被动态创建出来的对象。
     - Weaving(织入), 将Advice应用到Target Object时生成Proxy的过程。
     - Introduction(引入), 为现有类型声明额外的方法和属性。
-  
+
 *** 动态代理
 1) JDK动态代理
    通过调用 ~java.lang.reflect.Proxy~ 的方法 ~newProxyInstance~ 来创建代理对象实现的。
@@ -1388,7 +1388,7 @@
 
 *** 通过AspectJ构建AOP
     AspectJ是一个基于Java的AOP框架，Spring2.0+引入对AspectJ的支持。
-    
+
 **** 基于XML声明式
      #+BEGIN_EXAMPLE
      <aop:config>
@@ -1449,17 +1449,17 @@
              // 目标方法
              Method method = joinPoint.getSignature();
          }
-         
+
          public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
              // 前置
-             
+
              Object ret = proceedingJoinPoint.procee();
 
              // 后置
 
              return ret;
          }
-         
+
          public void myThrowing(JoinPoint joinPoint, Throwable e){
          }
 
@@ -1503,14 +1503,14 @@
          @Around("myPointCut()")
          public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
              // 前置
-             
+
              Object ret = proceedingJoinPoint.procee();
 
              // 后置
 
              return ret;
          }
-         
+
          @Throwing(value="myPointCut()", throwing="e")
          public void myThrowing(JoinPoint joinPoint, Throwable e){
          }
@@ -1520,39 +1520,1305 @@
          }
      }
      #+END_EXAMPLE
-     
+
 * Spring Boot
   通过[[https://start.spring.io/][Spring Initializr]]初始化项目。
 
 * TODO QA
-  1) Eclipse 中的 Dynamic Web Module Version 与 Application Server 搭配
-     Dynamic Web Module Version 决定Java动态网站依赖的包版本，因此必须和Application Server对应才能成功运行。
-     - 映射表
-       | Dynamic Web Module Version | Application Server |
-       |----------------------------+--------------------|
-       |                        2.4 |                5.5 |
-       |                        2.5 |                6.0 |
-       |                        3.0 |                7.0 |
-       |                        3.1 |                8.5 |
-       |                        4.0 |                9.0 |
-     - 通过 ~项目目录/.setting/org.eclipse.wst.common.project.facet.core.xml~ 修改 Dynamic Web Module Version
-       #+BEGIN_EXAMPLE xml
-       <?xml version="1.0" encoding="UTF-8"?>
-       <faceted-project>
-         <fixed facet="wst.jsdt.web"/>
-         <installed facet="java" version="1.5"/>
-         <installed facet="jst.web" version="3.1"/> <!-- 修改为对应的Dynamic Web Module Version，然后重启Tomcat即可 -->
-         <installed facet="wst.jsdt.web" version="1.0"/>
-       </faceted-project>
-       #+END_EXAMPLE
-  2) URI和URL的区别？
+
+** Eclipse 中的 Dynamic Web Module Version 与 Application Server 搭配
+      Dynamic Web Module Version 决定Java动态网站依赖的包版本，因此必须和Application Server对应才能成功运行。
+      - 映射表
+        | Dynamic Web Module Version | Application Server |
+        |----------------------------+--------------------|
+        |                        2.4 |                5.5 |
+        |                        2.5 |                6.0 |
+        |                        3.0 |                7.0 |
+        |                        3.1 |                8.5 |
+        |                        4.0 |                9.0 |
+      - 通过 ~项目目录/.setting/org.eclipse.wst.common.project.facet.core.xml~ 修改 Dynamic Web Module Version
+        #+BEGIN_EXAMPLE xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <faceted-project>
+          <fixed facet="wst.jsdt.web"/>
+          <installed facet="java" version="1.5"/>
+          <installed facet="jst.web" version="3.1"/> <!-- 修改为对应的Dynamic Web Module Version，然后重启Tomcat即可 -->
+          <installed facet="wst.jsdt.web" version="1.0"/>
+        </faceted-project>
+        #+END_EXAMPLE
+
+** URI和URL的区别？
+   https://danielmiessler.com/study/url-uri/
+   https://www.cnblogs.com/fsjohnhuang/p/4280369.html
+
+** TODO 性能容量评估？
 
 
 
 
-IOC容器设计原理
-AOP设计原理
-FactoryBean和BeanFactory
-Spring事务处理机制
-基于SpringJDBC手写ORM框架
-SpringMVC9大组件
+ IOC容器设计原理
+ AOP设计原理
+ FactoryBean和BeanFactory
+ Spring事务处理机制
+ 基于SpringJDBC手写ORM框架
+ SpringMVC9大组件
+
+* MicroService
+** 介绍
+  源自Martin Fowler的Microservices博文(http://martinfowler.com/articles/microservices.html)，作为一种系统架构的设计风格。
+  特点：
+  1) 以进程为边界，划分系统业务能力和实现能力重用
+  2) 主要服务间以基于HTTP的RESTful API进行通信
+  3) 各服务独立开发、测试、部署、运维，和进行性能容量评估和优化
+
+  9大特性：
+  1) 服务组件化
+  2) 按业务组织团队
+     从过往按技术层面的团队划分方式(DBA、运维、后端、前端和设计师团队)，重新以业务线来重新划分和组织宽栈或全栈团队。
+  3) 做“产品”的态度
+  4) 智能端点和哑管道
+     - 通信方式
+       1) 请求-响应同步阻塞模式，基于HTTP的RESTful API 或 轻量级的消息发送协议
+       2) 观察者异步模式，通过轻量级消息总线(如RabbitMQ)提供异步消息传递
+       3) 对于性能要求较高的场景，可以使用二进制的消息发送协议(如protobuf)
+  5) 去中心化治理
+     每个服务应业务特点进行技术选型、开发模式、运维方式等决策。
+  6) 去中心化管理数据
+     每个服务应业务特点使用不同类型的数据库和独立的数据库
+     - 问题
+       1) 数据一致性
+          - 最终一致性，即数据在最后的处理状态一致即可。中间过程中发现错误，则通过补偿机制来处理从而保证最终一致性。
+       2) 分布式事务
+          - 强调各服务间进行“无事务”的调用
+  7) 基础设施自动化
+     - 自动化测试
+     - 自动化部署
+  8) 容错设计
+     微服务会存在个别服务不可用，而其它服务可用的情况，因此快速检测出故障源并尽可能地自动恢复服务是设计时需要考虑的。
+     - 方法：每个服务中实现监控和日志记录，记录服务状态、断路器状态、吞吐量、网络延迟等关键数据的仪表盘。
+  9) 演进式设计
+     1) 初期：以单体系统的方式设计和实施；
+     2) 中期：将经常变动或有一定时效的内容进行微服务处理，逐渐将原来的单体系统中多变的部分拆分出来。
+
+  问题：
+  1) 运维复杂性提高，由于运维对象数量将成几何级别地上升，因此需要自动化运维支撑
+  2) 接口一致性，严格的 单体服务接口版本 和 整体服务接口版本(各服务接口的依赖) 的管理
+  3) 分布式的复杂度，存在网络延迟、分布式事务和异步消息等
+
+
+  服务治理：Dubbo（阿里）, DubboX（当当基于Dubbo），Eureka（Netflix）和Consul（Apache）等
+  分布式配置管理：Disconf（百度），Archaius（Netflix），QConf（360），Spring Cloud Config，Diamond（淘宝）等
+  批量任务：Elastic-Job（当当），Azkaban（ LinkedIn），Spring Cloud Task
+  服务跟踪：Hydra（京东），Zipkin（Twitter），Spring Cloud Sleuth等
+
+** Spring Cloud
+
+*** 基本介绍
+    基于Spring Boot实现的一套微服务架构解决方案，涉及配置管理、服务治理、断路器、智能路由、微代理、控制总线、全局锁、决策竞选、分布式会话和集群状态管理等。
+    Spring Cloud的子项目
+    1) Spring Cloud Config
+       配置管理工具，支持
+       1) 使用Git存储配置内容
+       2) 客户端配置信息刷新
+       3) 加密/解密配置内容
+    2) Spring Cloud Netflix
+       核心组件，对多个Netflix OSS开源套件进行整合
+       1) Eureka，服务治理组件，含服务注册中心、服务注册和发行机制
+       2) Hystrix，容错管理组件，实现断路器模式
+       3) Ribbon，客户端负载均衡的服务调用组件
+       4) Feign，基于Ribbon和Hystrix的声明式服务调用组件
+       5) Zuul，网关组件，提供智能路由、访问过滤等功能
+       6) Archaius，外部化配置组件
+    3) Spring Cloud Bus
+       事件、消息总线，用于传播集群中的状态变化或事件，比如动态刷新配置等
+    4) Spring Cloud Cluster
+       针对ZooKeeper、Redis、Hazelcast、Consul的选举算法和通用状态模式的实现
+    5) Spring Cloud Cloudfoundry
+       与Pivotal Cloudfoundry的整合支持
+    6) Spring Cloud Consul
+       服务发现和配置管理工具
+    7) Spring Cloud Stream
+       通过Redis,Rabbit或Kafka实现的消费微服务，可以通过声明式模型来发送和接收消息
+    8) Spring Cloud AWS
+       整合Amazon Web Service
+    9) Spring Cloud Security
+       安全工具包，提供在Zuul中对OAuth2客户端请求的中继器
+    10) Spring Cloud Sleuth
+        分布式跟踪实现，完美整合Zipkin
+    11) Spring Cloud ZooKeeper
+        基于ZooKeeper的服务发现和配置管理组件
+    12) Spring Clould Starters
+        基于Spring Boot风格项目的基础以来模块
+    13) Spring Cloud CLI
+        用于在Groovy中快速创建Spring Cloud应用的Spring Boot CLI插件
+
+*** 版本说明
+    版本采用命名方式而不是版本号(x.y.z)方式，具体为Angel.SR6, Camden.M1 和 Camde.BUILD-SNAPSHOT等。其中SR6表示Service Release的第6版，表示发布内容积累到临界点或一个严重的bug被修复。
+    采用命名方式的原因是，Spring Cloud包含一组子项目，而各子项目的版本推进是独立的，因此采用命名方式来多个子项目的一系列兼容版本更有效果。
+
+*** Spring Boot
+    通过大量的自动化配置等方式简化Spring项目的配置过程，并提供一系列Starter POMs的定义，只需在pom.xml中加载对应的Start POM即可引入复杂Spring相关的依赖关系。
+    spring-boot-starter-web是全栈Web开发模块，包含嵌入式Tomcat、Spring MVC
+    spring-boot-starter-test是测试模块，包含JUnit、Hamcrest、Mockito
+    spring-boot-starter-jdbc 或 spring-boot-starter-jpa 是数据库模块
+    Spring Boot开发的应用打包为jar，内含Tomcat或Jetty等容器，因此省去打包为war，然后在服务器上部署Tomcat的过程。
+
+**** 构建RESTful API应用
+     1) 在Spring Initializr(http://starter.spring.io)生成项目脚手架
+     2) Spring Boot Maven插件命令
+        #+begin_example bash
+        mvn spring-boot:help
+        mvn spring-boot:repackage
+        # 快速启动Spring Boot应用
+        mvn spring-boot:run
+        # 设置Tomcat端口号再启动Spring Boot应用
+        SERVER_PORT=9999 mvn spring-boot:run
+        mvn spring-boot:start
+        mvn spring-boot:stop
+        # 部署时先打包为jar包，然后通过java —jar xxx.jar来启动应用
+        mvn install
+        #+end_example
+     3) 目录结构
+        #+begin_example yaml
+        - mvnw # Maven Wrapper for Linux
+        - mvnw.cmd # Maven Wrapper for Windows
+        - pom.xml
+        - src/
+          - main/
+            - java/
+            - resources/
+              - application.properties # Spring Boot的默认配置文件
+              - static/ # 放置CSS、JavaScript和图片等静态资源
+              - templates/ # 方式页面文件
+          - test/
+            - java/
+        #+end_example
+     4) Spring Boot配置文件
+        1) property文件——apllication.properties
+           #+begin_example bash
+           # 指定内置Tomcat启用的服务端口号
+           server.port=8888
+           # 指定应用名，Spring Cloud中会被作为注册的服务名
+           spring.application.name=hello
+
+           # 自定义属性
+           book.name=SpringCloud
+           # 引用其他属性
+           book.desc=${book.name} is a good book
+           # 随机字符串
+           random_string=${random.value}
+           # 随机int
+           random_int=${random.int}
+           # 随机long
+           random_long=${random.long}
+           # 10以内的随机数
+           random_lt=${random.int(10)}
+           # 10到20之间的随机数
+           random_range=${random.int[10,20]}
+           #+end_example
+           - 代码中通过 ~@Value~ 引用属性
+             #+begin_example java
+             import org.springframework.web.bind.annotation.*;
+
+             @Component
+             public class Book {
+                 // 支持两种表达式
+                 // 1. PlaceHolder，格式为 ${...}
+                 // 2. SpEL(Spring Expression Language)，格式为 #{...}
+                 @Value("${book.name}")
+                 private String name;
+             }
+             #+end_example
+           - 多环境配置
+             - application.properties中通过属性 ~spring.profiles.active=~ 设置启用哪个环境，如 ~spring.profiles.active=uat~ 为启用uat环境的配置文件 ~application-uat.properties~ 。
+             - 各环境的配置文件位于与 ~application.properties~ 同级目录下，且文件名格式为 ~application-{profile}.properties~ 。
+        2) yaml文件
+        3) 数据文件加载顺序(优先级由高到低)
+           1) 在命令行传入参数
+           2) SPRING_APPLICATION_JSON中的属性
+           3) java:comp/env中的JNDI属性
+           4) Java的系统属性，可通过 ~System.getProperties()~ 获取
+           5) 操作系统的环境变量
+           6) 通过 ~random.*~ 配置的随机属性
+           7) 位于jar包外，针对不同 ~{profile}~ 环境的配置文件内容
+           8) 位于jar包内，针对不同 ~{profile}~ 环境的配置文件内容
+           9) 位于jar包外，application.properties的配置文件内容
+           10) 位于jar包内，application.properties的配置文件内容
+           11) 在 ~@Configuration~ 注解修改的类中，通过 ~@PropertySource~ 注解定义的属性
+           12) 应用默认属性，使用 ~SpringApplication.setDefaultProperties~ 定义内容
+     5) 代码
+        - 入口
+          #+begin_example java
+          // src/main/java/io/fsjohnuang/Application.java
+          import org.springframework.boot.SpringApplication;
+          import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+          @SpringBootApplication
+          public class Application {
+              public static void main(String[] args) {
+                  SpringApplication.run(Application.cmd, args);
+              }
+          }
+          #+end_example
+        - Controller
+          #+begin_example java
+          // src/main/java/io/fsjohnuang/HomeController.java
+          import org.springframework.web.bind.annotation.*;
+
+          @RestController
+          public class HomeController {
+              @RequestMapping("/hello")
+              public String index() {
+                  return "Hello";
+              }
+          }
+          #+end_example
+     6) 单元测试
+        #+begin_example java
+        // src/test/java/io/fsjohnhuang/ApplicationTests.java
+        import static org.hamcrest.Matchers.equalTo;
+        import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+        import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+        @RunWith(SpringJUnit4ClassRunner.class) // 引入Spring对JUnit4的支持
+        @SpringApplicationConfiguration(classes = Application.class) // 指定Spring Boot的启动类
+        @WebAppConfiguration // 开启Webi应用配置，用于模拟ServletContext
+        public class ApplicationTests {
+            private MockMvc mvc; // 用于模拟调用Controller接口发起请求
+
+            @Before
+            public void setUp() throws Exception {
+                mvc = MockMvcBuilders.standaloneSetup(new HelloController()).build();
+            }
+
+            @Test
+            public void hello() throws Exception {
+                mvc.perform(MockMvcRequestBuilders.get("/hello").accept(MediaType.APPLICATION_JSON))
+                   .andExpect(status().isOk())
+                   .andExpect(content().string(equalTo("Hello World")));
+            }
+        }
+        #+end_example
+     7) 监控
+        - 通过spring-boot-starter-actuator自动添加监控端点
+          1) 应用配置类
+             - ~/actuator/autoconfig~ 获取自动化配置报告，其中包括所有自动化配置后选项，及是否满足生效条件
+               - ~positiveMatches~ 中返回的是条件匹配成功的自动化配置
+               - ~negativeMatches~ 中返回的是条件匹配失败的自动化配置
+             - ~/actuator/beans~ 获取应用上下文中创建的所有Bean
+               - bean 为Bean名称
+               - scope 为Bean的作用域
+               - type 为Bean的Java类型
+               - resource 为class文件的具体路径
+               - dependencies 为依赖的Bean名称
+             - ~/actuator/configprops~ 获取属性的配置报告，可以查看各属性的配置路径
+             - ~/actuator/env~ 获取应用可用的环境属性报告，包括环境变量、JVM属性、应用的配置属性、命令行的参数。
+               - 属性名包含password、secret、key关键字，其值会用*代替；
+               - 包含在用和未使用的环境属性
+             - ~/actuator/mappings~ 返回所有Spring MVC的控制器映射关系报告
+             - ~/actuator/info~ 返回application.properties中以 ~info.~ 为前缀的自定义信息，默认返回 ~{}~ 。
+               #+begin_example
+               info.app.name=spring-boot-hello
+               info.app.version=1.0.0
+               #+end_example
+          2) 度量指标类
+             - ~/actuactor/metrics~ 返回内存、线程、垃圾回收等信息
+             - ~/actuactor/metrics/{name}~ 返回指定监控对象的信息，如获取可用内存信息 ~/actuator/metrics/mem.free~
+             - ~/actuactor/health~ 返回各类健康指标信息
+               - 检测器接口 ~HealthIndicator~
+               - 内置的检测器实现
+                 | 检查器                    | 功能                       |
+                 |---------------------------+----------------------------|
+                 | DiskSpaceHealthIndicator  | 低磁盘空间检测             |
+                 | DataSourceHealthIndicator | 检测DataSource连接是否可用 |
+                 | MongoHealthIndicator      | 检测Mongo数据库是否可用    |
+                 | RabbitHealthIndicator     | 检测Rabbit服务器是否可用   |
+                 | RedisHealthIndicator      | 检测Redis服务器是否可用    |
+                 | SolrHealthIndicator       | 检测Solr服务器是否可用     |
+               - 自定义检测器
+                 #+begin_example java
+                 import org.springframework.boot.actuate.health.HealthIndicator;
+                 import org.springframework.boot.actuate.health.Health;
+
+                 @Component
+                 public class RocketMQHealthIndicator implements HealthIndicator {
+                     @Override
+                     public Health health(){
+                       int errorCode = check()
+                       if (errorCode != 0) {
+                           return Health.down().withDetail("Error Code", errorCode).build();
+                       }
+                       // 状态有UP、DOWN、UNKNOW和OUT_OF_SERVICE
+                       return Health.up().build();
+                     }
+
+                     private int check(){
+                     // 检测逻辑
+                     }
+                 }
+                 #+end_example
+             - ~/actuactor/dump~ 或 ~/actuactor/threaddump~ 返回程序运行的线程信息
+             - ~/actuactor/trace~ 或 ~/actuactor/httptrace~ 返回最近100条的HTTP跟踪信息，默认跟踪信息存储在 ~org.springframework.boot.actuate.trace.InMemoryTraceRepository~
+          3) 操作控制类
+             - ~/actuator/shutdown~ 关闭应用。默认禁用，需要在application.properties中设置 ~endpoints.shutdown.enabled=true~ 来开启。
+*** Spring Cloud Eureka
+    服务治理作为微服务架构中最核心和基础的模块，提供服务注册、服务发现、服务端负载均衡、客户端负载均衡功能。
+    1) 服务注册
+       每个服务单元启动时自动向注册中心登记其所提供的服务(主机号、IP、端口、版本号、通信协议等)
+    2) 服务发现
+       服务间的调用将不再通过指定具体的服务实例地址来实现，而是通过服务名称发起请求调用实现。因此调用方在发起调用前需要从注册中心获取服务实例列表，然后根据轮询规则从列表中取出一个具体的实例地址发起调用。
+
+    Eureka包含Java服务端和客户端，提供基于RESTful API的服务治理机制，而其它语言平台也有对应的客户端(.NET的Steeltoe，Nodejs的eureka-js-client等)
+    Eureka服务端支持高可用集群配置，集群分片间通过异步模式相互复制各自的状态，因此在任意时刻每个分片实例关于所有服务的状态会有细微的差别。
+    Eureka客户端功能
+    1) 服务注册
+    2) 周期性地向注册中心发送心跳来更新它的服务租约
+    3) 服务发现，查询、缓存和周期性刷新各服务状态
+
+**** 搭建注册中心
+     1) 入口文件
+        #+begin_example java
+        package com.example.demo;
+
+        import org.springframework.boot.SpringApplication;
+        import org.springframework.boot.autoconfigure.SpringBootApplication;
+        import org.springframework.cloud.netflix.eureka.server.EnableEurekaServer;
+
+        @EnableEurekaServer
+        @SpringBootApplication
+        public class DemoApplication {
+        	public static void main(String[] args) {
+        		SpringApplication.run(DemoApplication.class, args);
+        	}
+        }
+        #+end_example
+     2) 禁用客户端服务注册和服务发现行为
+        - 默认情况下，服务中心会将自己作为服务提供者注册到服务中心，并从服务中心获取所有服务列表。
+          在注册中心的 *Instances currently registered with Eureka* 中看到服务信息
+        - 禁用，在application.properties中加入
+          #+begin_example bash
+          server.port=8761 # 设置注册中心端口号
+
+          eureka.client.register-with-eureka=false # 禁用注册中心作为客户端的服务注册功能
+          eureka.client.fetch-registry=false       # 禁用注册中心作为客户端的服务发现功能
+
+          eureka.instance.hostname=peer1 # 设置注册中心主机名，在注册中心 DS Replicas 中的名称
+          #+end_example
+     3) 高可用方案
+        通过将自己注册到集群中的其它注册中心上，从而实现服务清单的相互同步。而Eureka客户端则配置多个注册中心，实现从注册中心集群中注册服务和服务发现的高可用。
+        - 在注册中心页面中的 General Info/registered-replicas，unavailable-replicas 和 available-replicas 会实时显示集群节点
+
+**** 服务提供者
+     1) 入口文件
+        #+begin_example java
+        package com.example.demo;
+
+        import org.springframework.beans.factory.annotation.Autowired;
+        import org.springframework.boot.SpringApplication;
+        import org.springframework.boot.autoconfigure.SpringBootApplication;
+        import org.springframework.cloud.client.ServiceInstance;
+        import org.springframework.cloud.client.discovery.DiscoveryClient;
+        import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+        import org.springframework.web.bind.annotation.RequestMapping;
+        import org.springframework.web.bind.annotation.RestController;
+
+        import java.util.List;
+
+        @EnableDiscoveryClient
+        @SpringBootApplication
+        public class DemoApplication {
+
+        	public static void main(String[] args) {
+        		SpringApplication.run(DemoApplication.class, args);
+        	}
+
+        }
+
+        @RestController
+        class ServiceInstanceRestController{
+            @Autowired
+            private DiscoveryClient client;
+
+
+            // 服务发现
+            @RequestMapping("/service-instances")
+            public List<String> serviceNames() {
+                return client.getServices();
+            }
+        }
+        #+end_example
+     2) application.properties
+        #+begin_example bash
+        spring.application.name=my-first-service
+
+        eureka.instance.prefer-ip-address=true # 注册中心使用IP，而不是主机名。默认为false，导致
+        eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka # 设置注册中心地址，多个地址间以逗号分隔
+        #+end_example
+
+**** 服务消费者
+     通过Eureka客户端执行服务发现，然后通过Ribbon执行客户端负载均衡
+     1) 通过RestTemplate请求其他服务
+        #+begin_example java
+        @SpringBootApplication
+        @RestController
+        public class UserApplication(){
+            public statit void main(String[] args){
+                SpringApplication.run(UserApplication.class, args);
+            }
+
+            @Bean
+            RestTemplate restTemplate(){
+                return new Resttemplate();
+            }
+
+            @Autowired
+            RestTemplate restTemplate;
+
+            public String hi() {
+                // 请求具体服务实例
+                String greeting = this.restTemplate.getForObject("http://localhost:8081/greeting", String.class);
+                return greeting;
+            }
+        }
+        #+end_example
+     2) 不接入Eureka客户端，直接使用Ribbon执行客户端负载均衡
+        - 代码
+        #+begin_example java
+        @RibbonClient(name="say-hello", // Ribbon客户端名称，通过名称获取配置
+                      configuration=SayHelloConfiguration.class)
+        @SpringBootApplication
+        @RestController
+        public class UserApplication {
+
+          @Bean
+          @LoadBalanced
+          RestTemplate restTemplate(){
+            return new RestTemplate();
+          }
+
+          @Autowired
+          RestTemplate restTemplate;
+
+          @RequestMapping("/hi")
+          public String hi(@RequestParam(value="name", defaultValue="Artaban") String name) {
+            String greeting = this.restTemplate.getForObject("http://say-hello/greeting", String.class);
+            return String.format("%s, %s!", greeting, name);
+          }
+
+          public static void main(String[] args) {
+            SpringApplication.run(UserApplication.class, args);
+          }
+        }
+
+        class SayHelloConfiguration {
+          @Autowired
+          IClientConfig ribbonClientConfig;
+
+          @Bean
+          public IPing ribbonPing(IClientConfig clientConfig) {
+            // 默认为NoOpPing，表示不进行健康检查，总是认为所有应用服务都是可用的。
+            // PingUrl则为通过访问应用服务的/路径
+            return new PingUrl();
+          }
+
+          @Bean
+          public IRule ribbonRule(IClientConfig clientConfig) {
+            // 当健康检测返回非200时，标记服务不可用并从服务列表中剔除，直到健康检测为200为止。
+            return new AvailabilityFilteringRule();
+          }
+        }
+        #+end_example
+        - application.properties配置
+          #+begin_example bash
+          # say-hello为自定义的服务名，而ribbon中的应用服务列表为该服务名的服务实例地址
+          say-hello.ribbon.eureka.enable=false # 默认Spring Cloud Netflix中的Ribbon默认会从Eureka服务端获取应用服务列表，因此需要禁用
+          say-hello.ribbon.listOfServers=localhost:8080,localhost:8089 # 手动设置应用服务列表
+          say-hello.ribbon.ServerListRefreshInterval=15000 # 应用服务健康检查的时间间隔，单位毫秒
+
+          # Spring Cloud Netflix会为每个Ribbon客户端创建一个ApplicationContext，其中包含如下bean
+          # IClientConfig 存储Ribbon客户端或负载均衡器的配置信息
+          # ILoadBalancer 软件负载均衡器
+          # ServerList 应用服务地址列表
+          # IRule 用于描述负载均衡策略，和应用服务健康状态判断策略
+          # IPing 用于应用服务健康检查
+          #+end_example
+     3) 接入Eureka客户端，从Eureka服务端获取服务列表
+        - 代码
+          #+begin_example java
+          @EnableDiscoveryClient
+          @SpringBootApplication
+          @RestController
+          public class UserApplication {
+
+            @Bean
+            @LoadBalanced
+            RestTemplate restTemplate(){
+              return new RestTemplate();
+            }
+
+            @Autowired
+            RestTemplate restTemplate;
+
+            @RequestMapping("/hi")
+            public String hi(@RequestParam(value="name", defaultValue="Artaban") String name) {
+              // 这里的say-hello是注册到Eureka服务端的其他服务的服务名称
+              String greeting = this.restTemplate.getForObject("http://say-hello/greeting", String.class);
+              return String.format("%s, %s!", greeting, name);
+            }
+
+            public static void main(String[] args) {
+              SpringApplication.run(UserApplication.class, args);
+            }
+          }
+          #+end_example
+        - application.properties配置
+          #+begin_example bash
+          eureka.client.serviceUrl.defaultZone=http://eureka.service.com/
+          #+end_example
+**** 架构说明
+1) 服务提供者
+   - 服务注册
+     服务启动时默认会将服务自身元数据发送给注册中心
+   - 服务同步
+     注册中心集群中的节点会相互异步同步其上的服务信息
+   - 服务续约(Renew)
+     服务提供者在注册后，会维护一个心跳来告知Eureka Server该服务可用，防止从服务列表中剔除。
+     - 在服务提供者的application.properties中设置
+       #+begin_example bash
+       eureka.instance.lease-renewal-interval-in-seconds=30 # 定义服务续约任务的调用时间间隔，默认30秒
+       eureka.instance.lease-expiration-duration-in-seconds=90 # 定义服务失效的时间，默认90秒。即90秒内没有向Eureka Server发送心跳请求，那么Eureka Server就可以剔除该服务实例
+       #+end_example
+   - 服务下线
+     当服务实例正常关闭时，会向Eureka Server发送服务下线通知，然后Eureka Server会将该服务实例状态设置为下线(Down)，并通知整个注册中心集群。
+2) 服务消费者
+   - 服务发现
+     服务启动时会向Eureka Server获取服务列表，且默认情况下该服务列表会缓存起来，每隔30秒再从Eureka Server重新获取。
+     #+begin_example bash
+     eureka.client.fetch-registry=false # 禁止从Eureka Server获取服务列表，默认为true
+     eureka.client.registry-fetch-interval-seconds=30 # 重新从Eureka Server获取服务列表的时间间隔
+     #+end_example
+   - 服务调用
+     Eureka中有Region和Zone的概念，一个Region包含多个Zone；而每个服务实例必须且仅能注册到一个Zone。当服务调用时，会优先调用同一个Zone中的服务提供方。
+     - 通过设置region和zone来配合物理部署架构，实现就近调用、多地容灾。
+     - 设置服务所属的region和zone
+       #+begin_example bash
+       eureka.client.region=default # 设置所属region
+       eureka.client.availability-zones=defaultZone # 设置所属zone，多个zone间通过逗号分隔
+       #+end_example
+3) 注册中心
+   - 服务剔除
+     每隔60秒(默认)将当前服务清单中超时(默认90秒)没有续约的服务剔除出去。
+   - 自我保护
+     Eureka Server统计心跳失败的比例在15分钟内低于85%(开发环境很容易达到，生产环境通常为网络不稳定导致)时，会保护并认为当前服务列表均可用。从而导致服务消费者可能向实际不可用的服务实例发起调用。
+     - 控制台提示
+       #+begin_quote
+       emergency! eureka may be incorrectly clamiming instances are up when they're not.
+       renewals are lesser than threshold and hence the instances are not being expired just to be safe.
+       #+end_quote
+     - 禁用设置application.properties
+       #+begin_example bash
+       eureka.server.enable-self-preservation=false
+       #+end_example
+**** Eureka配置说明
+1) 服务注册类配置
+   以 ~eureka.client~ 为前缀
+   | 参数名                                        | 说明                                                                         | 默认值 |
+   |-----------------------------------------------+------------------------------------------------------------------------------+--------|
+   | enabled                                       | 启用Eureka Client                                                            |   true |
+   | registryFetchIntervalSeconds                  | 从Eureka Server获取服务消息的间隔秒数                                        |     30 |
+   | instanceInfoReplicationIntervalSeconds        | 向Eureka Server集群更新实例信息的间隔秒数                                    |     30 |
+   | initialInstanceInfoReplicationIntervalSeconds | 向Eureka Server集群初始化实例信息的间隔秒数                                  |     40 |
+   | eurekaServiceUrlPollIntervalSeconds           | 更新Eureka Server地址列表的间隔秒数。配合Spring Cloud Config动态配置时会用到 |    300 |
+   | eurekaServerReadTimeoutSeconds                | 读取Eureka Server信息超时秒数                                                |      8 |
+   | eurekaServerConnectTimeoutSeconds             | 连接Eureka Server超时秒数                                                    |      5 |
+   | eurekaServerTotalConnections                  | Eureka Client和Server间的总连接数                                            |    200 |
+   | eurekaServerTotalConnectionPerHost            | 单台主机和Server的连接数                                                     |     50 |
+   | eurekaConnectionIdleTimeoutSeconds            | Eureka Server连接空间关闭秒数                                                |     30 |
+   | heartbeatExecutorThreadPoolSize               | 心跳连接池的初始化线程数                                                     |      2 |
+   | heartbeatExecutroExponentialBackOffBound      | 心跳超时重试延迟时间的最大乘数值                                             |     10 |
+   | cacheExecutorThreadPoolSize                   | 缓存刷线程池的初始化线程数                                                   |      2 |
+   | cacheExecutroExponentialBackOffBound          | 缓存刷新重试延迟时间的最大乘数值                                             |     10 |
+   | useDnsForFetchingServiceUrls                  | 使用DNS来获取Eureka Server的serviceUrl                                       |  false |
+   | registerWithEureka                            | 将自身的实例信息注册到Eureka Server                                          |   true |
+   | preferSameZoneEureka                          | 优先使用相同Zone的Eureka Server                                              |   true |
+   | filterOnlyUpInstances                         | 仅保留UP状态的实例                                                           |   true |
+   | fetchRegistry                                 | 从Eureka Server发现服务                                                      | true   |
+2) 服务实例类配置
+   以 ~eureka.instance~ 为前缀
+   - 标准化元数据配置 ~eureka.instance.<property>=<value>~
+   - 自定义元数据配置 ~eureka.instance.metadataMap.<key>=<value>~
+     - 配置
+   - 实例名配置 ~eureka.instance.instanceId~
+     作为区分同一个服务下不同实例的唯一标识，默认值为 ~${spring.cloud.client.hostname}:${spring.application.name}:${spring.application.instance_id}:${server.port}~ 。
+     - 对于通过 ~server.port=0~ 或 ~server.port=${random.int[10000,19999]}~ 随机端口，导致instanceId相同的问题，需要设置 ~eureka.instance.instanceId=${spring.application.name}:${random.int}~
+   - 端点配置
+     - homePageUrl 服务应用主页URL
+     - statusPageUrl 服务状态URL，默认采用spring-boot-actuator的 ~/info~
+       - 在Eureka Server面板页面中给用户提供信息接口。
+     - healthCheckUrl 健康检查URL，默认采用spring-boot-actuator的 ~/health~
+       - 当Eureka Server开启healthcheck功能时，将以该URL作为健康检查标准。
+     - 配置
+       1) 配置 ~management.context-path~ 修改spring-boot-actuator的端点前缀，这时需要配置上述3个配置。
+          #+begin_example bash
+          management.context-path=/hello
+
+          eureka.instance.statusPageUrlPath=${management.context-path}/info
+          eureka.instance.healthcheckUrlPath=${management.context-path}/health
+          #+end_example
+       2) 配置绝对路径
+          #+begin_example bash
+          eureka.instance.statusPageUrl=https://${eureka.instance.hostname}/info
+          eureka.instance.healthcheckUrl=htpts://${eureka.instance.hostname}/health
+          #+end_example
+     - 健康检测
+       1) 默认的健康检测方式：Eureka Client向Eureka Server发送心跳请求，当心跳终止达到预设值后，注册中心就会把其剔除。缺点：仅能保证服务实例正常运行，但无法保证服务可用(如该服务依赖的服务已失效，导致给服务实际已经失效了)。
+       2) 增加Eureka Server主动请求服务提供者的spring-boot-actuator的/health端点获取健康状态
+          1) 在服务提供者的application.properties设置
+             #+begin_example bash
+             eureka.client.healthcheck.enable=true
+             #+end_example
+     - 其它
+       | 参数名                           | 说明                                                        | 默认值                   |
+       |----------------------------------+-------------------------------------------------------------+--------------------------|
+       | preferIpAddress                  | 优先使用IP地址作为主机名的标识                              | false                    |
+       | leaseRenewalIntervalInSeconds    | Eureka Client向Eureka Server发送心跳的间隔秒数              | 30                       |
+       | leaseExpirationDurationInSeconds | Eureka Server最后一次收到心跳后等待多少秒就将该服务实例剔除 | 90                       |
+       | nonSecurePort                    | 非安全通信端口号                                            | 80                       |
+       | securePort                       | 安全的通信端口号                                            | 443                      |
+       | nonSecurePortEnabled             | 启用非安全端口号                                            | true                     |
+       | securePortEnabled                | 启用安全端口号                                              |                          |
+       | appname                          | 服务名，通过spring.application.name配置                     | unknown                  |
+       | hostname                         | 主机名                                                      | 根据操作系统的主机名获取 |
+
+**** 通信协议
+Eureka使用Jersey和XStream配合JSON作为Server和Client间的通信协议。
+
+Jersey是JAX-RS的参考实现，包含三个主要部分
+1) 核心服务器(Core Server) 通过提供JSR 311中标准化的注释和API标准化，可用直观方式开发RESTful Web服务。
+2) 核心客户端(Core Client) 通过Jersey客户端API简化了与RESTful Web服务通信。
+3) 集成(Integration) Jersey提供集成Spring、Guice、Apache Abdera的库。
+
+XStream是将对象序列化为XML(JSON)或反序列化为对象的Java类库。
+
+JAX-RS(Java API for REStful Web Service)是Java EE 6引入的新技术，通过以下注解简化Web服务的客户端和服务端的开发和部署，如：
+- ~@Path~ 标注资源类或方法的相对路径
+- ~@GET,@PUT,@POST,@DELETE~ 标注HTTP请求类型
+- ~@Produces~ 标注返回的MIME媒体类型
+- ~@Consumes~ 标注可接受请求的MIME媒体类型
+- ~@PathParam~ 来自URL的路径
+- ~@QueryParam~ 来自URL的查询参数
+- ~@HeaderParam~ 来自HTTP请求的头信息
+- ~@CookieParam~ 来自HTTP请求的Cookie
+- ~@MatrixParam~
+- ~@FormParam~
+*** Spring Cloud Ribbon
+基于Netflix Ribbon通过Spring Cloud进行封装，提供REST Template请求自动转换为客户端负载均衡的服务调用的功能。Spring Cloud Feign也是基于Ribbon实现的。
+
+**** 服务端负载均衡和客户端负载均衡的区别？
+服务端负载均衡，如硬件负载均衡器F5和A10、软件负载均衡服务Nginx、HAproxy和LVS等，其负载均衡功能提供方和应用服务端清单均部署在独立的服务器上，而不是集成到客户端上；而客户端负载均衡则是负载均衡功能提供方和应用服务端清单均集成到客户端上。
+
+**** RestTemplate
+1) GET请求
+   - getForEntity
+     #+begin_example java
+     RestTemplate restTemplate = new RestTemplate();
+     /* @param url 请求的地址
+      * @param responseType 响应体body的包装类型
+      * @param urlVariables url中的参数绑定，从{1}开始
+      * getForEntity(String url, Class responseType, Object ... urlVariables)
+      */
+     ResponseEntity<String> responseEntity = restTemplate.getForEntity("http://USER-SERVICE/user?name={1}", String.class, "didi");
+     String body = responseEntity.getBody(); // 会根据getForEntity第二个参数转换类型
+
+     // getForEntity(String url, Class responseType, Map urlVariables)
+     Map<String, String> params = new HashMap<>();
+     params.put("name", "foo");
+     ResponseEntity<String> responseEntity = restTemplate.getForEntity("http://USER-SERVICE/user?name={name}", String.class, params);
+
+     // getForEntity(URI url, Class responseType)
+     UriComponents uriComponents = UriComponentsBuilder
+         .fromUriString("http://USER-SERVICE/user?name={name}")
+         .build()
+         .expand("foo")
+         .encode();
+     URI uri = uriComponents.toUri();
+     ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
+     #+end_example
+   - getForObject
+     作为getForEntity的进一步封装，通过HttpMessageConverterExtractor对HTTP的响应体body内容进行对象转换。
+     #+begin_example java
+     RestTemplate restTemplate = new RestTemplate();
+     /* @param url 请求的地址
+      * @param responseType 响应体body的包装类型
+      * @param urlVariables url中的参数绑定，从{1}开始
+      * getForObject(String url, Class responseType, Object ... urlVariables)
+      */
+     String body = restTemplate.getForObject("http://USER-SERVICE/user?name={1}", String.class, "didi");
+
+     // getForObject(String url, Class responseType, Map urlVariables)
+     Map<String, String> params = new HashMap<>();
+     params.put("name", "foo");
+     User body = restTemplate.getForObject("http://USER-SERVICE/user?name={name}", User.class, params);
+
+     // getForObject(URI url, Class responseType)
+     UriComponents uriComponents = UriComponentsBuilder
+         .fromUriString("http://USER-SERVICE/user?name={name}")
+         .build()
+         .expand("foo")
+         .encode();
+     URI uri = uriComponents.toUri();
+     String body = restTemplate.getForObject(uri, String.class);
+     #+end_example
+2) POST请求
+   - postForEntity
+     #+begin_example java
+     // 第二个参数可以接受普通对象或HttpEntity对象
+     // 1. 普通对象时，RestTemplate会将请求对象转换为一个HttpEntity对象来处理
+     // 2. HttpEntity对象时，则当作一个完整的HTTP请求对象来处理
+     // 返回ResponseEntity<T>
+     postForEntity(String url, Object request, Class responseType, Object... uriVariables)
+     postForEntity(String url, Object request, Class responseType, Map uriVariables)
+     postForEntity(URI url, Object request, Class responseType)
+     #+end_example
+   - postForObject
+     #+begin_example java
+     // 返回T
+     postForObject(String url, Object request, Class responseType, Object... uriVariables)
+     postForObject(String url, Object request, Class responseType, Map uriVariables)
+     postForObject(URI url, Object request, Class responseType)
+     #+end_example
+   - postForLocation
+     用于以POST方式提交资源，并返回新资源的URI
+     #+begin_example java
+     User user = new User("didi", 40);
+     URI responseURI = restTemplate.postForLocation("http://USER-SERVICE/user", user);
+
+     // 重载方法
+     postForLocation(String url, Object request, Object... uriVariables)
+     postForLocation(String url, Object request, Map uriVariables)
+     postForLocation(URI url, Object request)
+     #+end_example
+3) PUT请求
+   #+begin_example java
+   void put(String url, Object request, Object... urlVariables);
+   void put(String url, Object request, Map urlVariables);
+   void put(URI url, Object request);
+   #+end_example
+4) DELETE请求
+   #+begin_example java
+   void delete(String url, Object... urlVariables);
+   void delete(String url, Map urlVariables);
+   void delete(URI url);
+   #+end_example
+**** 在没有引入Eureka时，Ribbon的自动化配置
+- 默认配置
+  1) IClientConfig，Ribbon的客户端配置，采用com.netflix.client.config.DefaultClientConfigImpl实现
+  2) IRule，Ribbon的负载均衡策略，采用com.netflix.loadbalancer.ZoneAvoidanceRule实现
+  3) IPing，Ribbon的实例检查策略，采用com.netflix.laoadbalancer.NoOpPing实例了，即始终认为所有服务实例都可用
+  4) ServerList<Server>，服务实例清单的维护机制，采用com.netflix.loadbalancer.ConfigurationBasedServerList实现
+  5) ServerListFilter<Server>，服务实例清单过滤机制，采用com.springframework.cloud.netflix.ribbon.ZonePreferenceServerListFilter实现
+  6) ILoadbalancer，负载均衡器，采用com.netflix.loadbalancer.ZoneAwareLoadBalancer实现，具备区域感知的能力。
+
+**** 参数配置
+1) 全局配置
+   - 格式： ~ribbon.<key>=<value>~
+2) 指定客户端配置
+   - 格式： ~<client>.ribbon.<key>=<value>~
+     - ~<client>~ 为客户端名称，即 ~@RibbonClient~ 第一个参数
+所有配置均在com.netflix.client.config.CommonClientConfigKey类中。
+
+接入Eureka后，禁用Eureka对Ribbon服务实例列表进行维护，可设置 ~ribbon.eureka.enable=false~ 。
+**** 重试机制
+CAP原理：
+ZooKeeper强调CP(一致性和可靠性)。
+Spring Cloud Eureka强调AP(可用性和可靠性)，因此当服注册中心的网络发生故障，导致所大部分服务实例无法维持续约心跳，启用保护机制保留所有节点，从而实现即使其中有部分故障节点，但大部分服务依然正常。
+Spring Cloud集成Spring Retry增强RestTemplate的重试能力。
+#+begin_example bash
+# 开启重试机制，默认是关闭的
+spring.cloud.loadbalancer.retry.enabled=true
+
+# 断路器的超时时间需要大于Ribbon的超时时间，不然不会处罚重试
+hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds=10000
+# 请求连接的超时时间
+hello-service.ribbon.ConnectTimeout=250
+# 请求处理的超时时间
+hello-service.ribbon.ReadTimeout=1000
+# 对所有操作请求都进行重试
+hello-service.ribbon.OkToRetryOnAllOperations=true
+# 切换实例的重试次数
+hello-service.ribbon.MaxAutoRetriesNextServer=2
+# 对当前实例的重试次数
+hello-service.ribbon.MaxAutoetries=1
+
+# 场景：请求失败->向当前实例再请求一次，失败->向下一个实例A请求一次，失败->向下一个实例B请求一次，失败->整体请求失败
+#+end_example
+*** Spring Cloud Hystrix
+由于服务间依赖通过网络远程调用的方式执行，可能会由网络问题或部分服务自身问题导致调用延迟或故障，若此时调用方的请求不断增加并积压在依赖方，进而导致各服务瘫痪。
+例如：订单服务需要从库存服务获取数据，但库存服务处理缓慢导致订单服务多个线程被挂起，在高并发场景下，将导致后续订单服务的请求被拒绝，进而服务不可用。
+
+断路器(Circuit Breaker)，向调用方返回一个错误响应，而不是长时间的等待。从而避免故障在分布式系统中蔓延。
+
+Spring Cloud Hystrix是基于Netflix Hystrix开发啊，具备服务降级、服务熔断、线程和信号隔离、请求缓存、请求合并以及服务监控等强大功能。
+
+**** 入门示例
+1) POM引入依赖 spring-cloud-starter-hystrix
+2) 主入口
+   #+begin_example java
+   // 相当于
+   // @SpringBootApplication
+   // @EnableDiscoveryClient
+   // @EnableCircuitBreaker
+   @SpringCloudApplication
+   public class MyApplication {
+       @Bean
+       @LoadBalanced
+       RestTemplate restTemplate(){
+           return new RestTemplate();
+       }
+
+       public static void main(String[] args) {
+           SpringApplication.run(MyApplication.class, args);
+       }
+   }
+   #+end_example
+3) 定义服务
+   #+begin_example java
+   @Service
+   public class HelloService {
+       @Autowired
+       RestTemplate restTemplate;
+
+       @HystrixCommand(fallbackMethod = "helloFallback")
+       public String helloService(){
+           return restTemplate.getForObject("http://HELLO-SERVICE/hello", String.class);
+       }
+
+       /* 调用该方式的条件：
+        * 1. 服务实例不可用
+        * 2. 服务响应超时(默认2000毫秒)
+        */
+       public String helloFallback(){
+           return "error";
+       }
+   }
+   #+end_example
+4) 定义端点
+   #+begin_example java
+   @RestController
+   public class ConsumerController {
+       @Autowired
+       HelloService helloService;
+
+       @RequestMapping(value="/ribbon-consumer", method = RequestMethod.GET)
+       public String helloConsumer(){
+           return helloService.helloService();
+       }
+   }
+   #+end_example
+
+
+命令模式适用于记录日志、撤销操作、队列请求等。
+HystrixCommand 用在依赖的服务发那会单个操作结果的场景
+- ~R execute()~ 同步执行，从依赖的服务返回一个单一的结果对象，或是在发生错误时抛出异常
+- ~Future<R> queue()~ 异步执行，返回一个Future对象，其中包含服务执行结束时要返回的单一结果对象
+HystrixObservableCommand 用在依赖的服务返回多个操作结果的场景
+- ~Observable<R> observe()~ 返回Observable对象，代表操作的多个结果，是一个Hot Observable
+- ~Observable<R> toObservable()~ 返回Observable对象，代表操作的多个结果，是一个Cold Observable
+
+Hot Observable 不论“事件源”是否有“订阅者”，都会在创建后对事件进行发布。因此Hot Observable的每个“订阅者”都有可能从“事件源”的中途开始，仅能看到整个操作的局部过程。
+
+Cold Observable 若没有“订阅者”则不会发布事件，而是等待直到有“订阅者”。因此Cold Observable的订阅者能保证从一开始看到整个操作的全过程。
+
+**** Hystrix工作流程
+1) 创建HystrixCommand或HystrixObservableCommand对象
+2) 执行命令
+3) 结果是否被缓存
+   若当前命令的请求缓存功能被开启并且命中，那么会立即返回Observable对象。
+4) 断路器是否打开
+   1) 断路器打开时，Hystrix不会执行命令，而是转到fallback的处理逻辑(对应第8步)
+   2) 断路器关闭时，Hystrix检查是否有可用资源来执行命令(对应第5步)
+5) 线程池/请求队列/信号量是否占满
+   若与命令相关的线程池和请求队列或信号量已被占满，Hystrix会转到fallback处理逻辑。
+   - 注意：Hystrix为每个依赖服务创建独立的专有线程池。
+6) 执行HystrixObservableCommand.constructor()或HystrixCommand.run()
+   - 执行抛异常时会进行fallback处理逻辑
+7) 计算断路器的健康度
+   Hystrix会将成功、失败、拒绝和超时等信息报告给断路器，断路器会维护这组数据并根据它们来决定是否打开断路器。恢复期间断路器处于开启状态，对应的依赖服务的请求将被熔断/短路。恢复期满再次根据这组数据判断是否关闭断路器。
+8) fallback处理/服务降级
+   提供一个通用的响应结果，可以从缓存或根据静态逻辑生成。若要从网络获取数据，那么该网络请求也要进行HystrixCommand或HystrixObservableCommand包装构成联级降级策略。
+9) 返回成功响应
+
+**** 断路器原理
+
+*** Spring Cloud Feign
+基于Netflix Feign实现，整合Spring Cloud Ribbon和Spring Cloud Hystrix，并提供一种声明式的Web服务客户端定义方式。
+
+简化RestTemplate+Ribbon调用依赖服务，并提供支持热拔插的编码器、解码器等功能。
+
+**** 快速入门
+1) pom.xml添加依赖
+   - spring-cloud-starter-eureka
+   - spring-cloud-starter-feign
+2) 主入口
+   #+begin_example java
+   @EnableFeignClients
+   @EnableDiscoveryClient
+   @SpringBootApplication
+   public class ConsumerApplication {
+       public static void main(String[] args) {
+           SpringApplication.run(ConsumerApplication.class, args);
+       }
+   }
+   #+end_example
+3) 声明服务绑定
+   #+begin_example java
+   // 服务名不区分大小写
+   @FeignClient("hello-service")
+   public interface HelloService {
+       @RequestMapping("/hello")
+       String hello();
+
+       @RequestMapping("/hello1", method=RequestMethod.GET)
+       String hello(@RequestParam("name") String name); // 必须指定value，不能以参数名作为默认值
+
+       @RequestMapping("/hello2", method=RequestMethod.GET)
+       User hello(@RequestHeader("name") string name,
+                  @RequestHeader("age") Integer age);
+
+       @RequestMapping("/hello3", method=RequestMethod.POST)
+       String hello(@RequestBody User user);
+   }
+   #+end_example
+4) 定义端点
+   #+begin_example java
+   @RestController
+   public class ConsumerController {
+       @Autowired
+       HelloService helloService;
+
+       @RequestMapping(value="/feign-consumer", method=RequestMethod.GET)
+       public String helloConsumer(){
+         helloService.hello("d");
+         helloService.hello("d", 30);
+         helloService.hello(new User("d", 30));
+         return helloService.hello();
+       }
+   }
+   #+end_example
+
+由于服务提供方的Controller接口和消费方的服务绑定一致，因此可以将DTO和服务接口抽象出来作为一个独立模块，然后服务提供方和消费方依赖该模块，并继承即可。
+
+**** 配置Ribbon和Hystrix
+由于Feign是基于Ribbon和Hystrix，因此配置和单独配置Ribbon和Hystrix是一致的。
+1) 禁用Hystrix
+   - 全局禁用
+     ~feign.hystrix.enabled=false~ 或 ~hystrix.command.default.execution.timeout.enabled=false~
+   - 局部禁用
+     1) 定义配置类
+        #+begin_example java
+        @Configuration
+        public class DisableHystrixConfiguration {
+            @Bean
+            @Scope("prototype")
+            public Feign.Builder feignBuilder() {
+                return Feign.builder();
+            }
+        }
+        #+end_example
+     2) 引入配置
+        #+begin_example java
+        @FeignClient(name="hello-service", configuration=DisableHystrixConfiguration)
+        public interface HelloService {}
+        #+end_example
+     3) 设置配置
+        #+begin_example bash
+        # 以 hystrix.command.<commandKey>. 为前缀
+        # commandKey就是服务名称
+        # 如服务hello-service禁用Hystrix
+        hystrix.command.hello-service.execution.timeout.enabled=false
+        #+end_example
+2) 服务降级
+   实现服务绑定接口，重写方法即可
+   1) 定义fallback class
+      #+begin_example java
+      @Component
+      public class HelloServiceFallback implements HelloService {
+          @Override
+          public String hello(){
+              return "error";
+          }
+
+          @Override
+          public String hello(@RequestParam("name") String name) {
+              return "error";
+          }
+
+          // ......
+      }
+      #+end_example
+   2) 引入fallback class
+      #+begin_example java
+      @FeignClient(name="hello-service", fallback=HelloServiceFallback.class)
+      public interface HelloSerice{}
+      #+end_example
+
+**** 压缩配置
+#+begin_example bash
+# 请求响应启用GZIP压缩
+feign.compress.request.enabled=true
+# 设置启用压缩的MIME-TYPE，默认值如下
+feign.compress.request.mine-type=text/xml,application/json
+# 设置启用压缩的最小大小，默认值如下
+feign.compress.request.min-request-siz=2048
+feign.compress.respose.enabled=true
+#+end_example
+
+**** 日志配置
+Spring Cloud Feign会为每个被 ~@FeignClient~ 修饰的服务绑定创建独立的 ~feign.Logger~ 实例，并以DEBUG级别来记录日志信息，默认关闭。
+开发步骤：
+1) 设置服务绑定的日志启用级别
+   #+begin_example bash
+   # logging.level.<FeignClient>=DEBUG
+   # 其中FeignClient为服务绑定接口的权限定名称
+   logging.level.io.fsjohnhuang.web.HelloService=DEBUG
+   #+end_example
+2) 修改Feign的Logger.Level级别(默认为NONE)
+   - 全局配置
+     #+begin_example java
+     @EnableFeignClients
+     @EnableDiscoveryClient
+     @SpringBootApplication
+     public class ConsumerApplication {
+         @Bean
+         Logger.Level feignLoggerLevel() {
+             // NONE: 不记录任何信息
+             // BASIC: 仅记录请求方法、URL以及响应状态码和执行时间
+             // HEADERS: 包含BASIC的记录，还会记录请求和响应的头信息
+             // FULL: 记录所有请求和响应的明细，包括头信息、请求体和元数据等
+             return Logger.Level.FULL;
+         }
+
+         //......
+     }
+     #+end_example
+   - 局部配置
+     #+begin_example java
+     @Configuration
+     public class FullLogConfiguration {
+         @Bean
+         Logger.Level feignLoggerLevel(){
+           return Logger.Level.FULL;
+         }
+     }
+
+     @FeignClient(name="hello-service", configuration=FullLogConfiguration.class)
+     public interface HelloService {}
+     #+end_example
+*** Spring Cloud Zuul
+智能API网关，提供请求路由、负载均衡、校验过滤等功能，还要集成服务治理框架、请求转发时的熔断机制和服务聚合等功能。
+
+Zuul默认通过以服务名作为ContextPath的方式创建路由映射;
+校验过滤等通过一套过滤器机制实现，只有通过过滤器校验的才会被路由到具体的服务接口，不然就返回错误提示。
+
+**** 快速入门
+1) 引入依赖 spring-cloud-starter-zuul
+   - 其包含以下依赖
+     1) zuul-core
+     2) spring-cloud-starter-hystrix
+     3) spring-cloud-starter-ribbon
+     4) spring-cloud-starter-actuator
+2) 主入口
+   #+begin_example java
+   @EnableZuulProxy
+   @springCloudApplication
+   public class Application {
+       public static void main(String[] args){
+           SpringApplication.run(Application.class, args);
+       }
+   }
+   #+end_example
+3) 配置路由
+   1) 传统路由：在application.properties中配置路由规则，实现路由转发功能
+      #+begin_example bash
+      # 所有请求URL的路径以/api-a-url/开头的都会转发到http://localhost:8080/
+      # 例如：http://localhost:5555/api-a-url/hello会转发到http://localhost:8080/hello
+      zuul.routes.<route-id>.path=/api-a-url/**
+      zuul.routes.<route-id>.url=http://localhost:8080/
+      #+end_example
+   2) 面向服务路由
+      将请求转发到指定的服务名，然后通过服务名到Eureka获取具体的服务实例地址。
+      1) 加入依赖 spring-cloud-starter-eureka
+      2) 在application.properties配置
+         #+begin_example bash
+         zulul.routes.<route-id>.path=/api-a/**
+         zuul.routes.<route-id>.serviceId=hello-service
+
+         zulul.routes.<route-id>.path=/api-b/**
+         zuul.routes.<route-id>.serviceId=feign-consumer
+
+         eureka.client.serviceUrl.defaultZone=http//myeureka.com/eureka/
+         #+end_example
+
+**** 请求过滤器
+实现签名校验、鉴权服务等。
+
+1) 定义过滤器
+#+begin_example java
+public class AccessFilter extends ZuulFilter {
+    private static Logger log = LoggerFactory.getLogger(AccessFilter.class);
+
+    // 决定过滤器在请求的哪个生命周期阶段中执行
+    // pre 请求被路由前执行
+    @Override
+    public String filterType(){
+        return "pre";
+    }
+
+    // 过滤器执行顺序。当请求在一个生命周期中存在多个过滤器，则会根据该顺序来执行
+    @Override
+    public int filterOrder(){
+        return 0;
+    }
+
+    // 是否启用该过滤器
+    @Override
+    public boolean shouldFilter(){
+        return true;
+    }
+
+    // 过滤器的具体逻辑
+    @Override
+    public Object run(){
+        RequestContext ctx = RequestContext.getCurrentContext();
+        HttpServletRequest request = ctx.getRequest();
+        log.info("send {} request to {}",
+                 request.getMethod(),
+                 request.getRequestURL().toString());
+
+        Object accessToken = request.getParameter("accessToken");
+        if (accessToken == null) {
+            log.warn("access token is empty");
+            ctx.setSendZuulResponse(false); // 让Zuul过滤该请求，不进行路由。
+            ctx.setResponseStatusCode(401);
+            return null;
+        }
+        log.info("access token ok");
+        return null;
+    }
+}
+#+end_example
+2) 使用过滤器
+   #+begin_example java
+   @EnableZuulProxy
+   @SpringCloudApplication
+   public class Application {
+       public static void main(String[] args) {
+          SpringApplication.run(Application.class, args);
+       }
+
+       @Bean
+       public AccessFilter accessFilter(){
+           return new AccessFilter();
+       }
+   }
+   #+end_example
+
+**** 路由详解
+1) 传统路由
+   通过具体指定每个路由表达式与服务实例的映射关系来实现API网关对外部请求的路由
+   1) 单实例配置
+      #+begin_example bash
+      zulul.routes.<route-id>.path=/api-a/**
+      zuul.routes.<route-id>.url=http://localhost:8080/
+      #+end_example
+   2) 多实例配置
+      通过Ribbon实现
+      #+begin_example bash
+      zulul.routes.<route-id>.path=/api-a/**
+      zuul.routes.<route-id>.serviceId=hello-service
+      ribbon.erueka.enabled=false
+      hello-service.ribbon.listOfServers=http://localhost:8080/,http://localhost:8081/
+      #+end_example
+2) 服务路由配置
+   通过Zuul和Eureka集成整合后，除使用path和serviceId方式配置外，还有如下更简单的方式
+   1) 以服务名为URL的path前缀，路由到相同服务名的服务
+   #+begin_example bash
+   zuul.routes.<service-name>=/<service-name>/**
+   #+end_example
+   1) Zuul配合Eureka，默认自动为每个服务在Zuul中配置 ~zuul.routes.<service-name>=/<service-name>/**~
+      - 不未部分服务创建路由规则 ~zuul.ignored-services=<service-name-regex>~, 表达式匹配成功的服务名称将不被路由。
+      - 禁止自动创建路由规则 ~zuul.ignored-services=*~
+3) 多版本共存服务的路由配置
+   - 场景：服务uerserivce线上运行这v1和v2两个版本，服务名为userservice-v1, userservice-v2。
+   - 通用做法：以版本代号作为路由前缀定义路由规则
+     - userservice-v1 路由规则应为 ~/v1/userservice/~
+     - userservice-v2 路由规则应为 ~/v2/userservice/~
+   - 自定义Zuul服务与路由映射关系
+     #+begin_example java
+     @Bean
+     public PatternServiceRouteMapper serviceRouteMapper(){
+         return new PatternServiceRouteMapper(
+             "(?<name>^.+)-(?<version>v.+$)", // 匹配服务名
+             "${version}/${name}"             // 路由路径前缀
+         );
+     }
+     #+end_example
+4) 路径匹配
+   采用Ant风格
+   | 通配符 | 说明                             |
+   |--------+----------------------------------|
+   | ?      | 匹配任意单个字符                 |
+   | *      | 匹配任意数量的字符               |
+   | **     | 匹配任意数量的字符，支持多级目录 |
+5) 匹配顺序
+   采取线性遍历的方式，在请求路径获取到第一个匹配的路由规则之后就会返回并结束匹配过程。
+   - properties文件中的路由配置的读取顺序不一定和保存顺序一致
+   - yaml文件中的路由配置的读取顺序与保存顺序一致
+     #+begin_example yaml
+     zuul:
+       routes:
+         user-service-ext:
+           path: /user-service/ext/**
+           serviceId: use-service-ext
+         user-service:
+           path: /user-service/**
+           serviceId: use-service
+     #+end_example
+6) 忽略表达式
+   采用Ant风格表达式，针对所有路由匹配忽略规则，如 ~zuul.ignored-patterns=/**/hello/**/~ 。能在控制台或日志中看到没有匹配路由的输出信息。
+   #+begin_quote
+   o.s.c.n.z.f.pre.PreDecorationFilter : No route found for uri: /api-a/hello
+   #+end_quote
+7) 路由前缀
+   - 统一路由规则前缀： ~zuul.prefix=/<prefix>~
+   - 禁止移除代理前缀(默认开启)
+     - 统一移除： ~zuul.strip-prefix=false~
+     - 单独移除： ~zuul.routes.<route-id>.strip-prefix=false~
+8) 本地跳转(Forward)
+   #+begin_example bash
+   # 请求URL路径为/api-b/hello会转发到/local/hello
+   zuul.routes.api-a.path=/api-b/**
+   zuul.routes.api-a.url=forward:/local
+   #+end_example
+9) Cookie与头信息
+   默认情况下会过滤掉HTTP请求头信息中的敏感信息，防止被传递到下游的外部服务器。
+   - 默认值： ~zuul.sensitiveHeaders=Cookie,Set-Cookie,Authorization~
+     - 而 ~zuul.ignoredHeaders~ 则是设置网关不过滤，但下游服务器再转发请求时则会自动被过滤的请求头信息。
+   - 不过滤(存在安全隐患)： ~zuul.sensitiveHeaders=~
+   - 对指定路由开启自定义敏感头： ~zuul.routes.<router-id>.customSensitiveHeaders=true~
+   - 将指定路由的敏感头设置为空： ~zuul.routes.<router-id>.sensitiveHeader=~
+10) 重定向问题
+    - 问题原因：Spring Security或Shiro等登录完成后会将请求头的Host字段作为响应头字段Location的值，因此登录后会发现访问的是具体Web应用实例的地址。
+    - 解决办法：spring-cloud-netflix-core-1.2.x的Zuul引入配置项 ~zuul.addHostHeader=true~ 开启，将Host配置为客户端最初请求的服务断地址
+11) Ribbon与Hystrix
+    采用path,serviceId配置时，默认会启用Ribbon和Hystrix功能
+    - ~hystrix.command.default.execution.isolation.thread.timeoutInMillisecons~ 执行超时，Hystrix会抛出TIMEOUT。
+    - ~ribbon.ConnecTimeout~ 创建请求连接超时时间
+    - ~ribbon.ReadTimeout~ 创建读取超时时间
+    - 当路由转发超时且超时设置小于Hystrix的 ~hystrix.command.default.execution.isolation.thread.timeoutInMillisecons~ 时，会触发重试机制。可通过以下配置关闭重试机制
+      #+begin_example bash
+      zuul.retryable=false # 全局禁用
+      zuul.routes.<route-id>.retryable=false # 针对路由禁用
+      #+end_example
+
+**** 过滤器详解

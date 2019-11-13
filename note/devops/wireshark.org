@@ -1,0 +1,54 @@
+* 过滤器
+** 捕捉过滤器
+时机：在捕获前设置
+内部使用tcpdump，因此使用方式参考tcpdump即可。
+
+** 显示过滤器
+时机：捕获停止后设置
+过滤语法：
+- 字段名称：通过协议(支持OSI模型中2到7层的协议)及其子类，选择字段名称(https://www.wireshark.org/docs/dfref/)
+  - http
+    - http.request.uri
+  - tcp
+  - udp
+  - ip
+- 比较运算符
+  - eq
+  - ne
+  - gt
+  - lt
+  - ge
+  - le
+  - contains
+  - matches 正则匹配
+  - in
+- 设置比较值
+- 逻辑运算符
+  - and
+  - or
+  - xor
+  - not
+
+实例
+#+begin_example bash
+# 显示http或udp协议的包
+http or udp
+# 显示源地址或目的地址为10.1.1.1的包
+ip.addr eq 10.1.1.1
+# 显示源地址不为10.1.2.3或目的地址不为10.4.5.6的包
+ip.src ne 10.1.2.3 or ip.dst ne 10.4.5.6
+# 显示源端口为25的包
+tcp.port eq 25
+# 显示目的端口为25的包
+tcp.dstprot eq 25
+# 显示包含TCP标志的包
+tcp.flags
+# 显示包含TCP SYN标志的包
+tcp.flags.syn eq 0x02
+# 显示域名包含baidu字符串的包
+http.host contains "baidu"
+#+end_example
+
+* 查看包详细报文
+1) 右键点击包
+2) follow -> http stream

@@ -86,3 +86,6 @@ C-c C-c ; 在首行执行将刷新内联配置
 #+END_EXAMPLE
 
 bable mode直接在文本文件中执行代码并插入结果和图片。
+
+* 通过系统默认浏览器打开网页
+~M-x browse-url RET RET~

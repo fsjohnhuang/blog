@@ -1,7 +1,43 @@
 * 集成Maven
+https://github.com/groovy/GMavenPlus/wiki/Examples
+https://github.com/groovy/GMavenPlus/wiki/Usage
 
 ** Groovy Shell
-
+1) pom.xml
+   #+begin_example xml
+   <project>
+     <build>
+       <plugins>
+         <plugin>
+           <groupId>org.codehaus.gmavenplus</groupId>
+           <artifactId>gmavenplus-plugin</artifactId>
+           <version>1.8.0</version>
+           <dependencies>
+             <dependency>
+               <groupId>org.codehaus.groovy</groupId>
+               <artifactId>groovy-all</artifactId>
+               <!-- any version of Groovy \>= 1.5.0 should work here -->
+               <version>2.5.8</version>
+               <type>pom</type>
+               <scope>runtime</scope>
+             </dependency>
+             <!-- if you are using a version of Groovy \< 2.2.0-beta-1, you'll need to uncomment below -->
+             <!--<dependency>-->
+               <!--<groupId>jline</groupId>-->
+               <!--<artifactId>jline</artifactId>-->
+               <!--<version>1.0</version>-->
+               <!--<scope>runtime</scope>-->
+             <!--</dependency>-->
+           </dependencies>
+         </plugin>
+       </plugins>
+     </build>
+   </project>
+   #+end_example
+2) 命令
+   #+begin_example bash
+   mvn gplus:shell
+   #+end_example
 
 * Swtich中使用枚举
 和Java不同的是，case子句中必须使用枚举实例的全限定名。(Java中只能使用实例名称而已)
@@ -35,3 +71,54 @@ class Person {
 
 ** Spock
 http://spockframework.org/spock/docs/1.3/all_in_one.html
+
+* Gradle
+
+** Gradlew
+   由于gradle版本会不断更新，因此每个人使用的版本可能不相同。而gradlew对gradle进行包装，从而确保每个人使用的gradle版本都一样。
+   执行 ~gradle wrapper~ 会在当前目录生成gradlew、gradlew.bat和gradlew/wrapper/gradle-wrapper.properties等文件
+   #+begin_quote
+   distributionBase=GRADLE_USER_HOME
+   distributionPath=wrapper/dists
+   zipStoreBase=GRADLE_USER_HOME
+   zipStorePath=wrapper/dists
+   distributionUrl=https\://services.gradle.org/distributions/gradle-4.4-bin.zip
+   #+end_quote
+   然后当我们下载项目，运行 ~./gradlew~ 时就会根据gradle-wrapper.properties的配置下载指定版本的gradle。
+
+*** 命令
+    #+begin_example bash
+    # 清理项目
+    ./gradlew clean
+
+    # 构建项目
+    ./gradlew build
+
+    # 编译并打Debug包
+    ./gradlew assebleDebug
+    # 编译并打Release包
+    ./gradlew assebleRelease
+    # Debug模式打包并安装
+    ./gradlew installDebug
+    # Release模式打包并安装
+    ./gradlew installRelease
+    # 卸载Release模拟的包
+    ./gradlew uninstallRelease
+    #+end_example
+
+*** QA
+    1) https://maven.google.com 连接不上的解决方案
+       - 直接将build.gradle或build.gradle.kts中的 https://maven.google.com 更换为 https://dl.google.com/dl/android/maven2/
+       - 在gradle.properties中设置代理
+         #+begin_example java
+         systemProp.http.proxayHost=127.0.0.1
+         systemProp.http.proxyPort=1080
+         systemProp.http.proxyUser=userid
+         systemProp.http.proxyPassword=password
+         systemProp.http.nonProxyHosts=*.nonproxyrepos.com|localhost
+         systemProp.https.proxyHost=127.0.0.1
+         systemProp.https.proxyPort=1080
+         systemProp.https.proxyUser=userid
+         systemProp.https.proxyPassword=password
+         systemProp.https.nonProxyHosts=*.nonproxyrepos.com|localhost
+         #+end_example

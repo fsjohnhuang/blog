@@ -31,7 +31,6 @@ systemd 中切换默认运行目标命令为 ~ln -sf /lib/systemd/sys/multi-user
 | chkconfig foo       | systemctl is-enabled foo.service         | 查看某服务是否开机自动启动     |
 | chkconfig --list    | systemctl list-unit-files --type=service | 查看各级别服务的启动和禁用情况 |
 
-
 ** TODO Linux系统的启动过程和初始化
 
 *** Ref

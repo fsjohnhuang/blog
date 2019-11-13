@@ -1,12 +1,27 @@
 工作目录（working directory）
-暂存区（stage）
-版本历史
+暂存区（stage/index）
+版本仓库(Repostiory)
 
-| --->     | 工作目录         | 暂存区  | 版本历史   |
+| --->     | 工作目录         | 暂存区  | 版本仓库   |
 |----------+------------------+---------+------------|
 | 工作目录 |                  | git add |            |
 | 暂存区   | git reset --hard |         | git commit |
 | 版本历史 |                  |         |            |
+
+* 文件4种状态
+1) Untracked 未跟踪
+   文件未加入到git库，不参与版本控制。通过 ~git add~ 转变为 Staged 状态
+2) Unmodified 工作目录中的文件和版本仓库的一致
+   文件参与版本控制。
+   1) 通过修改其内容转变为 Modified 状态
+   2) 通过 ~git rm~ 转变为 Untracked 状态
+3) Modified 工作目录中的文件和版本库的不一致
+   文件参与版本控制。
+   1) 通过 ~git add~ 转变为 Staged 状态
+   2) 通过 ~git checkout~ 从暂存区获取文件覆盖工作目录的文件，同时转换为 Staged 状态 或 Unmodified 状态
+4) Staged 暂存状态
+   1) 通过 ~git commit~ 提交到版本仓库，同时转换为 Unmodified 状态
+   2) 通过 ~git reset HEAD <filename>~ 从版本仓库获取文件覆盖暂存区的文件，同时转换为 Modified 状态
 
 * 配置
   #+BEGIN_EXAMPLE shell
@@ -14,8 +29,9 @@
   # --local  表示当前仓库下使用，信息保存在.git/config中
   # --global 表示当前用户下所有仓库通用，信息保存在~/.gitconfig中
   # --system 表示所有用户下所有仓库通用
-  git config --global user.name "fsjohnhuang"
-  git config --global user.email "fsjohnhuang@hotmail.com"
+  git config --global user.name "fsjohnhuang" # 用户名
+  git config --global user.email "fsjohnhuang@hotmail.com" # 邮箱
+  git config --global core.editor vi # message文本编辑器
 
   # 查看当前仓库、当前用户、系统级和三者的配置
   git config --list --local
@@ -25,17 +41,26 @@
 
   # 彩色显示
   git config --global color.ui auto
+  git config --global color.diff true # diff时的彩色显示
   # 正常显示中文文件路径
   git config --global core.quotepath off
 
   # 子命令别名
   git config --global alias.co checkout
+  git config --global alias.pl pull
+  git config --global alias.ps push
   git config --global alias.br branch
   git config --global alias.st status
   git config --global alias.ci commit
+  git config --global alias.ca commit -a
+  git config --global alias.cp cherry-pick
   git config --global alias.type cat-file -t
   git config --global alias.dump cat-file -p
   git config --global alias.hist "log --pretty=format:'%C(yellow)%h %C(bold blue)%ad%Cred%d%Creset | %s' --graph --date=format:'%y/%m/%d %H:%M:%S'"
+
+
+  # 删除配置项
+  git config [--local|--global|--system] --unset section.key
   #+END_EXAMPLE
 
 * ~git log --pretty=format~
@@ -121,8 +146,19 @@
   git log -p <file>
   # 查看所有分支的日志
   git log --all
+  # 根据关键词，搜索提交历史
+  git log -S <keyword>
+  # 显示某文件的版本历史
+  git log --follow <file>
+  # 显示所有提交过的用户，按提交次数排序
+  git shortlog -sn
   # 查看某文件的提交日志（仅含sha码）
   git blame <file>
+
+  # 显示某次提交发生变化的文件名和内容
+  git show <commit>
+  # 显示某次提交发生变化的文件名
+  git show --name-only <commit>
 
   # 带注释的标签，git会创建一个tag对象保存注释和其指向的commit
   git tag -a <tag_name> -m <message>
@@ -150,6 +186,8 @@
   git branch -D <branch>
   # 切换分支
   git checkout <branch>
+  # 切换到上一个分支
+  git checkout -
   # 以指定的标签作为基础创建并切换到detached branch
   git checkout <tag>
   # 注意：分支名称和标签名称必须有所区分，若有重复那么引用时就要使用全路径refs/heads/<branch>和refs/tags/<tag>
@@ -216,10 +254,14 @@
   # 比较版本历史中当前提交和前一个提交的差异
   git diff HEAD HEAD^
   # 比较两个分支版本历史中当前提交的差异
-  git diff <branch-a> <branch-b>
-  git diff <branch-a> <branch-b> -- <file-path>...
-  # 与某次提交的指定文件进行比较
+  git diff <branch-a>..<branch-b>
+  git diff <branch-a>..<branch-b> -- <file-path>...
+  # 比较分支a和分支b共同的父提交与分支b当前提交的差异
+  git diff <branch-a>...<branch-b>
+  # 工作目录与某次提交的指定文件进行比较
   git diff <commmit-id> <file>...
+  # 仅列出工作目录与暂存区差异的统计
+  git diff --stat
 
   # 丢弃暂存区的变更，恢复和版本历史中当前提交一致
   git reset HEAD
@@ -265,6 +307,25 @@
   author和commiter可以为不同的人，通过cherry pick实现
   https://opensource.com/article/19/4/server-administration-git?utm_campaign=intrel
 
+* ~git diff~ 输出解释
+示例
+#+begin_quote
+diff --git a/README.md b/README.md
+index 5e6a0dc..29f2cd4 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-b
++a
+#+end_quote
+1) a/README.md 为变动前，b/README.md变动后
+2) 5e6a0dc为暂存区的文件对象id，29f2cd4为为工作目录的文件对象id；100代表普通文件，644代表权限
+3) --- a/README.md 中的---表示变动前的版本
+4) +++ b/README.md 中的+++表示变动后的版本
+5) @@ -1 +1 @@ 表示相对变动前的版本删除1行和新增1行内容
+6) -b 表示删除了内容为b这行
+7) +a 表示新增了内容为a这行
+
 * 远端操作
   #+BEGIN_EXAMPLE bash
   # 显示关联的远端仓库信息
@@ -293,6 +354,8 @@
   # remote-branch形如origin/feat-1
   git checkout -b <new-branch> <remote-branch>
   git checkout --track <remote-branch>
+  # 创建分支，并指定的远程分支建立追踪关系
+  git branch --track <branch> <remote-branch>
   # 设置本地分支追踪远端分支
   git branch -set-upstream <local-branch> <remote-branch>
   # 设置当前本地分支追踪远端分支

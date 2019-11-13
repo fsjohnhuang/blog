@@ -184,7 +184,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # 如宿主IP为10.73.19.133，那么虚拟机通过DHCP获取的IP可能为10.73.19.143。
   config.vm.network :public_network, bridge: "en1: Wi-Fi (AirPort)"
 
-
   # 默认情况Vagrant设置虚拟机的SSHD采用基于公钥的验证方式
   # 指定密钥路径
   config.vm.ssh.private_key_path = "~/.ssh/id_rsa"

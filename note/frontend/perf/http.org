@@ -1,3 +1,25 @@
+* HTTP Status Code
+- 2XX 表示成功
+  - ~200 OK~ 表示客户端发来的请求在服务端被正确处理；
+  - ~204 No Content~ 表示请求成功，但响应报文中不包含主体部分，因此浏览器不会刷新页面或导向新的页面；
+    #+begin_quote HTTP RFC 2616
+    If the client is a user agent, it SHOULD NOT change its document view from that which caused the request to be sent. This response is primarily intended to allow input for actions to take place without causing a change to the user agent's active document view, although any new or updated metainformation SHOULD be applied to the document currently in the user agent's active view.
+    #+end_quote
+  - ~206 Partial Content~ 表示范围请求
+- 3XX 表示请求重定向
+  - ~301 Moved Permanently~ 永久性重定向
+  - ~302 Found~ 临时性重定向
+  - ~304 Not Modified~
+  - ~307 Temporary Redirect~ 临时重定向
+- 4XX 客户端错误
+  - ~400 Bad Request~ 请求报文存在语法错误
+  - ~401 Unauthorized~ 请求需要有通过HTTP认证的认证信息
+  - ~403 Forbidden~ 请求被服务端拒绝
+  - ~404 Not Found~ 服务端没有被请求的资源
+- 5XX 服务器错误
+  - ~500 Internal Server Error~ 服务端处理请求时发生内部错误
+  - ~503 Service Unavailable~ 服务端无法处理请求
+
 * 请求报文结构
 Request Line(请求行)
 Header(头部)
@@ -45,7 +67,6 @@ Keep-Alive: timeout=5, max=1000
 timeout:指定当连接(connection)空闲时，最快多少秒后会被释放。当超时大于TCP的超时时间，则该设置会被忽略。
 max:指定单个连接可发起的最多的请求数。对于没有管道(non-piplined)的连接，该值只能为0.对于HTTP管道（HTTP pipeline）可通过这个限制管道。
 
-
 *** REF
 https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Keep-Alive
 https://www.byvoid.com/zht/blog/http-keep-alive-header
@@ -62,4 +83,4 @@ If-None-Match
 Last-Modified: Mon, 10 Jul 2017 15:50:06 GMT
 Expires: Mon, 10 Jul 2017 15:50:06 GMT
 
-* 断点续传
+* TODO 断点续传

@@ -1,0 +1,26 @@
+
+* Meghanada
+http://www.skybert.net/emacs/java-programming-in-emacs-with-meghanada-mode/
+
+Meghanada-Mode: https://github.com/mopemope/meghanada-emacs
+国内直接下载Meghanada Server十分慢，因此到github下载源码直接编译更快。
+Meghanada-Server：https://github.com/mopemope/meghanada-server
+
+** 命令
+1) 编译当前文件及相关文件 ~meghanada-compile-file~ 或 ~C-c C-c C-c~
+
+* Projectile
+https://github.com/bbatsov/projectile
+功能：
+1) 在项目中根据文件名搜索文件
+
+** 配置
+#+begin_example elisp
+(projectile-global-mode) ;; 全局启用
+(setq projectile-enable-caching t) ;; 启动缓存
+(global-set-key '[f5]' 'projectile-find-file)
+#+end_example
+
+** 创建Porjectile项目
+
+在Project Root下创建空的~.projectile~既可，那么打开该项目下的文件即会打开该项目。
