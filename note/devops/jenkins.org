@@ -141,11 +141,12 @@ Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ
              - 办法：
                1) 访问smtp服务地址，下载SSL证书(Base64编码X.509(.CER))
                2) 复制证书到Jenkins Master服务器的 ~$JAVA_HOME/jre/lib/security/~ 下
-               3) 导入证书：在Jenkins Master服务器上执行 ~keytool -import -alias <name> -keystore cacerts -file $JAVA_HOME/jre/lib/security/<name>.cer~
-                  1) 输入密钥
+               3) 导入证书：在Jenkins Master服务器上执行 ~sudo keytool -import -alias <name> -keystore cacerts -file $JAVA_HOME/jre/lib/security/<name>.cer~
+                  1) 输入密钥"changeit"
+                     若使用其他密钥则会报"keytool error: java.io.IOException: Keystore was tampered with, or password was incorrect"
                   2) 输入Y
-               4) 查看证书：在Jenkins Master服务器上执行 ~keytool -list -alias <name> -keystore cacerts~
-                  1) 输入密钥
+               4) 查看证书：在Jenkins Master服务器上执行 ~sudo keytool -list -alias <name> -keystore cacerts~
+                  1) 输入密钥"changeit"
                5) 重启Jenkins Master服务
      2) 在任务配置的Post-build下配置E-mail Notification任务
         1) 可配置必须接收构建状态异常的人员邮件

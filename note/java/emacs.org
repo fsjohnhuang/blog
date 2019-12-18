@@ -12,7 +12,7 @@ Meghanada-Server：https://github.com/mopemope/meghanada-server
 * Projectile
 https://github.com/bbatsov/projectile
 功能：
-1) 在项目中根据文件名搜索文件
+1) 在项目中根据文件名搜索文件 ~M-x projectile-find-file~
 
 ** 配置
 #+begin_example elisp

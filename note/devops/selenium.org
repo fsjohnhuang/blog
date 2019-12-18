@@ -92,7 +92,7 @@
    1) 绝对路径定位 ~/html/body/div[2]~
       - 下标从1开始
       - 绝对路径以单个斜杠开始 ~/~
-   2) 元素属性定位 
+   2) 元素属性定位
       - 相对路径以两个斜杠开始 ~//~ ，表示当前页面某个目录下
       - 属性必须位于方括号内，并以 ~@~ 开始。如 ~[@id=''],[@name=''],[@class=''],[@type='']~
       - 示例
@@ -140,7 +140,7 @@ Args:
   ignored_exceptions(Exception): Indicate which exception would be raised when operation is timeout, raise NoSuchElementException by default.
 
 Returns:
-  WebDriverWait: 
+  WebDriverWait:
 """
 WebDriverWait(driver, timeout, poll_frequency=0.5, ignored_exceptions=None)
 
@@ -242,7 +242,7 @@ we.text # 返回元素的文本(textContent, innerText)
    driver = webdriver.Firefox()
    we = driver.find_element_by_id('test')
    ActionChains(driver)
-       .double_click(we) 
+       .double_click(we)
        .perform() # 执行操作
    #+END_EXAMPLE
 3) 拖动
@@ -254,7 +254,7 @@ we.text # 返回元素的文本(textContent, innerText)
    source = driver.find_element_by_id('source')
    target = driver.find_element_by_id('target')
    ActionChains(driver)
-       .drag_and_drop(source, target) 
+       .drag_and_drop(source, target)
        .perform() # 执行操作
    #+END_EXAMPLE
 4) 悬停
@@ -265,7 +265,7 @@ we.text # 返回元素的文本(textContent, innerText)
    driver = webdriver.Firefox()
    we = driver.find_element_by_id('test')
    ActionChains(driver)
-       .move_to_element(we) 
+       .move_to_element(we)
        .perform() # 执行操作
    #+END_EXAMPLE
 
@@ -459,12 +459,12 @@ WebDriver的工作流程：
 1) 测试脚本(脚本位于IP为192.168.127.3上)
    #+BEGIN_EXAMPLE python
    from selenium.webdriver import Remote
-   
+
    # 定义测试主机和浏览器类型
    lists = {'http://192.168.127.3:4444/wd/hub': 'chrome',
             'http://192.167.127.4:5555/wd/hub': 'firefox',
             'http://192.167.127.4:5555/wd/hub': 'internet explorer',}
-   
+
    # 可配合多进程多线程实现并行测试
    for host, browser in lists:
        driver = Remote(command_executor=host, # 指定测试主机，默认为http://127.0.0.1:4444/wd/hub
@@ -486,7 +486,6 @@ WebDriver的工作流程：
    # NODE的默认端口号为5555
    java -jar selenium-server-standalone-2.27.0.jar -role node -port 5555 -hub http://192.168.127.3:4444/grid/register
    #+END_EXAMPLE
-
 
 
 
@@ -527,13 +526,13 @@ WebDriver的工作流程：
              - __init__.py
              - login.py
              - submit_form.py
-         
+
          - test_hr.py # 针对场景作测试
    #+END_EXAMPLE
 
 * TODO WebDriver配置
 
-** Firefox 
+** Firefox
 https://firefox-source-docs.mozilla.org/testing/geckodriver/geckodriver/TraceLogs.html
 
 #+BEGIN_EXAMPLE python
@@ -558,7 +557,7 @@ driver = webdriver.Firefox(firefox_binary=binary,
    #+BEGIN_EXAMPLE python
    from selenium import webdriver
    import os
-   
+
    fp = webdriver.FirefoxProfile()
    # 0表示下载到浏览器默认下载路径，2为下载到指定目录
    fp.set_preference('browser.download.folderList', 2)
@@ -575,8 +574,8 @@ driver = webdriver.Firefox(firefox_binary=binary,
    #+BEGIN_EXAMPLE python
    from selenium import webdriver
    from selenium.webdriver.firefox.options import Options
-   
-   
+
+
    firefox_options = Options()
    firefox_options.add_argument('--headless')
    firefox_options.add_argument('--disable-gpu')

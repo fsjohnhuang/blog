@@ -39,7 +39,7 @@ JavaBeans
                     <property name="driver" value="org.sqlite.JDBC"/>
                     <property name="url" value="jdbc:sqlite:/path/to/example.db"/>
                     <property name="username" value=""/>
-                    <property name="password" value=""/>                    
+                    <property name="password" value=""/>
                 </dataSource>
             </environment>
         </environments>
@@ -52,7 +52,7 @@ JavaBeans
     #+BEGIN_EXAMPLE java
     package org.john.domain;
     // src/org/john/domain/User.java
-  
+
     public class User {
         private Integer id;
         private String name;
@@ -68,7 +68,7 @@ JavaBeans
     <!-- namespace必须全局唯一，一般命名方式为<包名>+<SQL映射文件名> -->
     <mapper namespace="org.john.mapper.UserMapper">
        <!-- useGeneratedKeys表示使用数据库的自动增长策略需要底层数据库的支持 -->
-       <insert id="save" parameterType="org.john.domain.User" useGeneratedKeys="true"> 
+       <insert id="save" parameterType="org.john.domain.User" useGeneratedKeys="true">
            INSERT INTO USER(name) values(#{name})
        </insert>
     </mapper>
@@ -77,13 +77,13 @@ JavaBeans
     #+BEGIN_EXAMPLE java
     package org.john.mapper;
     import org.john.domain.User;
-    
+
     public interface UserMapper {
       public boolean save(User user);
     }
     #+END_EXAMPLE
   - log4j2.xml
-    #+BEGIN_EXAMPLE
+    #+BEGIN_EXAMPLE xml
     <?xml version="1.0" encoding="UTF-8"?>
     <Configuration>
       <Appenders>
@@ -101,20 +101,20 @@ JavaBeans
   - 程序入口
     #+BEGIN_EXAMPLE java
     package org.john;
-    
+
     public static class App {
         public static void main(String[] args) {
             InputStream configStream = Resources.getResourceAsStream("mybatis-config.xml");
             SqlSessionFactory sessionFactory = new SqlSessionFactoryBuilder().build(configStream);
             SqlSession session = sessionFactory.openSession();
-            
+
             User user = new User();
             user.setName("john");
 
             /* 通过SQL映射文件中的namespace+id的方式操作数据库
-               缺点: 
+               缺点:
                  1. 编译器无法在编译时检查字符串指定的namespace+id的合法性;
-                 2. SqlSession的insert/update/delete等方法入参均为Object，无法在编译时限制入参类型; 
+                 2. SqlSession的insert/update/delete等方法入参均为Object，无法在编译时限制入参类型;
                  3. 非面向对象的编程风格。
              */
             try{
@@ -233,7 +233,7 @@ p  - 常用方法
            2. 根据properies元素的resource或url读取属性文件，并覆盖同名属性值
            3. 读取作为方法参数传递的属性值，并覆盖同名属性值
 
-           
+
            示例：
            1. 通过方法传递属性值
               InputStream cfgStream = Resources.getResourceAsStream("mybatis-config.xml")
@@ -309,10 +309,15 @@ p  - 常用方法
           <setting name="jdbcTypeForNull" value="OTHER"/>
           <!--指定哪个对象的方法触发一次延迟加载，属性值设置为方法名的list集合-->
           <setting name="lazyLoadTriggerMethods" value="equals,clone,hashCode,toString"/>
-          <!--指定MyBatis增加到日志名称的前缀-->
-          <setting name="logPrefix" value="MyBatis"/>
+          <!--指定MyBatis生成SQL语句的日志名称的前缀，默认为空
+              MyBatis生成的SQL语句,SQL参数和结果条数将以DEBUG输出,
+              而返回行列值以TRACE级别输出,
+              SQL执行失败时会以ERROR输出SQL和出错原因.
+              -->
+          <setting name="logPrefix" value="MyBatis-"/>
           <!--指定MyBatis所用日志的具体实现，未指定时将自动查找
               值范围：SLF4J|LOG4J|LOG4J2|JDK_LOGGING|COMMONS_LOGGING|STDOUT_LOGGING|NO_LOGGING
+              实际上会根据slf4j的桥接包决定使用哪个日志类库，若引入多个slf4j的桥接包(如slf4j-log4j12,log4j-slf4j-impl)才需要通过该项目设置用哪个日志类库。
             -->
           <setting name="logImpl" value="LOG4J2"/>
           <!--指定创建具有延迟加载能力的对象所用到的代理工具
@@ -347,7 +352,7 @@ p  - 常用方法
           MyBatis3.4后已经内置并自动引入JSR310的typeHandler了。
         -->
       <typeHandlers>
-          <!-- 
+          <!--
             1. 通过jdbcType和javaType作为匹配标识，注册自定义/第三方类型转换器。
                若SQL映射文件中result节点的jdbcType、javaType和typeHandler节点的匹配时，则自动采用handler属性执行的类型转换器。
                若SQL映射文件中变量绑定如 #{roleName javaType=string, jdbcType=VARCHAR}，则自动采用handler属性执行的类型转换器。
@@ -441,7 +446,7 @@ p  - 常用方法
               </dataSource>
           </environment>
       </environments>
-      
+
       <!-- 数据库厂商标识
            在SQL映射文件中select/update/delete等节点可使用datasourceId标识该语句是在哪个数据库厂商上才执行，
            然后会调用sqlSessionFactory.getConfiguration().getDatabaeId()获取当前正操作的数据库厂商标识，
@@ -553,7 +558,7 @@ public enum Sex {
   MALE(1), FEMALE(2);
 
   private int id;
-  
+
   public int getId(){
     return this.id;
   }
@@ -642,13 +647,13 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
           - resultOrdered, 仅针对嵌套结果的select语句适用。节省内存空间。默认值为false
           - resultSets, 针对多个结果集的情况，给每个结果集列出一个别名，别名间以逗号分隔
      -->
-   <!-- 接口方法为 public Map<String, Object> selectUser(int id) -->    
+   <!-- 接口方法为 public Map<String, Object> selectUser(int id) -->
    <select id="selectUser" parameterType="int" resultType="map" databaseId="mysql">
      SELECT * FROM USER WHERE ID = #{id}
    </select>
-   
+
    <!-- 接口方法为 public List<User> selectUsers() -->
-   <!-- 接口方法为 
+   <!-- 接口方法为
         @MapKey("id") // 指定用User的id作为Map的键名
         public Map<String, User> selectUsers() -->
    <select id="selectUsers" resultType="org.john.domain.User">
@@ -681,7 +686,7 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
    <insert id="insertUser1" useGeneratedKeys="true" keyProperty="id">
      insert into User(name) values(#{name})
    </insert>
-    
+
    <!-- 对于不支持主键自增的数据库(如Oracle不支持auto-generated key field) -->
    <insert id="insertUser2">
      <!-- <selectKey>在<insert>和<update>元素中插入查询语句
@@ -827,14 +832,14 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
 
    <resultMap id="getStudent" type="org.john.domain.Student">
      <id property="id" column="id"/>
-     <result property="name" column="name"/>     
+     <result property="name" column="name"/>
      <!-- property: 次查询结果存放的POJO属性名
           select: 次查询的id
           column: 将主查询结果的哪个数据库表字段作为参数传递给次查询
           fetchType: 次查询执行时机
                      lazy(默认值)，懒执行，只有在mybatis-config.xml/settings中启动lazyLoadingEnabled和禁用aggressiveLazyLoading才能生效
                      eager，和主查询一起执行
-          
+
        -->
      <association property="clazz"
                   select="org.john.mapper.ClassInfoMapper.getClassInfo" column="class_id"
@@ -867,7 +872,7 @@ public class SexEnumTypeHandler implements TypeHandler<Sex>{
    from tbl_class a left join tbl_student b on (a.id=b.class_id)
    where id = #{id}
    </select>
-   
+
    <resultMap id="getClassInfoWithStudents" type="org.john.domain.Clazz">
      <id property="id" column="id"/>
      <result property="name" column="name"/>
@@ -934,7 +939,7 @@ column="{id=class_id, name=class_name}"
   public List<User> getUsers(List<String> ids);
 
   @Select("select * from user where id = #{0} and name = #{u.name}")
-  public User getUser(int id, @Param("u") User user); 
+  public User getUser(int id, @Param("u") User user);
   #+END_EXAMPLE
   param1~paramN为MyBatis额外添加到Map实例中的键，无论是命令参数还是无名参数一样会生成。
   而0~N为无名参数的键，若该参数设置为命名参数则对应的索引号将被具体设置的名称所替代。
@@ -960,7 +965,7 @@ column="{id=class_id, name=class_name}"
 
 * 动态SQL
   MyBatis使用基于OGNL的表达式实现动态SQL，就是在条件判断、表达式计算中采用OGNL表达式。
-  
+
 ** [[http://commons.apache.org/proper/commons-ognl/][OGNL(Object-Graph Navigation Language)]]
    | 功能         | 示例                                      |
    |--------------+-------------------------------------------|
@@ -980,7 +985,7 @@ column="{id=class_id, name=class_name}"
      <select id="selectEmployeeByLoginLike" parameterType="hashmap" resultType="org.john.domain.User">
      select * from user where state = 'ACTIVE'
      <if test="loginname != null and password != null and loginname != &quot;&quot;">
-       and loginname = #{loginname} 
+       and loginname = #{loginname}
        and password = #{password}
      </if>
      </select>
@@ -989,7 +994,7 @@ column="{id=class_id, name=class_name}"
      public interface EmployeeMapper{
          List<User> selectEmployeeByLoginLike(HashMap<String, Object> params);
      }
-     
+
      EmployeeMapper employeeMapper = session.getMapper(EmployeeMapper.class);
      HashMap<String, Object> params = new HashMap<String, Object>();
      params.put("loginname", "john");
@@ -1007,7 +1012,7 @@ column="{id=class_id, name=class_name}"
         and id = #{id}
         </when>
         <when test="loginname != null and password != null">
-        and loginname = #{loginname} 
+        and loginname = #{loginname}
         and password = #{password}
         </when>
         <otherwise>
@@ -1029,7 +1034,7 @@ column="{id=class_id, name=class_name}"
         and id = #{id}
         </if>
         <if test="loginname != null and password != null">
-        and loginname = #{loginname} 
+        and loginname = #{loginname}
         and password = #{password}
         </if>
         <if>
@@ -1053,7 +1058,7 @@ column="{id=class_id, name=class_name}"
      #+BEGIN_EXAMPLE xml
      <select id="selectUsers" resultType="org.john.domain.User">
      select * from user
-     where id in 
+     where id in
      <!--当入参为List或Array时会自动添加到内部Map实例中，List入参的键名为list，Array入参的键名为array。
          属性item定义元素引用名称
          属性index定义元素索引名称, List或Array时为索引号，Map时为键名
@@ -1086,7 +1091,7 @@ column="{id=class_id, name=class_name}"
      - Oracle批量插入
        #+BEGIN_EXAMPLE xml
        <insert id="save" databaseId="oracle">
-       insert into tstudent(name,age) 
+       insert into tstudent(name,age)
        <foreach collection="param1" item="student" open="(" close=")" separator="union all">
        select #{student.name} as a, #{student.age} as b from dual
        </foreach>
@@ -1124,7 +1129,7 @@ column="{id=class_id, name=class_name}"
        </trim>
      </select>
      #+END_EXAMPLE
- 
+
 ** 内置变量 ~_parameter~ 和 ~_databaseId~
    在动态SQL中可以引用内置变量 ~_parameter~ 和 ~_databaseId~
    - ~_parameter~ 就是入参Map实例自身
@@ -1141,12 +1146,12 @@ column="{id=class_id, name=class_name}"
   1) 原子性(Atomicity), 事务作为应用中不可再分割的最小逻辑执行单位。
   2) 一致性(Consistency), 数据库从一种一致性状态，变到另一种一致性状态。一致性通过原子性来保证。
   3) 隔离性(Isolation), 并发执行的事务之间互不干扰，即事务操作过程中的中间状态无法被其他事务访问。
-  4) 持续性(Durability/Persistence), 事务一旦提交，其对数据的任何草走都将记录到永久存簇器中。 
+  4) 持续性(Durability/Persistence), 事务一旦提交，其对数据的任何草走都将记录到永久存簇器中。
 
 ** 相关接口和实现类
 接口org.apache.ibatis.transaction.Transaction，而其实现类为org.apache.ibatis.transaction.jdbc.JdbcTransaction和org.apache.ibatis.transaction.managed.ManagedTransaction。
 工厂接口org.apache.ibatis.transaction.TransactionFactory，而其实现类为org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory和org.apache.ibatis.transaction.managed.ManagedTransactionFactory来获取事务的实例对象。
-   
+
 接口Transaction
 #+BEGIN_EXAMPLE java
 public interface Transaction {
@@ -1394,7 +1399,7 @@ ReadWriteLock getReadWriteLock();
      - 无参数
      - Java对象
      - java.util.Map对象
-   
+
    #+BEGIN_EXAMPLE java
    publc class UserDynaSqlProvider {
      public String selectWithParam(Map<String, Object> param){
@@ -1413,117 +1418,168 @@ ReadWriteLock getReadWriteLock();
      }
    }
    #+END_EXAMPLE
-* Spring集成 
-  MyBatis3问世前Spring3的开发工作已经完成，因此Spring3中没有内置对MyBatis3的支持，需要引入MyBatis提供的mybatis-spring.jar来集成。到Spring4时则延续这一做法。
-  1) 在applicationContext.xml配置MyBatis工厂类
-  2) 在DAO层使用Spring注入的工具Bean对数据进行操作
+* TODO Spring集成
+[[MyBatis Spring Adapter][https://github.com/mybatis/spring]]
+http://mybatis.org/spring/zh/index.html
+MyBatis3问世前Spring3的开发工作已经完成，因此Spring3中没有内置对MyBatis3的支持，需要引入MyBatis提供的mybatis-spring.jar来集成。到Spring4时则延续这一做法。
+功能:
+1) 允许MyBatis参与Spring的事务管理中
+2) 创建mapper和SqlSession的Bean
+3) 将MyBatis的异常转换为Spring的DataAccessException
 
-  #+BEGIN_EXAMPLE xml
-  <!-- applicationContext.xml -->
-  xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
-  xmlns:p="http://www.springframework.org/schema/p"
-  xmlns:tx="http://www.springframework.org/schema/tx"
-  xsi:schemaLocation="http://mybatis.org/schema/mybatis-spring
-                      http://mybatis.org/schema/mybatis-spring.xsd
-                      http://www.springframework.org/schema/p
-                      http://www.springframework.org/schema/p.xsd
-                      http://www.springframework.org/schema/tx
-                      http://www.springframework.org/schema/tx.xsd"
+** 示例: Spring XML配置方式
+1) 在applicationContext.xml配置MyBatis工厂类
+2) 在DAO层使用Spring注入的工具Bean对数据进行操作
 
-  <!-- 注册Spring Bean -->
-  <context:component-scan base-package="org.john"/>           
-  <!-- 引入mapper接口 -->
-  <mybatis:scan base-package="org.john.mapper"/>
-  <!-- 使用PropertyOverrideConfigurer后处理器加载数据源参数
-  <context:property-override location="classpath:db.properties"/> -->
-  <!-- 配置c3p0数据源
-  <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"/> -->
-  <!-- 配置jdbc数据源 -->
-  <bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
-    <property name="driverClassName">
-      <value>com.mysql.jdbc.Driver</value>
-    </property>
-    <property name="url">
-      <value>jdbc:mysql://localhost:3306/oa?zeroDateTimeBehavior=convertToNull</value>
-    </property>
-    <property name="username">
-    </property>
-    <property name="password">
-    </property>
-  </bean>
+   #+BEGIN_EXAMPLE xml
+   <!-- applicationContext.xml -->
+   xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
+   xmlns:p="http://www.springframework.org/schema/p"
+   xmlns:tx="http://www.springframework.org/schema/tx"
+   xsi:schemaLocation="http://mybatis.org/schema/mybatis-spring
+                       http://mybatis.org/schema/mybatis-spring.xsd
+                       http://www.springframework.org/schema/p
+                       http://www.springframework.org/schema/p.xsd
+                       http://www.springframework.org/schema/tx
+                       http://www.springframework.org/schema/tx.xsd"
 
-  <!-- 
-    创建SqlSessionFactory实例
-    指定SqlSessionFactory为社区开发的实现类 -->
-  <!--<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean" p:dataSource-ref="dataSource"/>-->
-  <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
-    <property name="dataSource" ref="dataSource"/>
-    <!-- 在当前classpath中读取MyBatis配置文件mybatis-config.xml -->
-    <property name="configLocation" value="classpath:mybatis-config.xml"/>
-    <!-- 指定SQL映射文件位置  -->
-    <property name="mapperLocations" value="classpath:org/john/mapper/*.xml"/>
-  </bean>
+   <!-- 注册Spring Bean -->
+   <context:component-scan base-package="org.john"/>
+   <!-- 引入mapper接口 -->
+   <mybatis:scan base-package="org.john.mapper"/>
+   <!-- 使用PropertyOverrideConfigurer后处理器加载数据源参数
+   <context:property-override location="classpath:db.properties"/> -->
+   <!-- 配置c3p0数据源
+   <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"/> -->
+   <!-- 配置jdbc数据源 -->
+   <bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+     <property name="driverClassName" value="com.mysql.jdbc.Driver"></property>
+     <property name="url" value="jdbc:mysql://localhost:3306/oa?zeroDateTimeBehavior=convertToNull"></property>
+     <property name="username" value="${jdbc.user}"></property>
+     <property name="password" value="${jdbc.password}"></property>
+   </bean>
 
-  <!-- 扫描所有Mapper接口，从而实现自动注入(@Autowired) -->
-  <mybatis-spring:scan base-package="org.john.dao"/>
-  <!-- 以前的写法
-    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
-      <!--递归扫描value值指定包下的文件-->
-      <property name="basePackage" value="org.john.dao"/>
-      <property name="sqlSessionFactoryBeanName" value="sqlSessionFactroy"/>
-      <!-- 若指定了sqlSessionTemplate, 那么sqlSessionFactory将被忽略 -->
-      <property name="sqlSessionTemplateBeanName" value="sqlSessionTemplate"/>
-      <!-- 表示通过该注解标识的接口将被识别为Mapper接口 -->
-      <property name="annotationClass" value="org.springframework.stereotype.Repository"/>
-      <!-- 表示继承该接口的接口将被识别为Mapper接口
-      <property name="mapperInterface" value="">
-      -->
-    </bean>
-    -->
+   <!--
+     创建SqlSessionFactory实例
+     指定SqlSessionFactory为社区开发的实现类 -->
+   <!--<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean" p:dataSource-ref="dataSource"/>-->
+   <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+     <property name="dataSource" ref="dataSource"/>
+     <!-- 在当前classpath中读取MyBatis配置文件mybatis-config.xml -->
+     <property name="configLocation" value="classpath:mybatis-config.xml"/>
+     <!-- 指定SQL映射文件位置  -->
+     <property name="mapperLocations" value="classpath:org/john/mapper/*.xml"/>
+   </bean>
 
-  <!-- JDBC事务管理器 -->
-  <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager" p:dataSource-ref="dataSource"/>
-  <!-- 启用支持annotation注解方式事务管理 -->
-  <tx:annotation-driven transaction-manager="transactionManager"/>
-  #+END_EXAMPLE
+   <!-- 扫描所有Mapper接口，从而实现自动注入(@Autowired) -->
+   <mybatis-spring:scan base-package="org.john.dao"/>
+   <!-- 以前的写法
+     <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+       <!--递归扫描value值指定包下的文件-->
+       <property name="basePackage" value="org.john.dao"/>
+       <property name="sqlSessionFactoryBeanName" value="sqlSessionFactroy"/>
+       <!-- 若指定了sqlSessionTemplate, 那么sqlSessionFactory将被忽略 -->
+       <property name="sqlSessionTemplateBeanName" value="sqlSessionTemplate"/>
+       <!-- 表示通过该注解标识的接口将被识别为Mapper接口 -->
+       <property name="annotationClass" value="org.springframework.stereotype.Repository"/>
+       <!-- 表示继承该接口的接口将被识别为Mapper接口
+       <property name="mapperInterface" value="">
+       -->
+     </bean>
+     -->
 
-  #+BEGIN_EXAMPLE
-  # db.properties
-  dataSource.driverClass=com.mysql.jdbc.Driver
-  dataSource.jdbcUrl=jdbc:mysql://127.0.0.1:3306/mybatis
-  dataSource.user=root
-  dataSource.password=root
-  dataSource.maxPoolSize=20
-  dataSource.maxIdleTime=1000
-  dataSource.minPoolSize=6
-  dataSource.initialPoolSize=5
-  #+END_EXAMPLE
+   <!-- JDBC事务管理器 -->
+   <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager" p:dataSource-ref="dataSource"/>
+   <!-- 启用支持annotation注解方式事务管理 -->
+   <tx:annotation-driven transaction-manager="transactionManager"/>
+   #+END_EXAMPLE
 
-  #+BEGIN_EXAMPLE xml
-  <!-- spring框架提供的字符集过滤器 -->
-  <!-- spring Web MVC框架提供了org.springframework.web.filter.CharacterEncodingFilter用于解决POST方式造成的中文乱码问题  -->
-  <filter>
-     <filter-name>encodingFilter</filter-name>
-     <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
-     <init-param>
-         <param-name>encoding</param-name>
-         <param-value>UTF-8</param-value>
-     </init-param>
-     <!-- force强制，促使 -->
-     <init-param>
-         <param-name>forceEncoding</param-name>
-         <param-value>true</param-value>
-     </init-param>
-  </filter>
-  <filter-mapping>
-     <filter-name>encodingFilter</filter-name>
-     <url-pattern>/*</url-pattern>
-  </filter-mapping>
-  #+END_EXAMPLE
+   #+BEGIN_EXAMPLE
+   # db.properties
+   dataSource.driverClass=com.mysql.jdbc.Driver
+   dataSource.jdbcUrl=jdbc:mysql://127.0.0.1:3306/mybatis
+   dataSource.user=root
+   dataSource.password=root
+   dataSource.maxPoolSize=20
+   dataSource.maxIdleTime=1000
+   dataSource.minPoolSize=6
+   dataSource.initialPoolSize=5
+   #+END_EXAMPLE
 
-   [[MyBatis Spring Adapter][https://github.com/mybatis/spring]]
+   #+BEGIN_EXAMPLE xml
+   <!-- spring框架提供的字符集过滤器 -->
+   <!-- spring Web MVC框架提供了org.springframework.web.filter.CharacterEncodingFilter用于解决POST方式造成的中文乱码问题  -->
+   <filter>
+      <filter-name>encodingFilter</filter-name>
+      <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
+      <init-param>
+          <param-name>encoding</param-name>
+          <param-value>UTF-8</param-value>
+      </init-param>
+      <!-- force强制，促使 -->
+      <init-param>
+          <param-name>forceEncoding</param-name>
+          <param-value>true</param-value>
+      </init-param>
+   </filter>
+   <filter-mapping>
+      <filter-name>encodingFilter</filter-name>
+      <url-pattern>/*</url-pattern>
+   </filter-mapping>
+   #+END_EXAMPLE
 
-** 另一个部分   
+** Spring配置DataSource
+
+*** org.springframework.jdbc.datasource.DriverManagerDataSource
+伪连接池,一个连接请求则新建一个Connection实例.
+依赖:spring-jdbc.jar
+
+*** Commons DBCP(org.apache.commons.dbcp.BasicDataSource)
+真正的连接池技术
+
+
+
+** TODO SqlSessionFactoryBean
+在MyBatis中是通过SqlSessionFactoryBuilder来创建SqlSessionFactory,然后通过SqlSessionFactory来创建SqlSession.
+而在MyBatis-Spring中则是以SqlSessionFactoryBean来代替SqlSessionFactoryBuilder.因此在注册SqlSessionFactory Bean的写法为
+#+begin_example xml
+<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+  <!-- 必填项 -->
+  <property name="dataSource" ref="dataSource"/>
+  <!-- 选填项, 注册映射器XML文件 -->
+  <property name="mapperLocation" value="classpath:/path/to/mapper/**/*.xml"/>
+  <!-- 选填项
+       1. mybatis-config.xml仅保留<setting>和<typeAliases>部分MyBatis配置信息
+       2. 映射器XML文件则通过mybatis-spring其他配置项注册
+  -->
+  <property name="configLocation" value="classpath:/path/to/mybatis-config.xml"/>
+  <!-- mybatis-spring 1.3+可直接通过configuration属性设置<setting>和<typeAliases>属性,不用另外设置mybatis-config.xml文件
+       <property name="configuration">
+           <bean class="org.apache.ibatis.session.Configuration">
+               <property name="mapUnderscoreToCamelCase" value="true"/>
+               <property name="jdbcTypeForNull" value="null"/>
+           </bean>
+       </property>
+  -->
+  <property name="transactionFactoryClass" value=""/>
+</bean>
+#+end_example
+由于SqlSessionFactoryBean为FactoryBean接口的实现类,因此上述配置的等价Java Config代码为
+#+begin_example java
+@Bean
+public SqlSessionFactory sqlSessionFactory(DataSource dataSource){
+    SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
+    factoryBean.setDataSource(dataSource);
+    org.apache.ibatis.session.Configuration conf = new org.apache.ibatis.session.Configuration();
+    conf.setJdbcTypeForNull(JdbcType.NULL);
+    conf.setMapUnderscoreToCamelCase(true);
+    factoryBean.setConfiguration(conf);
+
+    return factoryBean.getObject();
+}
+#+end_example
+
+** 另一个部分
 
    通过IOC实现即插即拔功能。
    通过AOP框架将数据库事务委托给Spring处理。
@@ -1612,13 +1668,13 @@ ReadWriteLock getReadWriteLock();
    #+END_EXAMPLE
    #+BEGIN_EXAMPLE java
    public interface UserDao {}
-   
+
    public class UserService {
      @Autowired
      private UserDao userDao;
    }
    #+END_EXAMPLE
-   
+
 *** 通过MapperScannerConfigurer自动扫描批量注册Mapper接口
     #+BEGIN_EXAMPLE xml
     <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
@@ -1635,13 +1691,29 @@ ReadWriteLock getReadWriteLock();
     </bean>
     #+END_EXAMPLE
 
+* AspectJ集成
+由于MyBatis采用JDK的动态代理，在启动加载配置文件时，根据自动生成Mapper接口的代理类，而代理类修饰符为final(即不能有子类)。因此AOP若采用CGLIB对代理类再次生成代理类时，将报错。
+
+** 处理方法1
+设置AspectJ采用JDK动态代理方式生成代理类
+#+begin_example xml
+<!--
+true为CGLIB
+false为JDK代理，默认值
+-->
+<aop:aspectj-autoproxy proxy-target-class="false" />
+#+end_example
+
+** 处理方式2
+创建一个包装类调用mapper，然后切面应用到包装类上。
+
 * 运行原理
   | 参数映射  -->    | SQL解析 -->     | SQL执行 -->    | 结果处理和映射   |
   |------------------+-----------------+----------------+------------------|
   | 配置             | 配置            | SimpleExecutor | 配置             |
   | 映射解析         | 解析            | BatchExecutor  | 转换             |
   | 类型解析         | SQL语句动态生成 | ReuseExecutor  |                  |
-  | ParameterHandler | SqlSource       | Executor       | ResultSetHandler | 
+  | ParameterHandler | SqlSource       | Executor       | ResultSetHandler |
 
   DefaultSqlSessionFactory implements SqlSessionFactory
   SqlSessionManager implements SqlSessionFactory, SqlSession
@@ -1657,17 +1729,17 @@ ReadWriteLock getReadWriteLock();
        - parseConfiguration(XNode root) 内部通过如settingsElement(Properties props)等方法遍历获取子配置项，并添加到全局配置Configuration对象(包含mybatis-config.xml和所有SQL映射文件的信息)中。
          - mapperElement(XNode parent)
            if ("package".equals(child.getName())){
-             // package优先级最高    
+             // package优先级最高
            }
            else {
              if (resource != null && url == null && mapperClass == null){
-               // resource优先级第二高  
+               // resource优先级第二高
              }
              else if (resource == null && url != null && mapperClass == null){
-               // url优先级第三高  
+               // url优先级第三高
              }
              else if (resource == null && url == null && mapperClass != null){
-               // mapperClass优先级最低  
+               // mapperClass优先级最低
              }
            }
            - XMLMapperBuilder mapperParser = new XMLMapperBuilder(mapperInputStream, configuration) 通过上述4种方式获取SQL映射文件后，构造XMLMapperBuilder实例对其进行解析
@@ -1687,7 +1759,7 @@ ReadWriteLock getReadWriteLock();
 
        Configuration.mappedStatements 包含所有SQL映射文件中的预处理后CRUD语句
        Configuration.mapperRegistry.knownMappers :: HashMap<K,V> 以Mapper接口为键，org.ibatis.binding.MapperProxyFactory为值
-       
+
        - build(configuration)
          - new DefaultSqlSessionFactory(configuration)
    */
@@ -1750,7 +1822,7 @@ ReadWriteLock getReadWriteLock();
                wrapCollection 将collection,array封装到Map实例中
                - BoundSql boundSql = ms.getBoundSql(parameterObject) 取出预处理后的SQL和入参映射及入参值等信息
                - CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql) 生成一级和二级缓存用的键名
-               - 
+               -
    */
   #+END_EXAMPLE
 
@@ -1846,7 +1918,7 @@ RoutingStatementHandler的源码
 public class RoutingStatementHandler implements StatementHandler{
   // 采用适配器模式
   private final StatementHandler delegate;
-  
+
   public RoutingStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql){
     switch (mappedStatement.getStatementType()){
       case STATEMENT:
@@ -1921,14 +1993,14 @@ public void setParameters(PreparedStatement ps){
         }
         else if (parameterObject == null){
           value = null;
-        }     
+        }
         else if (typeHandlerRegistry.hasTypeHandler(parameterObject.getClass())){
           value = parameterObject;
-        }         
+        }
         else {
           MetaObject metaObject = configuration.newMetaObject(parameterObject);
           value = metaObject.getValue(propertyName);
-        }             
+        }
         TypeHandler typeHandler = parameterMapping.getTypeHandler();
         JdbcType jdbcType = parameterMapping.getJdbcType();
         if (value == null && jdbcType == null){
@@ -1937,14 +2009,14 @@ public void setParameters(PreparedStatement ps){
         try{
           // 全部通过typeHandler设置入参
           typeHandler.setParameter(ps, i+1, value, jdbcType);
-        }     
+        }
         catch (TypeException e){
           throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);
         }
         catch (SQLException e){
-          throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);          
-        }             
-      }     
+          throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);
+        }
+      }
     }
   }
 }
@@ -1953,7 +2025,7 @@ public void setParameters(PreparedStatement ps){
 *** ResultSetHandler
 在handleResultSets方法中通过typeHandler和ObjectFactory对结果集进行组装后再返回。
 
-* 插件 
+* 插件
   Configuration对象在创建4大核心对象时，采用责任链模式将插件逻辑附加到4大核心对象中。
   注意：
   1) 能不用插件尽量不要用插件，因为它修改了MyBatis的底层设计
@@ -2031,7 +2103,7 @@ public class Plugin implements InvocationHandler {
         new Plugin(target, interceptor, singatureMap)
       );
     }
-    
+
     return target;
   }
 
@@ -2073,7 +2145,7 @@ MetaObject metaStatementHandler = SystemMetaObject.forObject(statementHandler);
 // 通过递归获取真正的StatementHandler而不是代理类实例
 while (metaStatementHandler.hasGetter("h")){
   Object object = metaStatementHandler.getValue("h");
-  metaStatementHandler = SystemMetaObject.forObject(object);  
+  metaStatementHandler = SystemMetaObject.forObject(object);
 }
 
 String sql = (String)metaStatementHandler.getValue("delegate.boundSql.sql");
@@ -2114,7 +2186,7 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
         public Object intercept(Invocation invocation) throws Throwable {
           return invocation.proceed();
         }
-         
+
         @Override
         public Object plugin(Object target){
           return Plugin.wrap(target, this);
@@ -2204,12 +2276,12 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
    {call get_role (
      #{roleName, mode=IN, jdbcType=VARCHAR},
      #{start, mode=IN, jdbcType=INTEGER},
-     #{end, mode=IN, jdbcType=INTEGER},     
-     #{count, mode=OUT, jdbcType=INTEGER},     
+     #{end, mode=IN, jdbcType=INTEGER},
+     #{count, mode=OUT, jdbcType=INTEGER},
      #{result, mode=OUT, jdbcType=CURSOR, javaType=ResultSet, resultMap=roleMap}
    )}
    </select>
-   #+END_EXAMPLE   
+   #+END_EXAMPLE
    #+BEGIN_EXAMPLE java
    @Data
    pulic class ResultPojo {
@@ -2248,12 +2320,12 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
      public static final int NO_ROW_OFFSET = 0;
      public static final int NO_ROW_LIMIT = Integer.MAX_VALUE;
      public static final RowBounds DEFAULT = new RowBounds();
-     
+
      @Getter
      private int offset; // 从第几行开始读取，从0开始
      @Getter
      private int limit;  // 最多读取多少行
-     
+
      public RowBounds(){
        this.offset = NO_ROW_OFFSET;
        this.limit = NO_ROW_LIMIT;
@@ -2354,7 +2426,7 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
            Object o = null;
            PageHelper.startPage(1,10);
            if (o != null){
-  
+
              mapper.query();
            }
          }
@@ -2363,11 +2435,6 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
          }
        }
        #+END_EXAMPLE
-
-
-    
-
-
 
 * 代码生成器——[[http://www.mybatis.org/generator/][MyBatisGenerator]]
   遵循Data First原则，可根据数据库表生成相关代码
@@ -2448,7 +2515,7 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
                          targetProject="D:/yangjm/Code/CTAS/JAVAEE/CTAS2CCSP/src/main/java">
             <property name="enableSubPackages" value="true"/>
         </sqlMapGenerator>
-        
+
         <!-- Mapper接口路径 -->
         <javaClientGenerator targetPackage="ctas.test.mapper"
                              targetProject="D:/yangjm/Code/CTAS/JAVAEE/CTAS2CCSP/src/main/java" type="XMLMAPPER">
@@ -2521,4 +2588,36 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
      |     1.2 |              46 |
      |     1.1 | 45              |
      - Eclipse下修复：将Build Path下的JDK修改为JDK8即可。
+  4) 抛出 ~org.apache.ibatis.binding.BindingException: Invalid bound statement (not found)~
+     - 问题:即在mybatis中dao接口与mapper配置文件在做映射绑定的时候出现问题，简单说，就是接口与xml要么是找不到，要么是找到了却匹配不到.
+     - 排除方式:
+       1) xml文件是否打包到target/classes下
+       2) xml的namespace值是否为对应的接口全限定名称
+       3) xml中是否没有与接口方法对应的id
+       4) xml中的resultType不正确
+  5) 抛出如下问题:
+     #+begin_quote
+     log4j:WARN No appenders could be found for logger (org.apache.ibatis.logging.LogFactory).
+     log4j:WARN Please initialize the log4j system properly.
+     log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.
+     #+end_quote
+     - 原因:
+       1) log4j通过 ~Thread.getContextClassLoader().getResource()~ 找不到默认配置文件log4j.properties和log4j.xml, 并且程序中没有执行显式配置.
+          - 解决方法:
+            1) 方法1 - 程序中显式配置
+               #+begin_example java
+               import org.apache.log4j.PropertyConfigurator;
 
+               try (FileInputStream input = new FileInputStream("src/main/resources/log4j.xml")) {
+                   Properties props = new Properties();
+                   props.load(input);
+                   PropertyConfigurator.configure(props);
+               }
+               catch (Exception e) {
+                   e.printStackTrace();
+               }
+               #+end_example
+            2) 方法2 - 将log4j.xml或log4j.properties保存到src/main/resources下
+       2) MyBatis内部使用SLF4J操作日志, 若已升级为Log4j2但依然使用slf4j-log4j12就会报这个异常
+          - 解决方法:
+            将slf4j-log4j12替换为log4j-slf4j-impl即可。

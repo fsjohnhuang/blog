@@ -1663,7 +1663,7 @@ class FilterModule(object):
          ansible_winrm_transport=kerberos
          ansible_winrm_server_cert_validation=ignore
          #+END_EXAMPLE
-   2) 被管节点必须为Windows Server 2008 R2+、PowerShell3.0+、.NET Framework3.0+，并且开启WinRM服务
+   2) 被管节点必须为Windows7/Windows Server 2008 R2+、PowerShell3.0+、.NET Framework3.0+，并且开启WinRM服务
       WinRM为WS-Management协议的Microsoft实现，该协议基于SOAP，由硬件和软件制造商群体开发的公共标准，用于实现该协议的任何计算机设备远程交换管理数据。
       - WinRM监听端口5985和5986，默认关闭
 

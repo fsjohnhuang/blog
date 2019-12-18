@@ -922,6 +922,7 @@
     #+END_EXAMPLE
 
 * Spring
+https://docs.spring.io/spring/docs/5.0.0.BUILD-SNAPSHOT/spring-framework-reference/htmlsingle/
 
 ** 体系结构
    1) Core Container
@@ -1016,8 +1017,8 @@
      - spring-aop-x.x.x.jar
      - spring-aspects-x.x.x.jar
    - IOC
-     - spring-beans-x.x.x.jar
-     - spring-context-x.x.x.jar
+     - spring-beans-x.x.x.jar 内置 ~org.springframework.beans.factory.BeanFactory~ 提供 spring beans的运行基础。
+     - spring-context-x.x.x.jar 内置 ~org.springframework.context.ApplicationContext~ 提供 message resources 和 AOP 等功能，并提供spring beans生命周期管理。
      - spring-core-x.x.x.jar
      - spring-expression-x.x.x.jar
    - JDBC
@@ -1027,6 +1028,206 @@
    - Web
      - spring-web-x.x.x.jar
      - spring-webmvc-x.x.x.jar
+** 配置方式
+*** 基于XML方式配置
+1) pom引入依赖
+   - spring-core
+   - spring-beans
+   - spring-context
+2) 配置(配置文件放置在src/main/resources/下)
+   1) 方式1：在单个配置文件中定义
+      #+begin_example xml
+      <?xml version="1.0" encoding="UTF-8"?>
+      <beans xmlns="http://www.springframework.org/schema/beans"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+             xsi:schemaLocation="http://www.springframework.org/schema/beans
+             http://www.springframework.org/schema/beans/spring-beans.xsd
+             http://www.springframework.org/schema/context
+             http://www.springframework.org/schema/context/spring-context.xsd">
+
+             <context:annotation-config/><!-- 启用注解配置，如@Autowired -->
+             <bean id="user" class="io.fsjohnhuang.User"></bean>
+             <bean id="dep" class="io.fsjohnhuang.Department"></bean>
+      </beans>
+      #+end_example
+   2) 方式2：多配置文件，然后导入到入口配置文件中
+      - beans.xml
+        #+begin_example xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <beans>
+             <import resource="user.xml"/>
+             <import resource="dep.xml"/>
+             <bean id="org" class="io.fsjohnhuang.Org"></bean>
+        </beans>
+        #+end_example
+      - user.xml
+        #+begin_example xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <beans>
+             <bean id="user" class="io.fsjohnhuang.User"></bean>
+        </beans>
+        #+end_example
+      - dep.xml
+        #+begin_example xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <beans>
+             <bean id="dep" class="io.fsjohnhuang.Department"></bean>
+        </beans>
+        #+end_example
+   3) 方式3：启用注解配置和自动组件扫描
+      #+begin_example xml
+      <?xml version="1.0" encoding="UTF-8"?>
+      <beans>
+          <context:component-scan base-packages="io.fsjohnhuang"/>
+      </beans>
+      #+end_example
+3) 应用
+   #+begin_example java
+   import org.springframework.context.ApplicationContext;
+   import org.springframework.context.support.ClassPathXmlApplicationContext;
+
+   ApplicationContext ctx = new ClassPathXmlApplicationContext("io/fsjohnhuang/beans.xml");
+   Department dep = (Department)ctx.getBean("dep");
+   Department dep1 = ctx.getBean(Department.class);
+   #+end_example
+*** 基于Java Config配置
+**** 自动组件扫描方式
+1) 标识Bean
+   #+begin_example java
+   package io.fsjohnhuang;
+   @Component
+   public class Employ {
+       /* @Value用于赋值,可接受如下类型
+        * 基本数值
+        * SpEL,如 #{20-2}
+        * 取出通过@PropertySource引入的properties文件的属性值,如 ${user.name}
+        */
+       @Value("默认值")
+       private String name;
+   }
+   #+end_example
+2) 定义配置文件
+   #+begin_example java
+   @Configuration
+   /* 引入properties文件属性,并加载到环境变量中.(环境变量可通过ctx.getEnvironment()获取)
+    */
+   @PropertySource({"classpath:/path/to/properties.properties"})
+   /* Java8中可对一个类写多个@ComponentScan对不同的包进行扫描;
+    * Java8以下则通过@ComponentScans({@ComponentScan(basePackages="io.f1"), @ComponentScan(basePackage="io.f2")}) 实现相同效果.
+    * 属性:
+    * value 或 basePackages 指定需要扫描的包及子包
+    * Filter[] [includeFilters={}] 指定只包含匹配的过滤器, 可按ANNOTATION,ASPECTJ(ASPECTJ表达式),ASSIGNABLE_TYPE(类型及其子类),CUSTOM,REGEX匹配.
+    * Filter[] [excludeFilters={}] 指定排除过滤器, 可按ANNOTATION,ASPECTJ(ASPECTJ表达式),ASSIGNABLE_TYPE(类型及其子类),CUSTOM,REGEX排除.
+    * boolean [useDefaultFilters=true] 默认匹配所有, 使用includeFilters时需要设置为false才生效.
+    * boolean [lazyInit=false]
+    */
+   @ComponentScan(basePackages = "io.fsjohnhuang",
+                  excludeFilters = {
+                      @Filter(type=FilterType.ANNOTATION,
+                              classes={Controller.class})
+                  })
+   public class AppConfig {}
+   #+end_example
+3) 应用
+   #+begin_example java
+   // 注册配置文件方式1
+   ApplicationContext ctx1 = new AnnotationConfigApplicationContext(AppConfig.class);
+
+   // 注册配置文件方式2
+   AnnotationConfigApplicationContext ctx2 = new AnnotationConfigApplicationContext();
+   ctx2.register(AppConfig.class);
+   ctx2.refresh();
+   #+end_example
+
+***** TypeFilter.CUSTOM示例
+#+begin_example java
+pulbic class MyTypeFilter implements TypeFilter {
+    /* @param metadataReader 读取当前正在扫描的类的信息
+     * @param metadataReaderFactory 可以获取其他任何类的信息
+     * @return true匹配成功,false匹配失败
+     */
+    @Override
+    public boolean match(MetadataReader metadataReader, MetadataReaderFactory metadataReaderFactory) {
+        // 获取当前类的注解信息
+        AnnotationMetadata annotationMetadata = metadataReader.getAnnotationMetadata();
+        // 获取当前类信息
+        ClassMetadata classMetadata = metadataReader.getClassMetadata();
+        // 获取当前类资源(如类路径)
+        Resource resource = metadataReader.getResource();
+    }
+}
+#+end_example
+
+**** 手动通过注解Bean和Configuration方式
+1) 无需标识Bean
+   #+begin_example java
+   package io.fsjohnhuang;
+   public class Employ {}
+   #+end_example
+2) 定义配置文件
+   #+begin_example java
+   /* @Import 用于快速导入Bean
+    * id 默认为类的全限定类名
+    */
+   @Import({Color.class, MyImportSelector.class, MyImportBeanDefinitionRegistar.class})
+   @Conifguration
+   public class AppConfig {
+       /* id 默认为方法名,也可以通过@Bean的value设置id. 如 @Bean("employ1")
+        * class 为方法返回值的类型
+        * 注意: @Bean标识的方法的参数默认会从容器中获取
+        */
+       @Bean
+       /* 按条件注册Bean, 可用于类和方法上
+        */
+       @Conditional({LinuxCondition.class})
+       public Employ employ(){
+           return new Employ();
+       }
+   }
+
+   public class LinuxCondition implements Condition {
+       /* @param context
+        * @param type
+        */
+       @Override
+       public boolean matches(ConditionContext context, AnnotatedTypeMetadata type) {
+           Environment env = context.getEnvironment();
+           String os = env.getProperty("os.name");
+           return os.contains("Linux");
+       }
+   }
+
+   public class MyImportSelector implements ImportSelector {
+       /*
+        * @param importingClassMetadata @Import标注的类的所有注解信息,如@Configuration等的信息
+        * @return 被导入作为Bean的全限定类名数组
+        */
+       @Override
+       public String[] selectImports(AnnotationMetadata importingClassMetadata) {
+           return new String[]{"xx.cc.A1", "xx.cc.B1"};
+       }
+   }
+
+   public class MyImportBeanDefinitionRegistar implements ImportBeanDefinitionRegistar {
+       @Override
+       public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+          // 设置Bean作用域等信息
+          RootBeanDefinition beanDefinition = new RootBeanDefinition(Red.class);
+          registry.registerBeanDefinition("red", beanDefinition);
+       }
+   }
+   #+end_example
+3) 应用
+   #+begin_example java
+   // 注册配置文件方式1
+   ApplicationContext ctx1 = new AnnotationConfigApplicationContext(AppConfig.class);
+
+   // 注册配置文件方式2
+   AnnotationConfigApplicationContext ctx2 = new AnnotationConfigApplicationContext();
+   ctx2.register(AppConfig.class);
+   ctx2.refresh();
+   #+end_example
+
 ** Bean的配置和实例化
    通过配置文件(XML或Properties文件)注册并管理Bean之间的依赖关系。
 
@@ -1092,19 +1293,157 @@
        #+END_EXAMPLE
 
 *** Bean的作用域
-    1) singleton, Spring容器中最多只有一个实例，无论有多少个Bean引用它，始终指向同一个实例。
-       用于无会话状态的Bean(Dao组件、Service组件)
-       注意：默认情况下在Spring容器初始化时就会实例化作用域为singleton的Bean，并将实例存放到内部的Map中，后续从Map中直接获取。
-    2) prototype, 每次通过Spring容器获取时，Spring容器都会创建一个全新的实例。
-       用于需要保持会话状态的Bean(Struct2的Action类)
+    1) singleton，默认值，Spring容器中最多只有一个实例，无论有多少个Bean引用它，始终指向同一个实例。用于无会话状态的Bean(Dao组件、Service组件)
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("singleton")
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="singleton"/>
+            #+end_example
+       - 注意：
+         - 若Bean仅有含参构造函数,那么该函数的入参必须可以通过Spring容器注入,否则要用 ~@Autowired(required=false)~ 标识不能自动装配的参数.
+         - 默认情况下在Spring容器初始化时就会实例化作用域为singleton的Bean，并将实例存放到内部的Map中，后续从Map中直接获取；
+         - 可配置为lazy模式实例化
+           1) xml方式
+              - 所有Bean统一设置
+                #+begin_example xml
+                <beans default-lazy-init="true>
+                  <bean ......></bean>
+                  <bean ......></bean>
+                </beans>
+                #+end_example
+              - 单独设置
+                #+begin_example xml
+                <beans>
+                  <bean id="user" class="io.fsjohnhuang.User" lazy-init="true"></bean>
+                </beans>
+                #+end_example
+           2) 注解方式
+              - 所有Bean统一设置
+                #+begin_example java
+                @Lazy
+                @Configuration
+                public class AppConfig{}
+                #+end_example
+              - 单独设置
+                #+begin_example java
+                @Configuration
+                public class AppConfig{
+                    @Lazy
+                    @Bean
+                    public User user(){
+                        return new User();
+                    }
+                }
+                #+end_example
+              - 对于组件自动扫描的，则要通过定义和使用处都调用Lazy注解才行，否则不起作用。
+                - Bean定义处
+                  #+begin_example java
+                  @Lazy
+                  @Component
+                  public class Employ {}
+                  #+end_example
+                - Bean使用处
+                  #+begin_example java
+                  public class App {
+                      @Lazy
+                      @Autowired
+                      Employ employ;
+                  }
+                  #+end_example
+    2) prototype, 每次通过Spring容器获取时，Spring容器都会创建一个全新的实例, Spring启动时不会自动创建Bean实例。用于需要保持会话状态的Bean(Struct2的Action类)
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("prototype")
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="prototype"/>
+            #+end_example
     3) request, 同一个HTTP请求中，每次通过Spring容器获取时将返回同一个实例；不在同一个HTTP请求中时则返回全新的实例。即实例仅在当前HTTP Request内有效。
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("request") // 或 @RequestScope
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="request"/>
+            #+end_example
     4) session, 对于同一个HTTP Session，每次通过Spring容器获取时将返回同一个实例。
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("session") // 或 @SessionScope
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="session"/>
+            #+end_example
     5) globalSession, 在一个全局的HTTP Session中，将返回同一个实例。仅对portlet上下文有效。(portlet现在已不怎么使用了)
     6) application, 为每个ServletContext对象创建一个实例，仅Web相关的ApplicationContext有效。
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("application") // 或 @ApplicationScope
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="application"/>
+            #+end_example
     7) websocket, 为每个websocket对象创建一个势力，仅Web相关的ApplicationContext有效。
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("websocket")
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="websocket"/>
+            #+end_example
+    8) 注册非内置的Thread Scope
+       - 注册
+         #+begin_example xml
+         <bean class="org.springframework.beans.factory.config.CustomScopeConfigurer">
+           <property name="scopes">
+            <map>
+              <entry key="thread">
+                <bean class="org.springframework.context.support.SimpleThreadScope"/>
+              </entry>
+            </map>
+           </property>
+         </bean>
+         #+end_example
+       - 设置方式
+         1) Java Config方式
+            #+begin_example java
+            @Scope("thread")
+            @Component
+            public class BeanClass{}
+            #+end_example
+         2) XML方式
+            #+begin_example xml
+            <bean id="beanId" class="io.fsjohnhuang.BeanClass" scope="thread"/>
+            #+end_example
 
 *** Bean的生命周期
-    Spring容器只能跟踪scope为singleton和prototype的Bean的生命周期。
+    Spring容器只能跟踪scope为singleton和prototype的Bean的生命周期。注意:prototype的Bean不会调用销毁相关方法.
     | 序号 | 流程操作                                                                                                                             |
     |------+--------------------------------------------------------------------------------------------------------------------------------------|
     |    1 | 通过构造方法实例化Bean                                                                                                               |
@@ -1112,13 +1451,114 @@
     |    3 | 若实现BeanNameAware接口，则调用setBeanName方法                                                                                       |
     |    4 | 若实现BeanFactoryAware接口，则调用setBeanFactory方法                                                                                 |
     |    5 | 若实现ApplicationContextAware接口，则调用setApplicationContext方法                                                                   |
-    |    6 | 调用BeanPostProcessor的预初始化方法                                                                                                  |
-    |    7 | 调用InitializingBean的afterProperties方法                                                                                            |
+    |    6 | Pre-initialization, 调用BeanPostProcessor的postProcessBeforeInitialization方法                                                       |
+    |    7 | 调用InitializingBean的afterPropertiesSet方法                                                                                         |
     |    8 | 若设置init-method属性，则调用其值指定的方法                                                                                          |
-    |    9 | 调用BeanPostProcesser的初始化方法                                                                                                    |
+    |    9 | Post-initialization, 调用BeanPostProcesser的postProcessAfterInitialization方法。此时Bean实例为可用状态。                             |
     |   10 | 对于scope为singleton的Bean，则将准备就绪的Bean实例存放在Spring缓冲池中并返回给调用者。若scope为prototype则将Bean实例直接返回给调用者 |
     |   11 | 对于scope为singleton的Bean，则调用Disposable的destroy方法                                                                            |
     |   12 | 对于scope为singleton的Bean，若设置destroy-method则调用其值指定的方法                                                                 |
+
+**** 5种初始化和3种销毁的方法
+按执行顺序排列为(注意:prototype的Bean不会调用销毁相关方法)
+1) JSR250提供的 ~@PostConstruct~ 和 ~@PreDestroy~
+   - 好处：和Spring解耦
+   - 示例：
+     #+begin_example java
+     public class MyBean{
+         @PostConstruct
+         public void postConstruct(){}
+         @PreDestroy
+         public void preDestroy(){}
+     }
+     #+end_example
+2) BeanPostProcessor.postProcessBeforeInitialization
+   - 示例
+     #+begin_example java
+     @Override
+     public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+         return bean;
+     }
+     #+end_example
+3) InitializingBean.afterPropertiesSet和DisposableBean.destroy
+   - 示例：
+     #+begin_example java
+     public class MyBean implements InitializingBean, DisposableBean{
+         @Override
+         public void afterPropertiesSet(){}
+
+         @Override
+         public void destroy(){}
+     }
+     #+end_example
+4) XML中的init-method,destroy-method
+   - 全局配置
+     #+begin_example xml
+     <beans default-init-method="custInit" default-destroy-method="custDestroy">
+         <bean id="user" class="io.fsjohnhuang.User"/>
+     </beans>
+     #+end_example
+   - Bean单独配置
+     - 通过xml配置
+       #+begin_example xml
+       <beans>
+           <bean id="user" class="io.fsjohnhuang.User"  init-method="custInit" destroy-method="custDestroy"/>
+       </beans>
+       #+end_example
+     - 通过Java Config配置
+       #+begin_example java
+       @Configuration
+       public class AppConfig{
+           @Bean(initMethod="custInit", destroyMethod="custDestroy")
+           public User getUser(){
+               return new User();
+           }
+       }
+       #+end_example
+5) BeanPostProcessor.postProcessAfterInitialization
+   - 示例
+     #+begin_example java
+     @Override
+     public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+         return bean;
+     }
+     #+end_example
+
+**** TODO BeanPostProcessor
+
+***** TODO 自定义BeanPostProcessor子类
+
+***** Spring内置的BeanPostProcessor子类
+      ApplicationContextAwareProcessor对实现了ApplicationContextAware接口的Bean调用其setApplicationContext注入容器实例.
+      BeanValidationPostProcessor对实现了对Bean初始化前后的数据校验.
+      InitDestroyAnnotationBeanPostProcessor执行注解@PostConstruct和@PreDestroy,和执行initMethod和destroyMethod注解属性.
+      AutowiredAnnotationBeanPostProcessor对注解@Autowired标识的字段注入Bean.
+
+**** TODO Aware接口
+     | 接口                           | 说明                   |
+     |--------------------------------+------------------------|
+     | ApplicationContextAware        | 获取当前Spring容器实例 |
+     | ApplicationEventPublisherAware |                        |
+     | BeanClassLoaderAware           |                        |
+     | BeanFactoryAware               |                        |
+     | BeanNameAware                  | 获取当前Bean的名称     |
+     | EmbeddedValueResolverAware     | 可解析SpEL#{}和${}     |
+     | EnvironmentAware               |                        |
+     | ImportAware                    |                        |
+     | LoadsTimeWeaverAware           |                        |
+     | MessageSourceAware             |                        |
+     | NotificationPublisherAware     |                        |
+     | ResourceLoaderAware            |                        |
+
+***** EmbeddedValueResolverAware
+      #+begin_example java
+      public class Red implements EmbeddedValueResolverAware {
+          @Override
+          public void setEmbeddedValueResolver(StringValueResolver resolver) {
+              String result = resolver.resolveStringValue("hi, ${os.name}+#{2*3}");
+          }
+      }
+      #+end_example
 
 ** Spring IoC/DI
    Spring IoC通过反射实习。
@@ -1214,6 +1654,8 @@
         private UserService userService;
     }
     #+END_EXAMPLE
+
+**** Autowired
     1) 通过 ~<context:annotation-config>~ 启用Annotation装配
        Annotation仅标识依赖关系，以便Spring容器在作Bean实例化时实现依赖注入，但要手工注册Bean信息。
        #+BEGIN_EXAMPLE xml
@@ -1229,55 +1671,422 @@
        <!-- applicationContext.xml -->
        <context:component-scan base-package="org.test"/>
        #+END_EXAMPLE
-    3) 通过属性 ~autowire=""~ 启用Annotation装配
+    3) 通过属性 ~autowire=""~ 设置自动装配
        - 值
          - default 由 ~<beans>~ 的属性default-autowire的值决定
          - byName 根据变量名匹配Bean的id值装配，可通过附加 ~@Qulifier(newid)~ 根据newid匹配Bean的id值装配
-         - byType 根据Bean的class值装配，若匹配结果为多个时则会通过Bean的id来匹配
+         - byType 根据Bean的class值装配，若匹配多个结果则抛出异常；若匹配失败则属性设置为null，若设置 ~dependency-check="objects"~ 则匹配失败时会抛出异常。
+           - ~@Autowired~ 默认使用byType模式
+           - 示例
+             - applicationConfiguration.xml
+               #+begin_example xml
+               <?xml version="1.0" encoding="UTF-8"?>
+               <beans xmlns="http://www.springframework.org/schema/beans"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:context="http://www.springframework.org/schema/context"
+                   xsi:schemaLocation="http://www.springframework.org/schema/beans
+                   http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+                   http://www.springframework.org/schema/context
+                   http://www.springframework.org/schema/context/spring-context-3.0.xsd">
+
+                   <bean id="user" class="io.fsjohnhuang.User" autowire="byType">
+                       <property name="fullName" value="fsjohnhuang"/>
+                   </bean>
+                   <bean id="department" class="io.fsjohnhuang.Department"/>
+               </beans>
+               #+end_example
+             - User.java和Department.java
+               #+begin_example java
+               public class User {
+                   private String fulName;
+                   private Department dep1;
+                   private Department dep2;
+                   // setters
+               }
+
+               public class Department{}
+               #+end_example
+             - App.java
+               #+begin_example java
+               ApplicationContext context = new ClassPathXmlApplicationContexg(new String[]{"applicationContext.xml"});
+               // 由于User bean标识为autowire="byType"，因此其内部属性将通过全限定类名自动加载实例。
+               User user = context.getBean(User.class);
+               System.out.println(user.dep1 == user.dep2); // 返回true
+               #+end_example
          - constructor 根据构造方法参数的数据类型，进行byType模式的自动装配
+           - 示例
+             - applicationConfiguration.xml
+               #+begin_example xml
+               <?xml version="1.0" encoding="UTF-8"?>
+               <beans xmlns="http://www.springframework.org/schema/beans"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:context="http://www.springframework.org/schema/context"
+                   xsi:schemaLocation="http://www.springframework.org/schema/beans
+                   http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+                   http://www.springframework.org/schema/context
+                   http://www.springframework.org/schema/context/spring-context-3.0.xsd">
+
+                   <bean id="user" class="io.fsjohnhuang.User" autowire="constructor"/>
+                   <bean id="department" class="io.fsjohnhuang.Department"/>
+               </beans>
+               #+end_example
+             - User.java和Department.java
+               #+begin_example java
+               public class User {
+                   private Department dep1;
+                   private Department dep2;
+                   public User(Department dep1, Department dep2){
+                       // .......
+                   }
+               }
+
+               public class Department{}
+               #+end_example
+             - App.java
+               #+begin_example java
+               ApplicationContext context = new ClassPathXmlApplicationContexg(new String[]{"applicationContext.xml"});
+               // 由于User bean标识为autowire="byType"，因此其内部属性将通过全限定类名自动加载实例。
+               User user = context.getBean(User.class);
+               System.out.println(user.dep1 == user.dep2); // 返回true
+               #+end_example
          - no 不使用自动装配，必须使用ref元素定义
        - 注意：成员变量必须提供setter方法，否则无法实现。
-       - 示例
-       #+BEGIN_EXAMPLE java
-       @Repository("userDao")
-       public class UserDaoImpl implements UserDao{}
-       @Service("userService")
-       public class UserServiceImpl implements UserService{
-           @Autowired
-           private UserDao userDao;
-           public void setUserDao(UserDao userDao){
-               this.userDao = userDao;
-           }
-       }
-       @Controller("userController")
-       public class UserControllerImpl{
-           @Autowired
-           private UserService userService;
-           public void setUserService(UserService userService){
-               this.userService = userService;
-           }
-       }
-       #+END_EXAMPLE
-       #+BEGIN_EXAMPLE xml
-       <!-- applicationContext.xml -->
-       <bean id="userDao" class="UserDaoImpl" autowire="byType"/>
-       <bean id="userService" class="UserServiceImpl" autowire="byType"/>
-       <bean id="userController" class="UserControllerImpl" autowire="byType"/>
-       #+END_EXAMPLE
+    4) 通过 ~@Autowired~ 注解设置自动装配
+       - 匹配顺序:
+         1) 根据字段的类型进行匹配,若匹配得到多个结果则进入步骤2;
+         2) 以字段名作为id匹配Bean.
+       - 标注字段和属性方法，效果一致
+         #+begin_example java
+         public class User {
+             @Autowired
+             private Department dep1;
+             public void setDep1(Department dep){}
 
+             private Department dep2;
+             @Autowired
+             public void setDep2(Department dep){}
+         }
+         #+end_example
+       - 标注方法上,就是实参通过自动装配注入
+         #+begin_example java
+         @Autowired
+         public void invoke(User user, Department dept){}
+         #+end_example
+       - 标注构造函数,就是实参通过自动装配注入
+         #+begin_example java
+         public class User {
+             @Autowired
+             public User(Department dep1, Department dep2){}
+         }
+         #+end_example
+         - 注意: 若类仅含一个有参构造函数,那么可以省略Autowired.
+       - 匹配多个结果不抛异常，而是设置为null
+         1) 方式1—— ~@Autowired(required=false)~ required的默认值为true
+         2) 方式2
+            #+begin_example xml
+            <beans>
+                <bean class="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor">
+                    <property name="requiredParameterValue" value="false" />
+                </bean>
+            </beans>
+            #+end_example
+    5) 设置Bean不作为自动装配的材料
+       1) 方式1 ~autowire-candidate=false~
+          #+begin_example xml
+          <bean id="department" class="io.fsjohnhuang.Department" autowire-candidate="false"/>
+          #+end_example
+       2) 方式2 ~default-autowire-candidate="*Impl,*Dao">~ 采用Ant语法匹配作为自动装配材料的类型
+          #+begin_example xml
+          <beans default-autowire-candidate="*Impl">
+              <bean id="department" class="io.fsjohnhuang.Department"/>
+          <beans>
+          #+end_example
+
+**** Qualifier
+配置 ~@Autowired~ 当通过byType匹配多个Bean时，通过 ~@Qualifier("bean-id")~ 筛选出唯一符合的Bean。
+#+begin_example xml
+<beans>
+    <bean id="user" class="io.fsjohnhuang.User" autowire="constructor"/>
+    <!-- 同一个类型注册了两个不同的Bean -->
+    <bean id="dep" class="io.fsjohnhuang.Department"/>
+    <bean id="bumen" class="io.fsjohnhuang.Department"/>
+</beans>
+#+end_example
+#+begin_example java
+public class User {
+    @Autowired
+    @Qualifier("bumen")
+    private Department dep;
+    // setter
+
+    public User(Department dep){}
+}
+#+end_example
+User将通过构造函数的方式注入依赖性Department实例，但由于通过byType获取了dep和bumen两个Bean，所以就通过Qualifier缩窄到获取bumen这个Bean。
+
+**** Primary
+     当多个Bean类型相同,当通过Autowired自动注入时,则会注入通过Primary的Bean.
+     #+begin_example java
+     @Configuration
+     public class AppConfig {
+         @Bean
+         public TestBean bean1(){}
+         @Primary
+         @Bean
+         public TestBean bean2(){}
+     }
+
+     public class App {
+         @Autowired
+         TestBean bean; // 注入的是bean2
+     }
+     #+end_example
+
+**** Resource
+     JSR250规范的注解,和Autowired一样可以实行自动装配.默认根据字段名称进行Bean的装配,可通过属性 ~name~ 设置id进行匹配.
+     #+begin_example java
+     @Configuration
+     public class AppConfig {
+         @Bean
+         public TestBean bean1(){}
+         @Primary
+         @Bean
+         public TestBean bean2(){}
+     }
+
+     public class App {
+         @Resource
+         TestBean bean1; // 注入的是bean1
+         @Resource(name="bean2")
+         TestBean bean3; // 注入的是bean2
+     }
+     #+end_example
+
+**** Inject
+     JSR250规范的注解,和Autowired一样,并且支持Primary注解,但没有required属性.另外,需要加入依赖项:
+     #+begin_example xml
+     <dependency>
+         <groupId>javax.inject</groupId>
+         <artifactId>javax.inject</artifactId>
+         <version>1</version>
+     </dependency>
+     #+end_example
+
+**** Component和Bean的区别
+~@Bean~ 仅能应用于Method, 用于显示标记该方法将返回Bean；
+~@Component~ 仅能应用于Class, 用于Spring自定发现和注册该类为Bean.
+
+*** 加载外部资源和文件
+| 前缀       | 描述                           | 示例                                 |
+|------------+--------------------------------+--------------------------------------|
+| classpath: | 从类路径加载资源               | classpath:io/fsjohnhuang/config.xml  |
+| file:      | 从本地文件系统加载资源         | file:///path/to/config.xml           |
+| http:      | 加载http资源                   | http://www.domain/path/to/config.xml |
+| (none)     | 根据ApplicationContext加载资源 | /data/config.xml                     |
+
+Spring提供如下Resource的实现类加载外部资源：
+1) UrlResource
+2) ClassPathResource
+3) FileSystemResource
+4) ServletContextResource
+5) InputStreamResource
+6) ByteArrayResource
+
+**** 加载资源
+1) 通过ApplicationContext加载
+   #+begin_example java
+   ApplicationContext ctx = new ClasspathXmlApplicationContext(new String[] {"applicationConfig.xlm"});
+   Resource conf = ctx.getResource("file:///path/to/config.xml");
+   #+end_example
+2) 通过ResourceLoaderAware加载
+   - 定义Bean
+     #+begin_example java
+       public class User implements ResourceLoaderAware {
+           private ResourceLoader resourceLoader;
+           public void setResourceLoader(ResourceLoader loader) {
+               this.resourceLoader = loader;
+           }
+           private StringBuilder content = new StringBuilder();
+
+           @PostConstruct
+           public void init() {
+               Resource file = this.resourceLoader.getResource("file:///path/to/config.xml");
+               try(BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))){
+                   while (true) {
+                       String line = reader.readLine();
+                       if (line == null) break;
+                       content.append(line);
+                   }
+               }
+           }
+       }
+       #+end_example
+   - 注册Bean
+     #+begin_example xml
+     <beans>
+         <bean id="user" class="io.fsjohnhuang.User"/>
+     </beans>
+     #+end_example
+3) 主动注入外部资源
+   - 定义Bean
+     #+begin_example java
+       public class User {
+           private Resource file;
+           public void setResource(Resource file) {
+               this.file = file;
+           }
+
+           @PostConstruct
+           public void init() {
+               try(BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))){
+                   while (true) {
+                       String line = reader.readLine();
+                       if (line == null) break;
+                       content.append(line);
+                   }
+               }
+           }
+       }
+       #+end_example
+   - 注册Bean
+     #+begin_example xml
+     <beans>
+         <bean id="user" class="io.fsjohnhuang.User">
+             <property name="file">
+                 <value>file:///path/to/config.xml</value>
+             </property>
+         </bean>
+     </beans>
+     #+end_example
+
+*** 多线程上下文注入
+
+**** 通过ApplicationContextAware注入静态字段
+#+begin_example java
+@Component
+public class SpringContext implements ApplicationContextAware {
+    static ApplicationContext ctx;
+    @Override
+    public void setApplicationContext(ApplicationContext ctx) {
+        SpringContext.ctx = ctx;
+    }
+
+    public static <T> T getBean(Class<T> clazz) {
+        if (ctx == null) {
+            return null;
+        }
+
+        return ctx.getBean(clazz);
+    }
+}
+
+public class Task implements Runnable {
+    @Override
+    public void run() {
+        // 通过Spring加载Bean
+        MyBean bean = SpringContext.getBean(MyBean.class);
+    }
+}
+
+@Service
+public class App {
+   @Autowired
+   SpringContext springContext;
+
+   public static void main(String[] args) {
+       // ApplicationContext context = .....;
+       App app = context.getBean(App.class);
+       Thread t1 = new Thread(new Task());
+       t1.start();
+       t1.join();
+   }
+}
+#+end_example
+
+*** TODO 通过 ~@EnableAsync~ 和 ~@Async~ 简化线程池的使用
+*** @Profile
+    可根据当前环境(如prod,uat,sit等)动态激活和切换一系列组件的功能.
+    可以标识类和方法, 并且类的注解优先级高于方法注解的优先级. 默认启用 ~@Profile("default")~ 的配置.
+    示例-数据源设置:
+    1) 配置@Configuration
+       #+begin_example java
+       //@Profile({"test", "dev"}) 则为整个Configuration
+       @PropertySource("classpath:/path/to/config.properties")
+       @Configuration
+       public class AppConfig implements EmbeddedValueResolverAware {
+           StringValueResolver resolver;
+
+           @Override
+           public void setEmbeddedValueResolver(StringValueResolver resolver) {
+               this.resolver = resolver;
+           }
+
+           @Bean
+           public AllEnvBean allEnvBean{/**/}
+
+           @Profile("test")
+           public DataSource dataSourceTest(){
+               String driver = this.resolver("${jdbc.test.driver}");
+               String url = this.resolver("${jdbc.test.url}");
+               String username = this.resolver("${jdbc.test.username}");
+               String password = this.resolver("${jdbc.test.password}");
+
+               DriverManagerDataSource dataSource = new DriverManagerDataSource();
+               dataSource.setDriverClassName(driver);
+               dataSource.setUrl(url);
+               dataSource.setUsername(username);
+               dataSource.setPassword(password);
+
+               return dataSource;
+           }
+
+           @Profile("prod")
+           public DataSource dataSourceProd(){
+               String driver = this.resolver("${jdbc.prod.driver}");
+               String url = this.resolver("${jdbc.prod.url}");
+               String username = this.resolver("${jdbc.prod.username}");
+               String password = this.resolver("${jdbc.prod.password}");
+
+               DriverManagerDataSource dataSource = new DriverManagerDataSource();
+               dataSource.setDriverClassName(driver);
+               dataSource.setUrl(url);
+               dataSource.setUsername(username);
+               dataSource.setPassword(password);
+
+               return dataSource;
+           }
+       }
+       #+end_example
+    2) 配置@Component、@Service和@Repository等
+       #+begin_example java
+       @Profile({"test", "dev"})
+       @Component
+       public class MyBean{}
+       #+end_example
+    3) 激活切换方式
+       1) 启动时通过 ~-Dspring.profiles.active=test,dev~ 设置启用的环境即可
+       2) 通过代码方式激活
+          #+begin_example java
+          ApplicationContext ctx = new AnnotationConfigApplicationContext();
+          ctx.getEnvironment().setActiveProfiles("test", "dev"); // 启动test和dev两个环境
+          ctx.register(AppConfig.class);
+          ctx.refresh();
+          #+end_example
+
+*** TODO @EnableScheduling 注册Bean后处理器
 ** Spring AOP
 
 *** 术语
     - Aspect(切面), 封装用于横向插入系统功能(如日志、事任等)的类。
     - Joinpoint(链接点), 程序运行过程中的函数/方法调用。
-    - Pointcut(切入点), Aspect与程序运行过程中的交叉点，就是Aspect起作用的Joinpoint。
+    - Pointcut(切入点), 用于匹配Joinpoint的断言或表达式。
     - Advice(通知/增强处理), 在Pointcut中执行的具体的Aspect下的方法。
     - Target Object(目标对象), 被通知或被增强的对象，若采用动态AOP实现，那么Target Object即为一个被代理对象。
     - Proxy(代理), 将Advice应用到Target Object后，被动态创建出来的对象。
     - Weaving(织入), 将Advice应用到Target Object时生成Proxy的过程。
     - Introduction(引入), 为现有类型声明额外的方法和属性。
 
-*** 动态代理
+*** 代理类型
 1) JDK动态代理
    通过调用 ~java.lang.reflect.Proxy~ 的方法 ~newProxyInstance~ 来创建代理对象实现的。
    - 限制：
@@ -1320,8 +2129,9 @@
          }
      }
      #+END_EXAMPLE
-2) CGLIB动态代理
+2) CGLIB预编译生成代理
    CGLIB(Code Generation Library)是一个采用底层字节码技术的代码生成包，对指定的目标类生成一个子类，从而对子类实现增强。
+   - 注意: final类不可使用CGLIB来代理
    - 示例
      #+BEGIN_EXAMPLE java
      public class CglibProxy implements MethodInterceptor {
@@ -1362,32 +2172,74 @@
     5) org.aopalliance.intercept.IntroductionInterceptor - 引介通知
        在目标类中添加新的方法和属性，用于修改老版本的程序
 
-*** 通过 ~<bean class="org.springframework.aop.framework.ProxyFactoryBean">~ 构建AOP
-    ProxyFactoryBean作为FactoryBean的实现类，负责为其它Bean创建代理实例，作为Spring中床将AOP代理的基本方式。
-    - 参数
-      | 属性             | 说明                                                                |
-      |------------------+---------------------------------------------------------------------|
-      | target           | 目标对象                                                            |
-      | proxyInterfaces  | 代理实现的接口，若实现多个接口则使用<list><value></value>...</list> |
-      | proxyTargetClass | 是对类代理(底层使用GCLIB)，还是对接口代理(底层使用JDK Proxy)        |
-      | interceptorNames | 需要织入的目标Advice                                                |
-      | singleton        | 代理是否为单例，默认为true                                          |
-      | optimize         | true时底层采用GCLIB                                                 |
-    - 示例
-      #+BEGIN_EXAMPLE xml
-      <!-- applicationContext.xml -->
-      <context:component-scan base-package="org.proxy.experiment">
-      <!-- 然后通过 applicationContext.getBean("userDaoProxy") 即可获取代理实例 -->
-      <bean id="userDaoProxy" class="org.springframeowork.aop.framework.ProxyFactoryBean">
-          <property name="target" value="userDaoImpl"></property>
-          <property name="proxyInterfaces" value="UserDao"></property>
-          <property name="proxyTargetClass" value="true"></property>
-          <property name="interceptorNames" value="myAspect"></property>
-      </bean>
-      #+END_EXAMPLE
+*** 通过ProxyFactoryBean构建AOP
+~org.springframework.aop.framework.ProxyFactoryBean~ 作为FactoryBean的实现类，负责为其它Bean创建代理实例。
+- 参数
+  | 属性             | 说明                                                                |
+  |------------------+---------------------------------------------------------------------|
+  | target           | 目标对象                                                            |
+  | proxyInterfaces  | 代理实现的接口，若实现多个接口则使用<list><value></value>...</list> |
+  | proxyTargetClass | 是对类代理(底层使用GCLIB)，还是对接口代理(底层使用JDK Proxy)        |
+  | interceptorNames | 需要织入的目标Advice                                                |
+  | singleton        | 代理是否为单例，默认为true                                          |
+  | optimize         | true时底层采用GCLIB                                                 |
+- 示例
+  #+BEGIN_EXAMPLE xml
+  <!-- applicationContext.xml -->
+  <context:component-scan base-package="org.proxy.experiment">
+  <!-- 然后通过 applicationContext.getBean("userDaoProxy") 即可获取代理实例 -->
+  <bean id="userDaoProxy" class="org.springframeowork.aop.framework.ProxyFactoryBean">
+      <property name="target" value="userDaoImpl"></property>
+      <property name="proxyInterfaces" value="UserDao"></property>
+      <property name="proxyTargetClass" value="true"></property>
+      <property name="interceptorNames" value="myAspect"></property>
+  </bean>
+  #+END_EXAMPLE
 
 *** 通过AspectJ构建AOP
-    AspectJ是一个基于Java的AOP框架，Spring2.0+引入对AspectJ的支持。
+AspectJ(https://www.eclipse.org/aspectj/)是一个基于Java的AOP框架，支持JDK动态代理和CGLIB代理。
+Spring2.0+引入AspectJ作为默认的AOP框架。
+引入依赖项spring-aop和spring-aspects.
+
+**** TODO Pointcut Designator
+| 表达式      | 描述                                         |
+|-------------+----------------------------------------------+
+| execution   | 匹配方法执行的连接点                         |
+| within      | 匹配特定类的所有方法                       |
+| this        | 限定匹配特定连接点的bean引用是指定类型的实例 |
+| target      | 限定匹配特定连接点的目标对象是指定类型的实例 |
+| args        | 限定匹配特定连接点的参数是指定类型的实例     |
+| @target     | 限定匹配特定连接点的目标类型具有指定注解     |
+| @args       | 限定匹配特定连接点的参数类型具有指定注解     |
+| @within     | 限定匹配特定类型的连接点具有指定注解         |
+| @annotation |                                              |
+
+1) execution
+   - 语法： ~execution(modifier-pattern? ret-type-pattern declaring-type-pattern? name-pattern(param-pattern) throws-pattern?)~
+   - 注意：当匹配为接口时，会匹配其下所有实例的方法
+   - 通配符
+     - ~*~ 表示匹配任意字符
+     - ~..~ 表示匹配任意形参
+   - 示例
+     1) 匹配位于不同包的某类的所有方法 ~execution(* io.fsjohnhuang.TaskInOtherPackage.*(..))~
+     2) 匹配位于相同包的某类的所有方法 ~execution(* TaskInTheSamePackage.*(..))~
+     3) 匹配位于相同包，指定返回值类型和第一个形参类型的公开方法 ~execution(public User TaskInTheSamePackage.*(String,..)~
+     4) 匹配位于不同包下所有子包下所有类型的某个方法 ~execution(* io..*.execute(..))~
+2) within
+   - 示例
+     1) 匹配位于某包下的类型的所有方法 ~within(io.fsjohnhuang.*)~
+     2) 匹配位于某包下的所有子包的下所有类型的所有方法 ~within(io..*)~
+     3) 匹配位于当前包下某类型的所有方法 ~within(TaskInTheSamePackage)~
+     4) 匹配位于其他包下某类型的所有方法 ~within(io.fsjohnhuang.TaskInOtherPackage)~
+     5) 匹配接口的所有实现类的所有方法 ~within(io.fsjohnhuang.ITask+)~
+3) bean
+   - 作用：匹配Bean ID
+   - 示例
+     1) 匹配Bean ID以Manager结尾的Bean的所有方法 ~bean(*Manager)~
+4) 逻辑运算符
+   1) ~||~ 或
+   2) ~&&~ 与
+   3) ~!~ 非
 
 **** 基于XML声明式
      #+BEGIN_EXAMPLE
@@ -1398,13 +2250,15 @@
           - <aop:advisor>, 通知器
           - <aop:aspect>
             - attributes
+              - id aop名称
+              - ref Aspect的权限定类名
             - child-element
               - <aop:pointcut>, 切入点
               - <aop:before>, 前置通知
-              - <aop:returning>, 后置通知
+              - <aop:returning>, 后置通知,正常返回时执行
               - <aop:around>, 环绕通知
-              - <aop:throwing>, 异常通知
-              - <aop:after>, 最终通知
+              - <aop:throwing>, 异常通知,异常结束时执行
+              - <aop:after>, 最终通知,正常或异常结束都会执行.在returning和throwing切面前执行.
               - <aop:declare-parents>, 引介通知
      #+END_EXAMPLE
 
@@ -1453,7 +2307,7 @@
          public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
              // 前置
 
-             Object ret = proceedingJoinPoint.procee();
+             Object ret = proceedingJoinPoint.procced(); // 调用被代理的方法
 
              // 后置
 
@@ -1472,19 +2326,21 @@
      #+BEGIN_EXAMPLE xml
      <!-- applicationContext.xml -->
      <context:component-scan base-package="org.john.test"/>
-     <!-- 启动基于注解的AspectJ支持 -->
+     <!-- 启动基于注解的AspectJ支持.
+          若采用Java Config方法,则在@Configuration标识的类上追加@EnableAspectJAutoProxy.
+     -->
      <aop:aspectj-autoproxy>
      #+END_EXAMPLE
      #+BEGIN_EXAMPLE java
-     @Component
-     @Aspect
+     @Aspect // 告知Spring容器这是一个切面Bean,不是普通的Bean
+     @Component // 注册Bean
      public class MyAspect{
          // 通过一个私有方法定义Pointcut表达式
          // 而Pointcut的id为方法函数名加形参列表
          @Pointcut("execution(* org.john.*.*(..))")
          private void myPointCut(){}
 
-         @Before("myPointCut()")
+         @Before("myPointCut()") // 也可直接写AspectJ表达式
          public void myBefore(JoinPoint joinPoint){
              // 目标对象
              Object targetObject = joinPoint.getTarget();
@@ -1504,14 +2360,20 @@
          public Object myAround(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
              // 前置
 
-             Object ret = proceedingJoinPoint.procee();
+             Object ret = proceedingJoinPoint.procced();
 
              // 后置
 
              return ret;
          }
 
-         @Throwing(value="myPointCut()", throwing="e")
+         /* throwing指定的参数的类型，为匹配的异常类型父类。
+          * 参数类型为Throwable 或 不设置throwing，表示匹配所有异常类；
+          * 参数类型为CustomException，表示匹配CustomException及其派生类。
+          * 注意：AfterThrowing切面是捕获异常后，再次抛出。
+          ×       若要吞丢异常则使用Around处理。
+          */
+         @AfterThrowing(value="myPointCut()", throwing="e")
          public void myThrowing(JoinPoint joinPoint, Throwable e){
          }
 
@@ -1521,8 +2383,541 @@
      }
      #+END_EXAMPLE
 
+**** Aspect执行顺序
+1) 通过 ~@Order~ 设置执行顺序
+   #+begin_example java
+   @Order(1)
+   @Aspect
+   public class Aspect1 {
+       @Before("within(Task)")
+       public void before(){
+           System.out.println("Aspect1");
+       }
+   }
+   @Order(0)
+   @Aspect
+   public class Aspect2 {
+       @Before("within(Task)")
+       public void before(){
+           System.out.println("Aspect2");
+       }
+   }
+   // 执行顺序 Aspect2 -> Aspect1
+   #+end_example
+2) 通过继承 ~Ordered~ 接口的 ~public int getOrder()~ 方法返回执行顺序
+   #+begin_example java
+   @Aspect
+   public class Aspect1 implements Ordered {
+       @Override
+       public int getOrder() {
+           return 1;
+       }
+
+       @Before("within(Task)")
+       public void before(){
+           System.out.println("Aspect1");
+       }
+   }
+   @Aspect
+   public class Aspect2 implements Ordered {
+       @Override
+       public int getOrder() {
+           return 1;
+       }
+
+       @Before("within(Task)")
+       public void before(){
+           System.out.println("Aspect2");
+       }
+   }
+   // 执行顺序 Aspect2 -> Aspect1
+   #+end_example
+
+**** TODO JoinPoint API
+     #+begin_example java
+     // 获取实参
+     Object[] args = joinPoint.getArgs();
+     // 获取方法名
+     String methodName = joinPoint.getSignature().getName();
+     #+end_example
+
+** TODO 事务处理
+
+*** 概要
+事务特点:
+1) 原子性, 事务内的一系列操作要么都成功,要么都失败.
+2) 一致性, 一旦事务结束,系统必须保证业务模型处于一致的状态.
+3) 隔离性, 多个事务并行执行时,应将它们对状态的操作隔离起来.
+4) 持久性, 一旦事务结束,状态结果将被持久化.
+
+**** 传播行为
+当事物方法被另一个事务方法调用时,必须指定事务应该如何传播(在现有事务中运行,或创建新事务运行)
+Spring定义7种事务传播行为
+| 值                        | 含义                                                                                           |
+|---------------------------+------------------------------------------------------------------------------------------------|
+| PROPAGATION_REQUIRED      | 若存在活动事务,则在当前事务运行；否则创建新事务运行                                            |
+| PROPAGATION_SUPPORTS      | 若存在活动事务,则在当前事务运行；否则直接运行                                                  |
+| PROPAGATION_MANDATORY     | 若存在活动事务,则在当前事务运行；否则抛出异常                                                  |
+| PROPAGATION_REQUIRED_NEW  | 无论如何均创建新事务运行,若存在活动事务则将当前事务挂起                                        |
+| PROPAGATION_NOT_SUPPORTED | 若存在活动事务则挂起当前事务,再运行                                                            |
+| PROPAGATION_NEVER         | 若存在活动事务则挂起当前事务,则直接抛出异常                                                    |
+| PROPAGATION_NEST          | 若存在活动事物在创建嵌套事务(独立于当前事务执行提交和回滚)；否则创建新事务运行(逻辑由厂商决定) |
+
+**** 隔离级别
+| 级别                          | 说明                                                                                                                |
+|-------------------------------+---------------------------------------------------------------------------------------------------------------------|
+| 脏读(dirty read)              | 事务A读取了另个事务B改写但尚未提交的数据.若事务B回滚,那么事务A读取的数据将为无效数据.                               |
+| 不可重复读(unrepeatable read) | 事务A在存续期间多次执行相同的查询操作,但获取的数据不尽相同.原因是事务B在此期间修改了数据并提交事务.                 |
+| 幻读(phantom read)            | 事务A在存续期间多次执行相同的查询记录数量操作,但获取的数据不尽相同.原因是事务B在此期间新增或删除数据记录并提交事务. |
+
+Spring定义5种事务隔离级别
+| 值                         | 含义                                                      |
+|----------------------------+-----------------------------------------------------------|
+| ISOLATION_DEFAULT          | 使用数据源默认的隔离级别                                  |
+| ISOLATION_READ_UNCOMMITTED | 最低的隔离级别,会出现脏读,不可重复读和幻读                |
+| ISOLATION_READ_COMMITTED   | 仅允许读取已提交的数据,会出现不可重复读和幻读             |
+| ISOLATION_REPEATABLE_READ  | 会出现幻读                                                |
+| ISOLATION_SERIALIZABLE     | 最好的隔离级别,完全服从ACID的隔离级别,性能最低的隔离级别.不会出现脏读,不可重复读和幻读问题 |
+
+*** Spring提供的事务管理接口及实现
+Spring提供的事务管理接口(SPI)
+#+begin_example java
+public interface PlatformTransactionManger {
+   TransactionStatus getTransaction(TransactionDefinition defintion) throws TransactionException;
+   void commit(TransactionStatus status) throws TransactionException;
+   // 默认情况下,抛出RuntimeException派生类和Error会触发回滚；而跑出checked异常则不会触发回滚.
+   // 通过配置可以指定抛出哪些异常(包含checked异常)会触发或不触发异常.
+   // 调用事务管理器实例的setRollbackOnly(),那么该事务仅能执行回滚操作,无法执行提交操作.
+   void rollback(TransactionStatus status) throws TransactionException;
+}
+
+public interface TransactionDefinition {
+   int getPropagationBehavior(); // 事务传播行为
+   int getIsolationLevel(); // 事务隔离级别
+   // 事务超时. 若超时则会触发回滚操作. 默认为具体的事务管理器的超时设置.
+   // 仅对 PROPAGATION_REQUIRED, PROPAGATION_REQUIRED_NEW, PROPAGATION_NEST有效.
+   int getTimeout();
+   // 只读状态. 若对数据库仅进行读取操作,那么将该事务设置为只读则可让数据库采用特定的优化策略.
+   // 为true时及仅对 PROPAGATION_REQUIRED, PROPAGATION_REQUIRED_NEW, PROPAGATION_NEST有效.
+   boolean isReadOnly();
+}
+
+public interface TransactionStatus {
+    hasSavepoint();
+    isRollback();
+    isCompleted();
+}
+#+end_example
+
+各数据源厂商提供的实现
+1) JDBC: DataSourceTransactionManager
+2) Hibernate: HibernateTransactionManager
+3) JPA: JpaTransactionManager
+4) JTA: JtaTransactionManager
+5) JMS: JMSTransactionManager, 作为MQ的事务管理器.
+
+*** 本地事务
+调用链:
+|        | Spring容器         | Spring容器                             | Spring容器                  |        |
+|--------+--------------------+----------------------------------------+-----------------------------+--------|
+| 调用者 | Spring事务管理接口 | Spring事务管理实现(TransactionManager) | 资源管理器(ResourceManager) | 数据源 |
+
+一个事务管理器对应个数据源, 因此会出现操作多数据源时,状态不一致的问题.
+如:
+应用需要连接数据库和MQ, 那么需要创建一个DataSourceTransactionManager和一个JMSTransactionManager来分别进行事务管理.
+访问流程:
+1) start message transaction
+2) receive message
+3) start database transaction
+4) update database
+5) commit database transaction
+6) throws exception
+7) commit message transaction
+
+由于步骤6中数据库事务已经成功提交, 而MQ的事务却被回滚, 因此两者状态不一致.
+
+*** 全局事务
+一个事务管理器对应多个数据源, 用于在分布式系统中解决状态不一致的问题.
+
+**** JTA(Java Transaction Manager)
+XA: 作为资源管理器和事务管理器的接口规范,由Tuxedo提出并由X/Open组织维护.
+XA规范定义:
+1) TransactionManager: 通过TransactionManager可以管理多个ResourceManager
+2) XAResource: 数据源封装的接口
+3) 两段式提交: 多数据源事务提交的机制, 即整个业务流程完成时进行第一阶段提交, 然后在第二阶段提交前会检查之前是否抛出异常或第一阶段是否有提交, 若为否则对所有事务进行回滚.
+
+JTA则为XA在Java上的实现.
+1) TransactionManager: 包含常用方法(begin,commmit,rollback)
+2) XAResource: 通过session进行事务管理
+3) XID: 每个事务分配特定的XID
+
+缺点:
+1) 事务时间较长,锁数据时间较长
+2) 低性能,低吞吐量
+
+***** 方式1:外部容器提供JTA事务支持
+通过JNDI调用外部容器的JTA事务管理器实例.
+
+|        | 应用服务器         | 应用服务器 | 应用服务器    | 应用服务器                  |        |
+|--------+--------------------+------------+---------------+-----------------------------+--------|
+|        | Spring容器         | Spring容器 |               |                             |        |
+|--------+--------------------+------------+---------------+-----------------------------+--------|
+| 调用者 | Spring事务管理接口 | Spring JTA | JTA资源管理器 | 资源管理器(ResourceManager) | 数据源 |
+
+***** 方式2:通过JTA类库提供JTA事务支持
+|        | Spring容器         | Spring容器 | Spring容器    | Spring容器                  |        |
+|--------+--------------------+------------+---------------+-----------------------------+--------|
+|        |                    |            | JTA管理器     | JTA管理器                   |        |
+|--------+--------------------+------------+---------------+-----------------------------+--------|
+| 调用者 | Spring事务管理接口 | Spring JTA | JTA资源管理器 | 资源管理器(ResourceManager) | 数据源 |
+
+JTA类库:atomikos
+
+*** 命令式事务管理
+1) TransactionTemplate
+   #+begin_example xml
+   <bean id="dataSource" class="......."/>
+   <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+       <property name="dataSource" ref="dataSource"/>
+   </bean>
+   <bean id="transactionTemplate" class="org.springframework.transaction.support.TransactionTemplate">
+       <property name="transactionManager" ref="transactionManager"/>
+       <property name="isolationLevelName" value="ISOLATION_DEFAULT"/>
+       <property name="propagationBehaviorName" value="PROPAGATION_REQUIRED"/>
+   </bean>
+   #+end_example
+
+   #+begin_example java
+   @Service
+   class UserService {
+       public void insert(String sql) throws Exception {
+           this.dao.insertSql(sql);
+       }
+   }
+
+   @Service
+   class Service {
+       @Autowired
+       UserService service;
+
+       public void execute(){
+           TransactionTemplate tt = new TransactionTemplate();
+           tt.execute(
+               new TransactionWithoutResult(){
+                   protected void doTransactionWithoutResult(TransactionStatus status){
+                       try {
+                           service.insert("insert1");
+                           service.insert("insert2");
+                       }
+                       catch (Exception e){
+                           // Exception不会触发回滚,需要调用setRollbackOnly才会触发
+                           status.setRollbackOnly();
+                       }
+                   }
+               }
+           );
+       }
+   #+end_example
+2) PlatformTransactionManager
+   #+begin_example java
+   DataSourceTransactionManager dataSourceTransactionManager = new DataSourceTransactionManager(); //定义一个某个框架平台的事务管理器，如JDBC，Hibernate的
+   dataSourceTransactionManager.setDataSource(this.getJdbcTemplate().getDataSource()); //设置数据源
+   DefaultTransactionDefinition transDef = new DefaultTransactionDefinition(); //定义事务属性
+   transDef.setPropagationBehavior(DefaultTransactionDefinition.PROPAGATION_REQUIRED); //设置传播行为属性
+   TransactionStatus status = dataSourceTransactionManager.getTransaction(transDef); //获得事务状态
+   try{
+        //数据库操作
+        dataSourceTransactionManager.commit(status); //提交
+   catch(Exception e){
+        dataSourceTransactionManager.rollback(status); //回滚
+   }
+   #+end_example
+
+*** 声明式事务管理
+
+AnnotationTransactionAspect 可用于织入任何对象的任何方法，包括非公开方法和非Spring IOC容器管理的对象。
+这样我们就可以通过 ~@Transactional~ 标注方法，从而实现事务处理。
+启用方式
+1) 方式1： 在 ~@Configuration~ 上附加 ~@EnableLoadTimeWeaving~
+   #+begin_example java
+   @EnableTransactionManagement(mode=AdviceMode.ASPECTJ) // mode可设置为 AdviceMode.PROXY(默认值)、AdviceMode.ASPECTJ
+   @EnableLoadTimeWeaving
+   @Configuration
+   public class AppConfig {}
+   #+end_example
+2) 方式2： ~<context:load-time-weaver />~
+   #+begin_example xml
+   <beans>
+      <context:load-time-weaver />
+      <tx:annotation-driven mode="aspectj" />
+   </beans>
+   #+end_example
+
+**** 基于注解 ~@Transactional~
+1) 在配置文件中启用注解方式
+   #+begin_example xml
+   <!--
+   Java Config方式则需要添加@EnableTransactionManager
+   -->
+   <tx:annotation-driven transaction-manager="transactionManager"/>
+   #+end_example
+   - 注册配置事务管理器
+     #+begin_example java
+     @Configuration
+     public class AppConfig {
+         @Bean
+         public PlatformTransactionManager transactionManager(DataSource dataSource) {
+             // JDBC、MyBatis等都有自己的事务管理器，按实际设置即可
+             return new DataSourceTransactionManager(dataSource);
+         }
+     }
+     #+end_example
+2) 使用
+   #+begin_example java
+   /* rollbackFor缺省为只要抛出RuntimeException就会回滚
+    */
+   @Transactional(rollbackFor=Exception.class)
+   public void insert(String sql) throws Exception {
+       this.dao.insertSql(sql);
+   }
+   #+end_example
+
+**** 基于tx和aop命名空间的XML
+
+** 通过 FactoryBean 注册Bean
+#+begin_example java
+public interface FactoryBean<T> {
+    // 其返回值作为Bean注册到容器中
+    T getObject() throws Exception;
+    // 返回Bean的类型
+    Class<?> getObjectType();
+    // Bean的作用域是否为单例
+    boolean isSingleton();
+}
+#+end_example
+
+示例
+#+begin_example java
+public class ColorFactoryBean implements FactoryBean<Color> {
+    @Override
+    public Color getObject() throws Exception {
+        return new Color();
+    }
+    @Override
+    public Class<?> getObjectType() {
+        return Color.class;
+    }
+    @Override
+    public boolean isSingleton() {
+        return true;
+    }
+}
+
+@Configuration
+public class AppConfig {
+    @Bean
+    public ColorFactoryBean colorFactoryBean(){
+        return new ColorFactoryBean();
+    }
+}
+
+Color color = (Color)ctx.getBean("colorFactoryBean");
+ColorFactoryBean colorFactoryBean = (ColorFactoryBean)ctx.getBean("&colorFactoryBean");
+#+end_example
+
+** ApplicationContext API
+#+begin_example java
+ConfigurationEnvironment env = ctx.getEnvironment(); // 获取Spring IOC的运行的环境变量
+String os = env.getProperty("os.name");  // 获取操作系统名称
+
+// 传递实参创建Bean实例, 注意Bean的Scope必须设置为prototype
+Object bean = ctx.getBean("BeanId", constructor_arg1, constructor_arg2...);
+
+ctx.close(); // 关闭容器,容器中的Bean随之销毁
+#+end_example
+** ApplicationListener
+用于监听容器中发布的事件，实现事件驱动开发模型。
+
+订阅事件
+#+begin_example java
+// 当Spring事件触发时，就会执行事件订阅方法
+@Component
+public class MyApplicationListener implements ApplicationListener<ApplicaitonEvent> {
+    @Override
+    public void onApplicationEvent(ApplicationEvent event) {
+        // do something
+    }
+}
+#+end_example
+
+ApplicationEvent的子类
+org.springframework.context.event.ContextRefreshedEvent 容器刷新完成事件(所有Bean已准备好)
+org.springframework.context.event.ContextClosedEvent 容器关闭事件
+org.springframework.context.event.ContextStartedEvent 容器创建完成事件
+org.springframework.context.event.ContextStoppedEvent 容器停止事件
+
+发布事件
+#+begin_example java
+ApplicationContext ctx = new AnnotationConfigApplicationContext(AppConfig.class);
+ctx.publishEvent(new ApplicationEvent("custom event") {});
+#+end_example
+** Spel
+Spring Expression Language, 可用在 ~@Value~ 注解、XML配置和代码块中。
+
+
+*** 基本语法
+#+begin_example bash
+# 字符串
+'Hello Spel'
+
+# 方法调用
+'Hello Spel'.concat('!')
+
+# 算术运算(^为指数幂)
++,-,*,/,%,^
+
+# 关系运算符,XML中则为eq,ne,lt,le,gt,ge
+==,!=,<,<=,>,>=
+
+# 逻辑运算符
+&&,||,!
+
+# 三元运算
+2 > 1 ? 1 : 2
+
+# Elvis运算符
+null ?: 'default value'
+
+# 正则全匹配，返回boolean值
+'Hello Spel' matches '[A-Z\\s]+'
+
+# 静态方法或属性, T()调用静态类并返回Class Object，然后就可以调用静态方法和属性了
+T(java.lang.Math).PI
+
+# Optional chain
+name?.length
+name?.size()
+
+# 直接使用new/insance of
+# 注意：仅java.lang下的类可以省略包名，其它必须为全限定类名
+new String('hello world')
+
+# 集合操作
+# 定义java.util.Collections.UnmodifiableList
+{1,2,3}
+# 访问字面量列表的元素
+{1,2,3}[0]
+# 访问外部传入的列表(命名为coll)的元素
+#coll[1]
+# 向外部传入的列表(命名为coll)添加元素
+#coll[1] = 3
+# filter表达式，表达式中#this指向当前元素, 表达式返回true则保留该元素
+#coll.?[#this>2]
+# map表达式
+#coll.![name]
+
+# 映射操作
+# 访问外部传入的映射(命名为kvs)的元素
+#kvs['name']
+# filter表达式，表达式中#this指向当前元素， 表达式返回true则保留该元素
+#kvs.?[#this['name']=='john']
+#+end_example
+
+*** 默认上下文运行Spel表达式
+由于没有与具体的Spring IOC容器关联，因此无法调用Spring IOC容器中的Bean。
+#+begin_example java
+ExpressionParser exprParser = new SpelEpressionParser();
+Expression expr = exprParser.parseExpression("1+1");
+Integer result = expr.getValue(Integer.class);
+#+end_example
+
+*** 创建特定Bean的上下文运行Spel表达式
+根对象：作为上下文的实例，一个ExpressionContext仅能有0到1个根对象。
+Spel中可直接访问实例的以下成员：
+1) 字段(包含非公开)
+   #+begin_example bash
+   # 访问字段
+   filed1
+
+   # 对字段执行其他操作
+   filed1 == 'test'
+
+   # List字段
+   users[0]
+
+   # Map字段
+   userInfo['name']
+   #+end_example
+
+#+begin_example java
+public class RootBean{
+    private String field1;
+}
+
+// 创建上下文性能消耗高
+StandardEvaluationContext ctx = new StandardEvaluationContext(RootBean.class);
+// 或者后期通过setRootObject设置，如
+// StandardEvaluationContext ctx = new StandardEvaluationContext();
+// ctx.setRootObject(RootBean.class);
+
+// 向上下文添加变量
+RootBean otherBean = new RootBean();
+ctx.setVariable("otherBean", otherBean);
+
+ExpressionParser exprParser = new SpelEpressionParser();
+Expression expr = exprParser.parseExpression("field1 == #otherBean.field1");
+Boolean result = expr.getValue(ctx, Boolean.class);
+#+end_example
+
+*** 创建Spring IOC的上下文运行Spel表达式
+#+begin_example java
+ApplicationContext appCtx = new AnnotationConfigApplicationContext(AppConfig.class);
+
+// 创建根对象
+BeanExpressionContext rootObject = new BeanExpressionContext(appCtx.getBeanFactory(), null);
+// 创建上下文
+StandardEvaluationContext ctx = new StandardEvaluationContext();
+ctx.setBeanResolver(new BeanFactoryResolver(appCtx.getBeanFactory());
+ctx.addPropertyAccessor(new BeanExpressionContextAccessor());
+
+ExpressionParser exprParser = new SpelEpressionParser();
+Expression expr = exprParser.parseExpression("bean1.getValue() == 'test'");
+Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
+#+end_example
+
 * Spring Boot
   通过[[https://start.spring.io/][Spring Initializr]]初始化项目。
+
+** Starter Template
+   #+begin_example xml
+   <!-- Parent pom is mandatory to control versions of child dependencies -->
+   <parent>
+       <groupId>org.springframework.boot</groupId>
+       <artifactId>spring-boot-starter-parent</artifactId>
+       <version>2.1.6.RELEASE</version>
+       <relativePath />
+   </parent>
+
+   <!-- Spring web brings all required dependencies to build web application. -->
+   <dependency>
+       <groupId>org.springframework.boot</groupId>
+       <artifactId>spring-boot-starter-web</artifactId>
+   </dependency>
+   #+end_example
+   Spring Boot Starter Template是功能相关的一系列依赖的集合， ~spring-boot-starter-parent~ 用于
+
+** 打包非内置Web容器的Spring Boot应用
+1) 修改pom.xml
+   #+begin_example xml
+   <packaging>war</packaging>
+   <build>
+       <plugins>
+           <plugin>
+
+           </plugin>
+       </plugins>
+   </build>
+   #+end_example
 
 * TODO QA
 
@@ -1552,9 +2947,6 @@
    https://www.cnblogs.com/fsjohnhuang/p/4280369.html
 
 ** TODO 性能容量评估？
-
-
-
 
  IOC容器设计原理
  AOP设计原理
@@ -2822,3 +4214,240 @@ public class AccessFilter extends ZuulFilter {
       #+end_example
 
 **** 过滤器详解
+* TODO Servlet3.0
+属于JSR315规范，需要Tomcat7+支持。
+可通过注解注册servlet、filter和listener,而不用使用web.xml来注册。
+
+** 示例
+#+begin_example java
+@WebServlet("/hello")
+public clas HelloServlet extends HttpServlet {
+    @Override
+    public void doGet(HttpServletRequest req, HttpServletResponse resp) {
+        resp.getWriter().write("hello...");
+    }
+}
+#+end_example
+
+** 共享库和运行时插件机制(Shared libraries/ Runtimes pluggability)
+1) Servlet容器启动时会读取每个JAR包下 ~META-INF/services/javax.servlet.ServletContainerInitializer~ (源码中位于src/META-INF/services/javax.servlet.ServletContainerInitializer) 的内容；
+2) 其内容为javax.servlet.ServletContainerInitializer实现类的全限定类名；
+3) 然后就会运行实现类。
+
+#+begin_example java
+// Servlet容器启动时会将value属性指定的类的子类、子接口加载过来
+@HandlesTypes(value={})
+public class MyServletContainerInitializer implements ServletContainerInitializer {
+    /* @param arg0 @HandlesTyeps引入的类及子类、子接口
+     * @param arg1 代表当前Web应用的ServletContext
+     */
+    public void onStartup(Set<Class<?>> arg0, ServletContext arg1)
+}
+#+end_example
+* Thymeleaf
+https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#creating-and-configuring-the-template-engine
+
+** 优点和缺点
+1. 由于是通过在HTML标签上附加额外属性实现动态数据绑定，因此浏览器直接解析thymeleaf模板时会忽略thymeleaf的附加属性，从而以普通HTML文件的方式渲染页面；
+2. 可直接套用JSTL、OGNL表达式。
+
+** 引入依赖
+#+begin_example xml
+<!-- Spring Boot项目 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
+
+<!-- 非Spring Boot项目 -->
+<dependency>
+    <groupId>org.thymeleaf</groupId>
+    <artifactId>thymeleaf</artifactId>
+    <version>3.0.0.RELEASE</version>
+</dependency>
+#+end_example
+
+thymeleaf模板默认路径为 ~src/main/resources/templates/~
+
+** 语法
+#+begin_example html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+    <!--/*@thymesVar id="name" type="java.lang.String"*/-->
+    <p th:text="'hi, ' + ${name} + '!'">Default Message</p>
+</body>
+#+end_example
+1. 获取变量值 ~${}~ (用法和OGNL一致)
+2. with块的取值 ~*{}~
+   #+begin_example html
+   <ul th:object="${session.user}">
+       <li th:text="*{name}">Name</li> <!-- 等价于 ${session.user.name} -->
+       <li th:text="*{description}">Description</li> <!-- 等价于 ${session.user.description} -->
+   </ul>
+   #+end_example
+3. 链接表达式 ~@{}~ (配合 ~th:href~, ~th:src~ 使用)
+   #+begin_example html
+   <!-- /order/detail?orderId=123 -->
+   <a href="details.html" th:href="@{/order/detail(orderId=${o.id})}">view</a>
+   #+end_example
+4. 字符串拼接
+   #+begin_example html
+   <div th:text="|Welcome to our application, ${user.name}!|">Default Message</div>
+   #+end_example
+5. 条件判断
+   1) if 只有条件成立才会显示元素
+      #+begin_example html
+      <a th:text="${session.user ? 'Logout' : 'Login'}">Login</a>
+      <a th:if="${session.user == null}">Login</a>
+      <a th:unless="${session.user != null}">Login</a>
+      #+end_example
+   2) switch
+      #+begin_example html
+      <div th:switch="${user.role}">
+          <p th:case="'admin'">Admin</p>
+          <p th:case="#{global.role}">Yes</p>
+          <p th:case="*">Default Value</p>
+      </div>
+      #+end_example
+6. 循环 ~th:each~
+   #+begin_example html
+   <tr th:each="emp, meta:${emps}">
+       <td th:text="${emp.name}">Name</td>
+       <td th:text="${emp.description}">Description</td>
+   </tr>
+   #+end_example
+   - 可以遍历如下类型
+     - Iterable
+     - Enumeration
+     - Iterator
+     - Map
+     - Array
+   - meta包含循环属性
+     - int index，从0开始的下标
+     - int count，元素个数
+     - int size，元素个数
+     - Object current，当前元素
+     - boolean even
+     - boolean odd
+     - boolean first
+     - boolean last
+7. JS inline
+   #+begin_example html
+   <script th:inline="javascript">
+       const user = /*[[${user}]]*/ {};
+       const age = /*[[${age}]]*/ 20;
+       console.log(user);
+       console.log(age);
+   </script>
+   #+end_example
+
+** 常用属性
+| 属性       | 描述          | 示例                                          |
+|------------+---------------+-----------------------------------------------|
+| th:id      | 替换id        |                                               |
+| th:text    | 替换innerText |                                               |
+| th:utext   | 替换innerHTML |                                               |
+| th:object  | with块        |                                               |
+| th:value   | 替换value     |                                               |
+| th:with    | 变量赋值运算  | <div th:with="isEven=${prodStat.count}%2==0"> |
+| th:style   | 设置样式      |                                               |
+| th:onclick | 点击事件      | th:onclick="getCollect()"                     |
+| th:each    | 循环          | th:each="name,age:${users}"                   |
+| th:if      | 条件判断      |                                               |
+| th:unless  | 条件判断      |                                               |
+
+** 内置Utility对象
+以 ~#~ 为前缀调用Thymeleaf内置Utility对象。
+#+begin_example html
+<!-- #dates  -->
+#dates.format(date, 'dd/MM/yyyy')
+#dates.arrayFormat(datesArray, 'dd/MM/yyyy')
+#dates.createNow()
+#dates.createToday()
+
+<!-- #strings  -->
+#strings.isEmpty(name)
+#strings.arrayIsEmpty(nameArray)
+#strings.listIsEmpty(nameList)
+#strings.setIsEmpty(nameSet)
+#strings.startsWith(name, 'Don')
+#strings.endsWith(name, 'Don')
+#strings.length(name)
+
+<!-- #calendars -->
+<!-- #numbers -->
+<!-- #bools -->
+<!-- #lists -->
+<!-- #arrays -->
+<!-- #sets -->
+<!-- #maps -->
+#+end_example
+
+** 环境相关对象
+| 对象            | 描述                                         |
+|-----------------+----------------------------------------------|
+| #ctx            | Thymeleaf自己的Context对象                   |
+| #request        | 若为Web程序，可以获取HttpServletRequest对象  |
+| #response       | 若为Web程序，可以获取HttpServletResponse对象 |
+| #session        | 若为Web程序，可以获取HttpSession对象         |
+| #servletContext | 若为Web程序，可以获取HttpServletContext对象  |
+
+** Spring集成
+
+*** pom.xml
+ #+begin_example xml
+ <dependency>
+     <groupId>org.thymeleaf</groupId>
+     <artifactId>thymeleaf-spring4</artifactId>
+     <version>3.0.0.RELEASE</version>
+ </dependency>
+ #+end_example
+
+*** ApplicationContext.xml
+#+begin_example xml
+<bean id="templateEngine" class="org.thymeleaf.spring4.SpringTemplateEngine">
+    <property name="templateResolvers">
+        <set>
+            <ref bean="templateResolver" />
+        </set>
+    </property>
+</bean>
+<bean id="templateResolver" class="org.thymeleaf.spring4.templateresolver.SpringResourceTemplateResolver">
+    <property name="prefix" value="/WEB-INF/templates/" />
+    <property name="suffix" value=".html" />
+    <property name="templateMode" value="HTML" />
+</bean>
+#+end_example
+
+*** 代码调用
+#+begin_example java
+@Component
+public class Service {
+    @Autowired
+    SpringTemplateEngine engine;
+
+    public void execute() {
+        Context context = new Context();
+        context.setVariable("name", "john");
+        context.setVariable("location", "foshan");
+        engine.process("template.html", context);
+    }
+}
+#+end_example
+
+** Spring Boot集成
+Spring Boot1.4+支持Thymeleaf3，支持非闭合标签。通过配置启用：
+#+begin_example xml
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- set thymeleaf version -->
+    <thymeleaf.version>3.0.0.RELEASE</thymeleaf.version>
+    <thymeleaf-layout-dialect.version>2.0.0</thymeleaf-layout-dialect.version>
+    <!--set java version-->
+    <java.version>1.8</java.version>
+  </properties>
+#+end_example

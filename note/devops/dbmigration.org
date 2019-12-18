@@ -1,0 +1,75 @@
+* flyway
+官网：https://flywaydb.org/
+
+* liquibase
+
+** 安装
+http://www.liquibase.org/download/index.html
+
+#+begin_example bash
+mkdir liquibase && cd liquibase && wget -qO- https://github.com/liquibase/liquibase/releases/download/v3.8.1/liquibase-3.8.1.tar.gz | tar xvz && ln -s `pwd`/liquibase /usr/local/bin
+#+end_example
+
+** 使用
+1) 创建数据库变更日志(changelog)文件
+   支持4种格式：
+   1) Formatted SQL Changelogs(http://www.liquibase.org/documentation/sql_format.html)
+      可包含任意条SQL语句，也可以被其他XML changelogs引入该SQL changelogs。
+      - 必要配置
+        1) 文件第一行必须为 ~--liquibase formatted sql~
+        2) 每个变更集开头必须为 ~--changeset <author>:<id> [attribute1:value1[ attribute2:value2]*]~
+           多个SQL语句间通过分号或 ~endDelimiter~ 配置值进行分隔。
+2) 在变更日志文件中创建变更集(change set)
+3) 通过命令行或构建工具执行变更集
+4) 检验数据库中的变更
+
+*** 示例
+1) Changelogs文件
+   #+begin_example sql
+   --liquibase formatted sql
+
+   --changeset author:
+   #+end_example
+
+2) 执行命令行
+   - Oracle
+     #+begin_example bash
+     liquibase --changeLogFile=F:/liquibase/Release0003.sql
+     --driver=oracle.jdbc.OracleDriver
+     --classpath=/path/to/ojdbc6.jar
+     --url="jdbc:oracle:thin:@localhost:1521:liquibase"--username=test--password=123456
+     update
+     #+end_example
+
+*** 示例——Create or Update Oracle Package
+#+begin_example sql
+--liquibase formatted sql
+
+--changeset fsjonhuang:1 endDelimiter:\\n
+create or replace package BUILD2TEST.MyPackage is
+  /* my code */
+END MyPackage;
+/
+create or replace package body BUILD2TEST.MyPackage is
+    /* my code */
+end MyPackage;
+/
+#+end_example
+或通过XML Changelogs文件引入
+#+begin_example xml
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+  <changeSet author="fsjohnhuang" id="1" runOnChange="true">
+    <sqlFile dbms="oracle"
+        encoding="utf8"
+        path="create_or_update_package.sql"
+        relativeToChangelogFile="true"
+        endDelimiter="\n/"/>
+    <rollback>
+    drop package BUILD2TEST.MyPackage;
+    </rollback>
+ </changeSet>
+</databaseChangeLog>
+#+end_example

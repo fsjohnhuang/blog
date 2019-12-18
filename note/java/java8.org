@@ -1,4 +1,10 @@
 
+* 命令
+#+begin_example bash
+# 运行JAR的main方法
+java -cp xxx.jar io.fsjohnhuang.App start
+#+end_example
+
 * 基础概念
 1) JDK和JRE的区别
    JRE(Java Runtime Environment)仅包含Java程序运行时必要的虚拟机和核心库组件；而JDK(Java Development Kit)除了包含JRE外，还包含一系列开发、诊断工具(如jps等)。
@@ -134,7 +140,14 @@
   StringBuffer为线性安全，而StringBuilder在Java5引入且为非线性安全。
   由于StringBuilder为非线程安全，因此性能上优于StringBuffer。
 
-* TODO CharSequence和String的区别
+* CharSequence和String的区别
+CharSequence为描述可读可写的字符序列的接口，其子类为String、StringBuilder、StringBuffer。
+内部定义了3个方法
+- ~public char charAt(int index)~
+- ~public int length()~
+- ~public CharSequence subSequence(int start, int end)~
+
+String为只读序列。
 
 * 数组
   #+BEGIN_EXAMPLE java
@@ -172,6 +185,20 @@
    - ~boolean deepEquals(T[] a, U[] b)~ 比较数组的每个元素是否相同
    - ~String deepToString(T[] a)~ 数组序列化
    - ~T[] copyOf(T[] source, int length)~ 新增数组并将数组source的元素复制过去，用于扩展数组
+     #+begin_example java
+     // 合并两个数组
+     int[] a = new int[]{1,2,3};
+     int[] b = new int[]{4,5};
+     int[] c = Arrays.copyOf(a, a.length+b.length);
+     /**
+      * @param Object src
+      * @param int srcStartPos
+      * @param Object dest
+      * @param int destStartPos
+      * @param int length
+      */
+     System.arraycopy(b, 0, c, a.length, b.length);
+     #+end_example
 
 * 日期时间
 
@@ -266,12 +293,20 @@
    c1.set(Calendar.HOUR_OF_DAY, 13); // 24进制
    c1.set(Calendar.MINUTE, 45);
    c1.set(Calendar.SECOND, 55);
+   c1.set(Calendar.MILLISECOND, 55);
    c1.set(Calendar.DAY_OF_WEEK, 1); // 星期几，1星期日，2星期一
+   c1.get(Calendar.DAY_OF_WEEK_IN_MONTH); // 获取当前日期为当月第几个周N
+   c1.get(Calendar.DAY_OF_YEAR); // 一年中第几天
+   c1.get(Calendar.WEEK_OF_YEAR); // 一年中第几周
+   c1.get(Calendar.AM_PM); // 1为上午,0为下午
    // 对应有获取方法
    c1.get(Calendar.YEAR);
    // 在当前基础上增减
    c1.add(Calendar.YEAR, 1);
    c1.add(Calendar.YEAR, -1);
+
+   // 设置0时
+   c1.set(Calendar.HOUR_OF_DAY, 0);
    #+END_EXAMPLE
 
 *** Date和Calendar转换
@@ -288,6 +323,122 @@
 NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 
 * IO
+
+** TODO BIO(java.io)
+主要包含文件、网络数据流和内存缓冲等。
+|                | Byte Based Input      | Byte Based Input       | Character Based Input | Character Based Input |
+|----------------+-----------------------+------------------------+-----------------------+-----------------------|
+| Basic          | InputStream           | OutputStream           | Reader                | Writer                |
+|                |                       |                        | InputStreamReader     | OutputStreamWriter    |
+| Arrays         | ByteArrayInputStream  | ByteArrayOutputStream  | CharArrayReader       | CharArrayWriter       |
+| Files          | FileInputStream       | FileOutputStream       | FileReader            | FileWriter            |
+|                | RandomAccessFile      | RandomAccessFile       |                       |                       |
+| Pipes          | PipedInputStream      | PipedOutputStream      | PipedReader           | PipedWriter           |
+| Buffering      | BufferedInputStream   | BufferedOutputStream   | BufferedReader        | BufferedWriter        |
+| Filtering      | FilterInputStream     | FilterOutputStream     | FilterReader          | FilterWriter          |
+| Parsing        | PushbackInputStream   |                        | PushbackReader        |                       |
+|                | StreamTokenizer       |                        | LineNumberReader      |                       |
+| Strings        |                       |                        | StringReader          | StringWriter          |
+| Data           | DataInputStream       | DataOutputStream       |                       |                       |
+| Data-Formatted |                       | PrintStream            |                       | PrintWriter           |
+| Objects        | ObjectInputStream     | ObjectOutputStream     |                       |                       |
+| Utilities      | SequenceInputStream   |                        |                       |                       |
+
+
+RandomAccessStreaam：流默认情况下只能顺序访问，通过RandomAccessStream实现随机访问。
+PushbackInputStream：允许将有限数据推回流中，并且只能顺序访问流中的数据。
+read方法返回一个整数(0~255)代表读取到的字节内容，达到流末尾没有更多数据可读时，将返回-1。
+
+*** 文件操作
+
+FileInputStream每次调用read都会从磁盘读取一个字节到内存，可以 ~new BufferedInputStream(new FileInputStream("/path/to/file"))~ 从磁盘一次读取一大块数据到内存，然后再逐个字节读出来处理。
+FileOutputStream每次调用write都会往磁盘写入一个字节的数据，可以通过 ~new BufferedOutputStream(new FileOutputStream("/path/to/file"))~ 往磁盘一次写入一大块数据。
+
+*** 管道操作
+管道可作为两个线程间字节、字符通信方式，一个管道必须由一个Input和一个Output关联出现，并且一个线程持有Input，另一个线程持有Output，Input和Output不能同一个线程持有。(read、write方法均为同步阻塞方法)
+
+#+begin_example java
+final PipedOutputStream output = new PipedOutputStream();
+final PipedInputStream input = new PipedInputStream(output);
+
+Thread t1 = new Thread(new Runnable(){
+    @Override
+    public void run(){
+        try {
+            output.write("Hi".getBytes());
+        }
+        catch(IOException e){}
+    }
+});
+
+Thread t2 = new Thread(new Runnable(){
+    @Override
+    public void run(){
+        try {
+            int data = input.read();
+            while (data != -1) {
+                System.out.print((char) data);
+                data = input.read();
+            }
+        }
+        catch(IOException e){}
+    }
+});
+t1.start();
+t2.start();
+#+end_example
+
+*** 字节和字符数组
+
+#+begin_example java
+
+// Input
+byte[] data = new byte[1024];
+InputStream input = new ByteArrayInputStream(data);
+int data = input.read();
+while (data != -1){
+    // operations
+    data = input.read();
+}
+
+// Output
+OutputStream output = new ByteArrayOutpuStream();
+output.write("hi".toBytes("UTF-8"));
+byte[] data = output.toByteArray();
+#+end_example
+
+*** System.in, System.out, System.err
+JVM在运行时自动初始化这3个流，可以在运行时替换他们。
+#+begin_example java
+// System.setIn(PrintStream)
+// System.setOut(PrintStream)
+// System.setErr(PrintStream)
+OutputStream output = new FileOutputStream("/path/to/output");
+PrintStream printOut = new PrintStream(output);
+System.setOut(printOut);
+#+end_example
+
+**** 从System.in读取数据
+#+begin_example java
+try {
+    // 标准输入为字符串时
+    BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+    StringBuilder sb = new StringBuilder();
+    boolean notEof = false;
+    String line;
+    do {
+        line = reader.readLine();
+        notEof = line != null && line.length() > 0;
+        if (notEof) {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+            sb.append(line);
+        }
+    } while(notEof);
+
+} catch (IOException e) {}
+#+end_example
 
 ** 字符流
    - Reader
@@ -706,18 +857,31 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     #+END_EXAMPLE
 
 *** 泛型类
-    #+BEGIN_EXAMPLE java
-    public class Box<T>{
-      private T value;
-      public T getValue(){
-        return this.value;
-      }
-      public void setValue(T value){
-        this.value = value;
-      }
+1. 当类包含泛型字段，那么该类必须定义为泛型类型;
+#+begin_example java
+public class Maybe<T> {
+    T value;
+}
+#+end_example
+2. 泛型类中的泛型方法若采用与类一样的类型参数，则不用声明类型参数。只声明类没有的参数变量即可。
+#+begin_example java
+public class Box<T> {
+    T value;
+    public T getValue(){
+        return null;
     }
-    #+END_EXAMPLE
 
+    public <E extends T> void setValue(E value) {
+       this.value = value;
+    }
+
+    public Box(T value) {
+        this.value = value;
+    }
+}
+#+end_example
+
+*** TODO 泛型接口
 *** 类型限定符
     1) ~extends~ 用于限制为某类或接口的派生类
        对于继承多个类或接口则通过 ~&~ 表示，如 ~<T extends Comparable & Serializable>~
@@ -1163,6 +1327,28 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
 ** TODO Object终极父类
    所有类型都集成自Object，数组也是类因此继承自Object。
 
+** TODO 类和静态类的区别
+** 抽象类
+包含abstract方法的类必须标识为abstract。
+一般情况下抽象类是不能实例化的，但可以以匿名内部类方式进行实例化（实际上是实例化派生类，但语法上看似是实例化抽象类）
+#+begin_example java
+public abstract P {
+    String name;
+    public P(String name) {
+        this.name = name;
+    }
+
+    public abstract String getName();
+}
+
+P p = new P("john"){
+    @Override
+    public String getName() {
+        return this.name;
+    }
+}
+#+end_example
+
 * 异常处理
   1) 异常类型
      - ~java.lang.Throwable~ 所有异常的顶层父类
@@ -1269,9 +1455,17 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
      - Exception的操作Stack Trace的方法
        - ~printStackTrace([OutputStream output])~
        - ~StackTraceElement[] getStackTrace()~
+  8) catch多个异常
+     #+begin_example java
+     try {
+         // TODO: throw exception
+     }
+     catch (SecurityException | NoSuchMethodException e) {
+         e.printStackTrace();
+     }
+     #+end_example
 
 * TODO 文件系统操作
-
 * TODO 集合类型
 
 ** Java2出现的
@@ -1570,18 +1764,104 @@ NumberFormat currencyFormat = NumberFormat.getCurrencyInstance();
     注解可以出现的地方
     1)
 
+** 自定义注解
+#+begin_example java
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Target(ElementType.TYPE)
+public @interface TestAnnotation {
+    public String value(); // 属性，没有默认值
+    public int id() default -1; // 属性，有默认值。默认值必须为常量表达式。
+}
+
+// 使用
+@TestAnnotation(value="hi")
+public class MyType {}
+#+end_example
+
+*** 元注解
+用于注解定义上的注解。
+1) ~Rentention~ 注解存活时间
+   - ~RententionPolicy.SOURCE~ 注解仅在源码阶段保留，编译阶段将被清除。
+   - ~RententionPolicy.CLASS~ 注解在编译阶段被保留，但不会被加载到JVM中。
+   - ~RententionPolicy.RUNTIME~ 注解会被加载到JVM中，运行时可以通过反射获取。
+2) ~Documented~ 注解信息包含在JavaDoc中
+3) ~Target~ 注解运用的地址
+   - ~ElementType.ANNOTATION_TYPE~ 用在注解定义上
+   - ~ElementType.CONSTRUCTOR~ 用在构造函数上
+   - ~ElementType.FIELD~ 用在类字段上
+   - ~ElementType.LOCAL_VARIABLE~ 用在局部变量上
+   - ~ElementType.METHOD~ 用在方法上
+   - ~ElementType.PACKAGE~ 用在包上
+   - ~ElementType.PARAMETER~ 用在方法参数上
+   - ~ElementType.TYPE~ 用在类、接口、枚举定义上
+4) ~Inherited~ 被修饰的类型的派生类将继承该注解
+5) ~Repeatable~ Java1.8新元注解，表示该注解可以多次修饰同一个对象
+
+** 内置注解
+1) ~Deprecated~
+   标记过时元素(类、方法、字段等)，编译器在编译阶段遇到这个注解时会发出提醒警告。
+2) ~Override~
+   标记子类要重写父类方法。
+3) ~SuppressWarnings~
+   标记忽略编译器提醒警告。
+   #+begin_example java
+   @SuppressWarnings("deprecation")
+   @SuprressWarnings("unchecked")
+   #+end_example
+4) ~SafeVarargs~
+   Java1.7新增，用于提醒开发者不要用参数做一些不安全的操作。添加该注解后，编译阶段将不会抛出unchecked警告提示。
+   #+begin_example java
+   @SafeVarargs
+   static void m(List<String>... strLsts) {
+       Object[] array = strLsts;
+       List<Integer> tmpLst = Arrays.asList(42);
+       array[0] = tmpLst; // 编译正常
+       String s = strLsts[0].get(0); // 运行时抛出 ClassCastException
+       // 未来编译阶段对上述问题直接抛异常
+   }
+   #+end_example
+5) ~FunctionInterface~
+   Java1.8新增，函数式接口——一个具有一个方法的普通接口，并且该方法与Lambda表达式可相互转换。
+   #+begin_example java
+   @FunctionInterface
+   public interface Runnable {
+       public void run();
+   }
+   #+end_example
+
 * TODO 打包发布
   jar、ear和war的差别
 * 反射
-Class类(类型类)，即所有Java类型(包括数组)的均为Class类的实例。
-接口、8种基本数据类型和void类型，都不是Class类的实例。
+由Smith于1982年提出，让程序可以实现自我行为描述(self-description)、监测(examination)，并根据自身的行为状态和结果，调整或修改应用所描述行为的状态和相关的语义。
+Oracle官方Tutorial Guide: https://docs.oracle.com/javase/tutorial/reflect/
+
+Class类(类型类)
+1) 即所有Java类型(包括数组)的均为Class类的实例。如：
+   #+begin_example java
+   String instanceof Class<String> == true;
+   Integer instanceof Class<Integer> == true;
+   Boolean  instanceof Class<Boolean> == true;
+   // ......
+   #+end_example
+2) 接口、8种基本数据类型和void类型，都不是Class类的实例。
+3) 8中基本数据类型和void类型的包装类为Class类的实例。
+   #+begin_example java
+   Class<Void> clazz = (Class<Void>) Class.getPrimitiveClass("void");
+   Class<Integer> clazz = (Class<Integer>) Class.getPrimitiveClass("int");
+   #+end_example
+4) 反射的RTTI(Run-Time Type Identification)都是使用Class实例实现，而多态则依赖RTTI实现。
+5) Class类没有公共的构造函数，不能显式创建一个Class实例。
+6) JVM虚拟机加载类后会调用 ~defineClass~ 方法构造出Class实例。JVM采用懒加载方式，当需要使用某个类时才会进行加载和实例化。
+7) Class对象必须由 *类加载器* 和 *权限定类名* 来共同确定其在JVM中的唯一性。
+
 #+BEGIN_EXAMPLE java
 public Class{
   private Class(ClassLoader classLoader);
 }
 #+END_EXAMPLE
 获取方式
-1) ~类名.class~
+1) ~类名.class~, 不会触发Class对象的初始化，而是将Class对象的初始化延迟到对运行时静态字段或静态方法的首次引用。
 2) ~实例.getClass()~
 3) ~Class.forName("全限定类名")~ ， 通过Bootstrap ClassLoader加载获取，前提是相关的class文件在classpath下。
    1) ~Class.forName("全限定类名", true)~ ，确保类的静态代码块在加载之后执行
@@ -1603,7 +1883,7 @@ public Class{
    3) ~Class.loadClass("全限定类名")~ ，同样能加载类，但不会执行静态代码块
 4) ~this.getClass().getClassLoader().loadClass("全限定类名")~ ，使用指定的ClassLoader加载获取。
 
-** 示例
+** 示例详解
 - 反射的对象
   #+BEGIN_EXAMPLE java
   package com.john;
@@ -1648,6 +1928,8 @@ public Class{
   }
   #+END_EXAMPLE
 - 反射操作
+  反射包: ~java.lang.reflect~
+
   #+BEGIN_EXAMPLE java
   // 数组类型类实例的getName()返回的是早期虚拟机使用的全限定类名形式
   // 通过Class.forName()获取数组类型时，需要使用这个早期的全限定类名形式
@@ -1667,8 +1949,7 @@ public Class{
   Class<?> cObj3 = Class.forName("com.john.Student");
 
   // 实例化
-  Student student1 = (Student)cObj1.newInstance(); // 调用无参构造方法
-  Student student2 = (Student)cObj1.newInstance("john", 25); // 调用含参构造方法
+  Student student1 = (Student)cObj1.newInstance(); // 调用无参构造方法创建实例
 
   // 获取接口的Class类实例
   Class<?>[] interfaces = cObj1.getInterfaces();
@@ -1676,8 +1957,14 @@ public Class{
   // 获取父类的Class类实例
   Class<?> superClass = cObj1.getSuperclass();
 
-  // 获取所有构造方法
+  // 获取所有public构造方法
   Constructor<?>[] cs = cObj1.getConstructors();
+  // 获取方法签名为String,int的public构造函数
+  Constructor<?> cs1 = cObj1.getConstructor(String.class, int.class);
+  // 调用带参数的构造方法创建实例
+  Student student3 = cs1.newInstance("john", 25);
+  // 获取所有public和private构造方法
+  Constructor<?>[] allCs = cObj1.getDeclaredConstructors();
 
   // 获取当前类(不含父类和接口)所有方法(包含public、protected、default、private)
   Method[] fs = cObj1.getDeclaredMethods();
@@ -1746,9 +2033,64 @@ public Class{
   Object newArray = Array.newInstance(componentClazz, 10);
   Integer len = Array.getLength(newArray);
   System.arraycopy(array, 0, newArray, 0, len);
+
+  // 获取方法的注解
+  Annotation anno = mSay.getAnnotation(LdapAnnotation.class);
+  if (anno instanceof LdapAnnotation) {
+      LdapAnnotation ldapAnno = (LdapAnnotation)anno;
+  }
+
+  boolean hasAnno = mSay.isAnnotationPresent(LdapAnnotation.class);
+  if (hasAnno) {
+      LdapAnnotation ldapAnno = mSay.getAnnotation(LdapAnnotation.class);
+  }
   #+END_EXAMPLE
 
-** TODO 反射操作泛型类型信息
+特别说明
+1) ~<U> Class<? extends U> asSubClass(Class<U> clazz)~
+   - 作用：将所属的Class实例转换为clazz代表的Class实例的子类。
+     #+begin_example java
+     List<String> lst = new ArrayList<String>();
+     Class<? extends List> lstClazz = lst.getClass().asSubClass(List.class);
+     #+end_example
+   - 使用场景：限制通过 ~Class.forName~ 加载的类型
+     #+begin_example java
+     try {
+         // 若加载的类型不是List的子类，那么就会抛出ClassCastException。
+         Class.forName("xxx.xxx.xxx").asSubClass(Listclass).newInstance();
+     }
+     catch (ClassCastException e) {
+         e.printStackTrace();
+     }
+     #+end_example
+   - 注意：instanceof不能用于Class实例
+     #+begin_example java
+     // 编译时报错
+     ArrayList.class instanceof List.class
+     #+end_example
+2) ~boolean <U> isAssignableFrom(Class<U> clazz)~
+   - 作用：判断所属Class实例是否与clazz代表的Class实例相同或为其的父类、接口
+     #+begin_example java
+     class A {}
+     class B extends A {}
+
+     A.class.isAssignableFrom(B.class); // 返回true
+     #+end_example
+3) ~Method getEnclosingMethod()~
+   - 作用：返回内部类在哪个方法中被定义
+     #+begin_example java
+     class Demo {
+         public Object getInnerClass(){
+             class Inner{}
+             return new Inner();
+         }
+     }
+
+     Method m = new Demo().getInnerClass().getClass().getEnclosingMethod();
+     m == Demo.class.getDeclaredMethod("getInnerClass");
+     #+end_example
+
+** 反射操作泛型类型信息
    类型擦写仅影响到被实例化的类型参数，而泛型类和泛型方法声明的信息是完整的，可以在运行时获取。
    #+BEGIN_EXAMPLE java
    // Collections的sort方法声明
@@ -1772,33 +2114,134 @@ public Class{
    }
    #+END_EXAMPLE
 
+*** java.lang.reflect.Type
+Java中所有类型(原始类型,参数化类型,数组类型和类型变量)的父接口.
+java.lang.Class是java.lang.reflect.Type唯一的实现类.
+#+begin_example java
+/**
+ * Type is the common superinterface for all types in the Java
+ * programming language. These include raw types, parameterized types,
+ * array types, type variables and primitive types.
+ *
+ * raw types 对应 Class, 除去泛型外的类型就是raw types和primitive types
+ * parameterized types 对应 ParameterizedType, 如 `Person<E>`
+ * array types 对应 GenericArrayType, 如 `Person<E>[]`
+ * type variable 对应 TypeVariable, 如 `Person<E>` 中的 `E`
+ * primitive types 对应 Class
+ * @since 1.5
+ */
+public interface Type {
+    default String getTypeName() {
+        return toString();
+    }
+}
+#+end_example
+
+*** java.lang.reflect.ParameterizedType(参数化类型)
+Java1.7引入的新特性, java.lang.reflect.Type的子接口, 表示参数化类型(如 ~Person<Student>, Collection<E>~ 等).
+源码:
+#+begin_example java
+public interface ParameterizedType extends Type {
+    // 仅脱去参数化类型最外层的<>,并获取最外层<>中的实际类型
+    // `((ParameterizedType)LinkedList<E>.class).getActualTypeArguments()[0]` 返回 `VariableType` 的 `E`
+    // `((ParameterizedType)LinkedList<String>.class).getActualTypeArguments()[0]` 返回 `Class` 的 `String`
+    // `((ParameterizedType)LinkedList<Integer[]>.class).getActualTypeArguments()[0]` 返回 `GenericArrayType` 的 `Integer[]`
+    // `((ParameterizedType)LinkedList<? extends Object>.class).getActualTypeArguments()[0]` 返回 `WildcardType` 的 `? extends Object`
+    // `((ParameterizedType)LinkedList<Collection<String>>.class).getActualTypeArguments()[0]` 返回 `ParameterizedType` 的 `Collection<String>`
+    Type[] getActualTypeArguments();
+    Type getRawType();
+    Type getOwnerType();
+}
+#+end_example
+
+而 ~java.lang.Class~ 的 ~Type getGenericSuperClass()~ 返回该类型的父类的(参数化)类型.
+#+begin_example java
+package test;
+class Person<T> {}
+class Student extends Person<Student> {}
+
+Class<Student> clazz = Student.class; // test.Student
+Class<?> pClazz = clazz.getSuperClass(); // test.Person
+Type gpClazz = clazz.getGenericSuperClass(); // test.Person<test.Student>
+ParameterizedType pt = (ParameterizedType)gpClazz;
+Class<?> actualType = pt.getActualTypeArguments()[0]; // test.Student
+#+end_example
+
+*** java.lang.reflect.GenericArrayType(泛型数组类型)
+表示一种元素类型为参数化类型或类型变量的数组类型.
+源码:
+#+begin_example java
+public interface GenericArrayType {
+    // 进脱去最外层的[],并返回脱去最外层[]后的元素的类型
+    // `((GenericArrayType)Integer[][].class).getComponentType()` 返回 `GenericArrayType` 的 `Integer[]`
+    Type getComponentType();
+}
+#+end_example
+
+实例说明
+#+begin_example java
+<E> E firstfirst(E[][] collection){
+    E[] outer = null;
+    E first = null;
+    if (collection != null && collection.length != 0) {
+        outer = collection[0];
+
+        if (outer != null && outer.length !=0) {
+            first = outer[0];
+        }
+    }
+    return first;
+}
+
+E[][] coll = new String[1][]; // 注意: new数组中不能出现<>否则编译会报错.
+coll[1] = new String[]{"123"};
+#+end_example
+
+*** java.lang.reflect.TypeVariable(类型变量类型)
+所有类型变量的父接口
+源码:
+#+begin_example java
+public interface VariableType extends Type {
+    // 返回类型变量的泛型上边界,即 `E extends A, B` 中的 `A` 和 `B`
+    Type[] getActualTypeArguments();
+}
+#+end_example
+
+*** java.lang.reflect.WildcardType(泛型限定的参数化类型)
+代表一种通配符类型表达式,如 ~?, ? extends Number, ? super Integer~ 等.
+源码:
+#+begin_example java
+public interface WildcardType extends Type {
+    // 返回类型变量的泛型上边界,即 `? extends A` 中的 `A`
+    // 注意: 通配符仅能extends一个上边界, 因此这里返回Type[]是为后面JDK的扩展预留而已
+    Type[] getUpperBounds();
+}
+#+end_example
 
 ** ~public static native java.lang.Class sun.reflect.Reflection.getCallerClass(int depth)~
-   用于获取调用该方法的类/父类/祖先类信息
-   #+BEGIN_EXAMPLE java
-   package com.test;
-
-   public class C {
-     public void test(){
-       Class<?> clazz0 = java.reflect.Reflection.getCallerClass(0);
-       Class<?> clazz1 = java.reflect.Reflection.getCallerClass(1);
-       Class<?> clazz2 = java.reflect.Reflection.getCallerClass(2);
-       System.out.println(clazz0.getName());
-       System.out.println(clazz1.getName());
-       System.out.println(clazz2.getName());
-     }
-   }
-
-   public class P {
-     public static void main(String[] args){
-       C c = new C();
-       c.test();
-       // java.reflect.Reflection
-       // com.test.C
-       // com.test.P
-     }
-   }
-   #+END_EXAMPLE
+用于获取调用该方法的类/父类/祖先类信息,但该方法已经被移除了.
+#+BEGIN_EXAMPLE java
+package com.test;
+ public class C {
+  public void test(){
+    Class<?> clazz0 = java.reflect.Reflection.getCallerClass(0);
+    Class<?> clazz1 = java.reflect.Reflection.getCallerClass(1);
+    Class<?> clazz2 = java.reflect.Reflection.getCallerClass(2);
+    System.out.println(clazz0.getName());
+    System.out.println(clazz1.getName());
+    System.out.println(clazz2.getName());
+  }
+}
+public class P {
+  public static void main(String[] args){
+    C c = new C();
+    c.test();
+    // java.reflect.Reflection
+    // com.test.C
+    // com.test.P
+  }
+}
+#+END_EXAMPLE
 
 * 从classpath获取资源
   ClassLoader是从classpath中读取资源的类，一般情况通过ClassLoader加载字节码文件(.class文件)，但它提供两个方法加载其他资源。
@@ -1968,7 +2411,7 @@ public Class{
    }
    #+END_EXAMPLE
 
-* JNDI(Java Naming and Directory Interface)
+* TODO JNDI(Java Naming and Directory Interface)
   是一组在Java中访问命名和目录服务的API，作为J2EE的核心技术之一。
   1) 命名服务
      将名称和对象联系起来，让我们可以通过名称访问对象。
@@ -2037,19 +2480,128 @@ public Class{
    相当于简易版本的RDBMS，以树状的层次结构存储数据，适用于读多写少的场景。（优化过读取操作）
 
 *** 概念
-    1) DN(Distinguished Name)
-       标记记录路径的唯一标识。其中Base DN为基准DN，即从哪个DN开始搜索(搜索范围分为One Level和Subtree)。而RDN为叶子节点本身的标识。
-    2) DC(Domain Component)
+    1) Entry
+       LDAP基本存储单元,一个DN和一组属性的集合.一个Entry必须包含1个或以上的Objectclass属性.
+    2) DN(Distinguished Name)
+       标记记录路径的唯一标识。其中Base DN为基准DN，即从哪个DN开始搜索(搜索范围分为Base,One Level和Subtree)。而RDN为叶子节点本身的标识。
+       - Base 只搜索baseDN本层的记录
+       - One Level 只搜索baseDN直接下级的记录
+       - Subtree 搜索baseDN全部下级的记录
+    3) DC(Domain Component)
        记录所属区域
-    3) OU(Organization Unit)
+    4) OU(Organization Unit)
        组织单元
-    4) CN/UID
+    5) CN/UID
        记录的名字
+    6) Objectclass(对象类)
+       LDAP内置的数据类型,每种Objectclass均有自己的数据结构,作为Entry的"模板".如名为"电话簿"的Objectclass内置很多属性(attributes),如身份证号码等.而名为"同学录"Objectclass则内置其他属性.
+       1) 属性分类
+          1) required attribute
+          2) option attribute
+          3) 操作属性 独立于Objectclass而存在的属性
+       2) 分类
+          1) 结构型(Structural),如account,inetOrgPerson,person,organizationUnit
+          2) 辅助型(Auxiliary),如extensibleObject
+          3) 抽象类(Abstract),不能直接使用的.如top
+       3) bind和unbind
+          - bind, 增加属性(属性要么隶属于objectclass,要么为操作属性)
+          - unbind,移除属性
+    7) Operational Attributes
+       只读属性
+       #+begin_example
+       createTimeStamp
+       creatorsName
+       entryFlags
+       federationBoundary
+       localEntryID
+       modifiersName
+       modifyTimeStamp
+       structuralObjectClass
+       subordinateCount
+       subschemaSubentry
+       #+end_example
+       - Java查询时在ReturnningAttributeNames设置为 ~new String[]{"*","+"}~ 来获取,而设置为 ~null~ 即获取所有非Operational Attributes.
 
 *** 运维工具
     1) GUI查看工具 —— Free LDAP Browser
 
-*** TODO 示例
+*** SpringLDAP
+https://docs.spring.io/spring-ldap/docs/2.3.1.RELEASE/reference/
+
+**** POM依赖
+#+begin_example xml
+<dependency>
+  <groupId>org.springframework.ldap</groupId>
+  <artifactId>spring-ldap-core</artifactId>
+  <version>2.3.2.RELEASE</version>
+</dependency>
+#+end_example
+
+依赖spring-ldap则会包含spring-ldap-core,spring-ldap-core-tiger,spring-ldap-odm等JAR.
+支持JDK1.6+
+
+**** 使用
+#+begin_example java
+@ComponentScan(basePackages=".....")
+@Configuration
+public class AppConfig {
+   /* 必须通过Spring注入LdapContextSource, 因此在初始话过程中会调用InitializingBean.afterPropertiesSet方法.
+    * 若不通过Spring注入则会报`at org.springframework.ldap.core.support.AbstractContextSource.getReadOnlyContext(AbstractContextSource.java:125)`
+    */
+   @Bean
+   public LdapContextSource getLdapContextSource() {
+       LdapContextSource contextSource = new LdapContextSource();
+       contextSource.setUrl("providerURL");
+       contextSource.setBase("baseDN");
+       contextSource.setUserDn("user dn");
+       contextSource.setPassword("password");
+       contextSource.setPooled(true);
+
+       Map<String, Object> config = new HashMap<String, Object>();
+       // 解决中文乱码
+       config.put("java.naming.ldap.attributes.binary", "objectGUID");
+       contextSource.setBaseEnvironmentProperties(config);
+
+       return contextSource;
+   }
+
+   @Bean
+   public LdapTemplate getLdapTemplate(LdapContexttSource contextSource) {
+       return new LdapTemplate(contextSource);
+   }
+}
+
+@Component
+public class App {
+    @Autowired
+    private LdapTemplate ldapTemplate;
+
+    public static void main(String[] args) {
+        ApplicationContext ctx = new AnnotationConfigApplicationContext(AppConfig.class);
+        App app = ctx.getBean(App.class);
+        app.test();
+    }
+
+    public void test() {
+        AndFilter filter = new AndFilter();
+        filter.and(new EqualsFilter("objectClass", "person"));
+
+        // search是通过filter string搜索记录
+        // lookup是通过dn搜索记录
+        List<User> users = ldapTemplate.search("baseDN", filter.encode(), new LdapUserMapper());
+    }
+}
+
+public class LdapUserMapper implements AttributesMapper {
+    @Override
+    public Object mapFromAttributes(Attributes attrs) throws NamingException {
+        User user = new User();
+        if (attrs.get("uid") != null) {
+             user.setUid(attrs.get("uid").get().toString());
+        }
+    }
+}
+#+end_example
 
 * 单元测试
 
@@ -2492,7 +3044,8 @@ public Class{
      Map<Integer, Long> sample2 = pWords1.collect(groupingByConcurrent(String::length));
      #+END_EXAMPLE
 
-** Date Time API
+** TODO Date Time API
+LocalDate date = LocalDate.of(1994,1,1)
 
 ** Optional类
    在非完全测试的程序中返回null，会导致空指针异常，因此Optional类是一种更好的表明缺少返回值的方式。
@@ -2693,18 +3246,549 @@ public Class{
    4) 重启eclipse即可
 
 * 反编译工具
-  Java Decompiler - http://java-decompiler.github.io/
+Java Decompiler - http://java-decompiler.github.io/
+javap 查看字节码文件
 
 * TODO 正则表达式
   ~int java.util.regex.Matcher#groupCount()~ 返回的是分组数量，并不是匹配成功的分组数量。
   ~void java.util.regex.Matcher#matches()~ 从字符串的0位置开始匹配
   ~void java.util.regex.Matcher#find()~ 从字符串的end+1位置开始匹配
   注意：调用 ~String java.util.regex.Matcher#group(int index)~ 前必须调用 ~matches~ 或 ~find~ 方法，否则回抛出 ~No match found~ 异常。
-* QA
+* TODO QA
 1) CopyOnWrite
-2) 泛型
-3) 线程池
-4) CAS
-5) AQS
-6) JVM
+2) 线程池
+3) CAS
+4) AQS
+5) JVM
+6) CAP
 7) 实现java.io.Serializable接口的类需要定义 ~private static final long serialVersionUID~ ?
+8) ~static final~ 编译期常量 和 ~static~ 或 ~final~ 运行时常量
+   - 编译期常量会在编译阶段把值存放在常量池中，当在其所属类未被初始化时访问编译期常量，将不会触发类的初始化
+   - 运行时常量，当在其所属类未被初始化时访问运行时常量，将会触发类的初始化
+   - 示例
+     #+begin_example java
+     class Dog {
+       static final compileValue = "compile constant";
+       static runtimeValue = "runtime constant";
+       static {
+           System.out.println("runtime static block");
+       }
+     }
+
+     public class Application {
+         public void main(String[] args) {
+             Dog.compileValue;
+             System.out.println("------");
+             Dog.runtimeValue;
+         }
+     }
+
+     // compile constant
+     // ------
+     // runtime static block
+     // runtime constant
+     #+end_example
+9) Void类的作用
+   - 源码
+     #+begin_example java
+     package java.lang;
+
+     public final class Void {
+         @SuppressWarnings("unchecked")
+         public static final Class<Void> TYPE = (Class<Void>) Class.getPrimitiveClass("void");
+
+         private Void(){}
+     }
+     #+end_example
+   - 作用：
+     1) 反射中方法返回值类型检查
+        #+begin_example java
+        cls.getMethod("xxx").getReturnType().equals(Void.TYPE);
+        #+end_example
+     2) 泛型中表示空类型
+        #+begin_example java
+        Future<Void> f = pool.submit(new Callable(){
+            @Override
+            public Void call() throws Exception{
+                return null;
+            }
+        });
+        #+end_example
+* CLI开发
+CLI风格：
+1) POSIX风格，选项以 ~-~ 开头，如 ~-e~, ~-f /path/to/file~
+2) GNU风格，选项以 ~--~ 开头，如 ~--enable~, ~--file=/path/to/file~
+3) Java风格，选项以 ~-D~ 开头，如 ~-DskipTests~, ~-Dspring.profile.active=prod~
+4) Git风格，支持子命令
+
+** Airline
+https://github.com/airlift/airline
+
+提供Git风格的CLI接口。
+
+*** 示例
+1) Java代码
+   #+begin_example java
+   package io.fsjohnhuang;
+
+   /* java -jar ldapclient.jar -v search "ldap://10.16.25.111" --dn "xxx" --pwd "xxx"
+    * java -jar ldapclient.jar -v sync user "ldap://10.16.25.111" "xxx:xxx@xxx.xxx.xxx:xx/oracle" --dn "xxx" --pwd "xxx"
+    * java -jar ldapclient.jar -v sync org "ldap://10.16.25.111" "xxx:xxx@xxx.xxx.xxx:xx/oracle" --dn "xxx" --pwd "xxx"
+    */
+   public class App {
+       public static void main(String[] args) {
+           CliBuilder<Runnable> builder = Cli.<Runnable>builder("ldapclient")
+               .withDescription("my git like cli tool")
+               .withDefaultCommand(Help.class)
+               .withCommands(Help.class, Search.class);
+
+          builder.withGroup("sync")
+                 .withDescription("Synchronize to database")
+                 .withDefaultCommand(User.class)
+                 .withCommands(User.class, Org.class);
+
+           Cli<Runnable> parser = builder.build();
+           try {
+               parser.parse(args).run();
+           }
+           catch (ParseArgumentsUnexpectedException e) {}
+       }
+
+       public static abstract class LdapclientCommand implements Runnable {
+           @Option(type = OptionType.GLOBAL, name = "-v", description = "Verbose mode")
+           public boolean verbose;
+       }
+
+       @Command(name = "search", description = "Search from Ldap")
+       public static class Search extends LdapclientCommand {
+
+           @Arguments(description = "Ldap provider URL", required = true)
+           public String providerUrl;
+
+           @Option(name = "--dn", description = "Distinguished name")
+           public String dn;
+
+           @Option(name = "--pwd", description = "Password of distinguished name")
+           public String pwd;
+
+           @Override
+           public void run(){
+               System.out.println(this.providerUrl);
+               System.out.println(this.dn);
+               System.out.println(this.pwd);
+           }
+       }
+
+       @Command(name = "user", description = "Synchronize user records")
+       public static class User extends LdapclientCommand {
+           @Arguments(description = "Ldap provider URL", required = true)
+           public String providerUrl;
+
+           @Option(name = "--dn", description = "Distinguished name")
+           public String dn;
+
+           @Option(name = "--pwd", description = "Password of distinguished name")
+           public String pwd;
+
+           @Override
+           public void run(){
+               System.out.println(this.providerUrl);
+               System.out.println(this.dn);
+               System.out.println(this.pwd);
+           }
+       }
+
+       @Command(name = "org", description = "Synchronize organization records")
+       public static class Org extends LdapclientCommand {
+           @Arguments(description = "Ldap provider URL", required = true)
+           public String providerUrl;
+
+           @Option(name = "--dn", description = "Distinguished name")
+           public String dn;
+
+           @Option(name = "--pwd", description = "Password of distinguished name")
+           public String pwd;
+
+           @Override
+           public void run(){
+               System.out.println(this.providerUrl);
+               System.out.println(this.dn);
+               System.out.println(this.pwd);
+           }
+       }
+   }
+   #+end_example
+2) pom.xml
+   #+begin_example xml
+   <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-assembly-plugin</artifactId>
+       <version>2.2.0</version>
+       <configuration>
+           <archive>
+               <manifest>
+                   <mainClass>io.fsjohnhuang.App</mainClass>
+               </manifest>
+           </archive>
+           <descriptorRefs>
+               jar-with-dependencies
+           </descriptorRefs>
+       </configuration>
+       <executions>
+           <execution>
+               <id>make-assembly</id>
+               <phase>package</phase>
+               <goals>
+                   <goal>single</goal>
+               </goals>
+           </execution>
+       </executions>
+   </plugin>
+   #+end_example
+3) 执行 ~mvn clean package~
+
+注意：
+1) 每个Command标识的类仅能包含一个使用Arguments标识的字段，包含父类。
+* JSON
+- Gson 谷歌开发的JSON库
+- FastJson 阿里巴巴开发的JSON库，性能十分优秀
+- Jackson 支持JSON、YAML、Smile、CSV和XML序列化反序列化，社区活跃，更新快速。Spring内置的。
+  - Smile为二进制的JSON数据格式，等同于标准JSON格式。于2010年发布。
+
+** Jackson2.0
+提供3种JSON的处理方式：
+1) 数据绑定
+2) 树模型
+3) 流式API
+
+*** 核心组件
+- Core库：jackson-core，包含streaming parser/generator
+- Annotation库：jackson-annotations，包含注解
+- Databind库：jackson-databind，包含ObjectMapper,Json Tree Model
+
+*** 数据绑定
+分为 *简单数据绑定* 和 *完整数据绑定*
+
+**** 简单数据绑定
+将JSON字符串转换为Java核心的数据类型，而不用定义POJO对象。
+| JSON类型 | Java类型              |
+|----------+-----------------------|
+| object   | LinkedHashMap         |
+| array    | ArrayList             |
+| string   | String                |
+| number   | Integer, Long, Double |
+| boolean  | Boolean               |
+| null     | null                  |
+
+#+begin_example java
+ObjectMapper objMapper = new ObjectMapper();
+
+// 反序列化
+Map<Strting, Object> map = objMapper.readValue("{\"id\": 1, \"name\": \"john\", \"labels\": [1,2], \"dep\": {\"id\": 1}}"
+                                               , HashMap<String, Object>.class);
+Integer id = (Integer)map.get("id");
+String name = (String)map.get("name");
+ArrayList<?> labels = (ArrayList<?>)map.get("labels");
+Map<String, Object> dep = (Map<String, Object>)map.get("dep");
+Integer depId = (Integer)dep.get("id");
+Object notExist = map.get("notExist"); // 不存在的返回null
+
+// 序列化
+String json = objMapper.writeValueAsString(map);
+#+end_example
+
+**** 完整数据绑定
+需要定义POJO对象进行JSON的序列化和反序列化，注意：
+1) 若JSON字符串中存在属性A，而POJO中没有对应字段，那么反序列化时会抛出UnrecognizedPropertyException异常；
+2) 若JSON字符串中缺少POJO的字段，那么序列化时POJO对应的字段将被设置为null。
+
+#+begin_example java
+class Person {
+    public int id;
+    private String name;
+    public void setName(String name) {
+        this.name = name;
+    }
+    public String getName() {
+        return this.name;
+    }
+}
+
+ObjectMapper objMapper = new ObjMapper();
+// 反序列化
+Person person = objMapper.readValue(jsonString, Person.class);
+
+// 序列化
+String json = objMapper.writeValueAsString(person);
+#+end_example
+
+*** 树模型
+通过get、JsonPointer等操作，适用于获取大JSON中的字段。
+
+#+begin_example java
+ObjectMapper objMapper = new ObjMapper();
+// 反序列化
+JsonNode rootNode = mapper.readTree(jsonString);
+// 通过path获取属性值
+rootNode.path("name").asText();
+// 通过get获取属性值
+rootNode.get("name").asText();
+// 通过JsonPointer获取嵌套的属性值
+JsonPointer pointer = JsonPointer.valueOf("/dep/id");
+JsonNode depIdNode = rootNode.at(pointer);
+depIdNode.asText();
+// 获取数组
+JsonNode arrayNode = rootNode.get("labels");
+for (int i = 0; i < arrayNode.size(); i++) {
+    arrayNode.get(i).asText();
+}
+JsonNode notExistNode = rootNode.path("notExist");
+notExistNode.isMissingNode(); // 返回true
+// 当JSON中key存在，但值为null，那么会返回NullNode实例。
+JsonNode nullNode = rootNode.path("nullNode");
+
+// 序列化
+JsonNode rootNode = mapper.createObjectNode();
+((ObjectNode)rootNode).putArray("labels");
+ArrayNode labelsNode = (ArrayNode)rootNode.get("labels");
+labelsNode.add("1");
+labelsNode.add("2");
+((ObjectNode)rootNode).put("id", 1);
+String json = mapper.writeValueAsString(rootNode);
+#+end_example
+
+*** 流式API
+通过JsonGenerator序列化，通过JsonParser反序列化。调用底层API所以速度较前两者较快。
+
+*** 注解说明
+- ~JsonProperty(String value, int index)~ 标识JSON映射的字段，value指定JSON属性名称(默认为字段名称)，index指定JSON属性的顺序
+- ~JsonIgnore~ 标识不被映射的字段
+- ~JsonIgnoreProperties~ 类注解，设置多个不被映射的字段
+  #+begin_example java
+  @JsonIngoreProperties({"p1", "p2"})
+  public class P {
+      public String p1;
+      public String p2;
+      public String p3;
+  }
+  #+end_example
+  - ~@JsonIgnoreProperties(ignoreUnknown=true)~ JSON反序列化为POJO时，排除所有没有Getter/Setter的字段。
+- ~JsonIngoreType~ 类注解，排除该类的所有字段
+- ~JsonPropertyOrder~ 指定JSON属性的顺序
+- ~JsonRootName~ 指定JSON根属性的名称
+- ~JsonInclude(Include.NON_EMPTY)~ 仅在不为空时才序列化此字段。若字段类型为字符串，则为null或""时就不参与序列化
+  1) Include.ALWAYS 默认值,表示总序列化
+  2) Include.NON_DEFATULT 表示不序列化
+  3) Include.NON_EMPTY 为空字符串或null时不序列化
+  4) Include.NON_NULL 为null时不序列化
+
+*** 日期处理
+支持Java8最新的日期时间类。
+1) 注册Java8日期时间模块
+   1) 手工注册
+      #+begin_example java
+      ObjectMapper objMapper = new ObjectMapper()
+          .registerModule(new JavaTimeModule())
+          .registerModule(new ParameterNamesModule())
+          .registerModule(new Jdk8Module());
+      #+end_example
+   2) 自动注册
+      #+begin_example java
+      ObjectMapper objMapper = new ObjectMapper();
+      objMapper.findAndRegisterModules();
+      #+end_example
+2) 通过 ~JsonFormat~ 设置日期时间格式
+   #+begin_example java
+   @JsonFormat(pattern = "yyyy-MM-DD")
+   private LocalDate birthday;
+   #+end_example
+
+*** 配置
+#+begin_example java
+// 美化输出
+mapper.enable(SerializationFeature.INDENT_OUTPUT);
+// 允许序列化空的POJO类
+// （否则会抛出异常）
+mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+// 把java.util.Date, Calendar输出为数字（时间戳）
+mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+// 在遇到未知属性的时候不抛出异常
+mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+// 强制JSON 空字符串("")转换为null对象值:
+mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
+
+// 在JSON中允许C/C++ 样式的注释(非标准，默认禁用)
+mapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+// 允许没有引号的字段名（非标准）
+mapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+// 允许单引号（非标准）
+mapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+// 强制转义非ASCII字符
+mapper.configure(JsonGenerator.Feature.ESCAPE_NON_ASCII, true);
+// 将内容包裹为一个JSON属性，属性名由@JsonRootName注解指定
+mapper.configure(SerializationFeature.WRAP_ROOT_VALUE, true);
+
+// 非null字段才参与序列化
+mapper.setSerializationInclusion(Include.NON_NULL);
+#+end_example
+* CSV
+http://www.cowtowncoder.com/blog/archives/2012/03/entry_468.html
+Jackson2.9内置支持CSV序列化和反序列化.
+
+CSV介绍
+1) 不具备自描述功能，因此接收处理方必须清楚每列表示的数据类型
+2) 可以包含非数据部分，如头行
+3) 可以以 ~,~, ~|~, 空格, tab 等作为列分隔符
+4) 可以以 ~\n~ 或其它字符作为行分隔符
+
+** 定义schema,包含必填项 *列名* 和 *列顺序* ，可选项 *列数据类型*
+1) 方式1：通过POJO设置
+   #+begin_example java
+   public enum Gender {MALE, FEMALE};
+    @JsonPropertyOrder({"name", "age", "gender", "verified", "image"})
+   public class User {
+       public String name;
+       public int age;
+       public Gender gender; // 对于结构体则需要自行定义序列化和反序列化方法
+       public boolean verified;
+       public byte[] image;
+   }
+    CsvMapper mapper = new CsvMapper();
+   CsvSchema schema = mapper.schemaFor(User.class);
+   #+end_example
+2) 方式2：通过fluent API设置
+   #+begin_example java
+   CsvSchema schema = CsvSchema.builder()
+     .addColumn("name")
+     .addColumn("age")
+     .addColumn("gender")
+     .addColumn("verified")
+     .addColumn("image")
+     .build();
+   #+end_example
+
+** 序列化
+#+begin_example java
+ObjectWriter writer = mapper.writer(schema.withLineSeparator("\n"));
+String csv = writer.writeValue(users);
+#+end_example
+
+** 反序列化
+#+begin_example java
+List<User> records = new ArrayList<User>();
+MappingIterator<User> it = mapper.reader(User.class).with(schema).readValues(csv);
+while (it.hasNextValue()) {
+    User record = it.nextValue();
+    records.add(record);
+}
+#+end_example
+
+对于非POJO形式,且没有定义schema
+#+begin_example java
+CsvMapper mapper = new CsvMapper();
+MappingIterator<Object[]> it = mapper
+  .reader(Object[].class)
+  .readValues("1,null\nfoobar\n7,true\n");
+Object[] data = it.nextValue();
+assert data[0] == "1"
+#+end_example
+
+* 邮件
+** 邮件传输协议
+1) SMTP: 简单邮件传输协议,用于发送电子邮件的传输协议,SSL版本为SMTPS；
+2) POP3: 用于接收电子邮件的传输协议,SSL版本为POP3S；
+3) IMAP: 互联网消息协议,作为POP3的替代协议,SSL版本为IMAPS.
+
+** JavaMail
+作为sun公司提供的一套与平台无关,协议独立的框架来构建邮件和消息应用程序.
+
+*** 导入依赖
+#+begin_example xml
+<dependency>
+    <groupId>com.sun.mail</groupId>
+    <artifactId>javax.mail</artifactId>
+    <version>1.6.2</version>
+</dependency>
+#+end_example
+
+*** API
+1) 会话(javax.mail.Session)
+   - 实例构建方式
+     1) 通过查询JNDI服务的管理对象获取
+        #+begin_example java
+        final String JNDI_NAME = "userMailSession";
+        InitialContext ctx = new InitialContext();
+        Session session = (Session)ctx.lookup(JNDI_NAME);
+        #+end_example
+     2) 基于编码方式获取
+        #+begin_example java
+        String username = "";
+        String pwd = "";
+        Properties props = new Properties();
+        props.put("mail.smtp.host", ""); // SMTP服务地址
+        props.put("mail.smtp.port", ""); // SMTP服务端口
+        props.put("mail.smtp.starttls.enable", "true"); // 是否启用starttls, 启动时需要导入SSL证书.
+        props.put("mail.smtp.auth", "true"); // 是否启用身份验证
+
+        Session session = Session.getInstance(props, new javax.mail.Authenticator(){
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(username, pwd);
+            }
+        });
+        #+end_example
+2) 消息(javax.mail.Message)
+   使用子类javax.mail.internet.MimeMessage
+   #+begin_example java
+   String from = "xxx@hotmail.com";
+   String to = "1@hotmail.com;2@hotmail.com";
+   String subject = "";
+   String textBody = "";
+   MimeMessage message = new MimeMessage(session);
+   message.setFrom(new InternetAddress(from)); // Address -> void
+   // Message.RecipientType -> Address[] -> void
+   message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+   message.setSubject(subject);
+   message.setText(textBody); // content uses text/plain MIME type
+   #+end_example
+   - Message.RecipientType的类型
+     - TO 收件人
+     - CC 抄送
+     - BCC 密件抄送
+3) 地址(javax.mail.Address)
+   使用子类javax.mail.internet.InternetAddress
+   #+begin_example java
+   Address addr1 = new InternetAddress("xxx@hotmail.com");
+   Address addr2 = new InternetAddress("xxx@hotmail.com", "xxx");
+   #+end_example
+4) 认证(javax.mail.Authenticator)
+   使用子类javax.mail.PasswordAuthentication
+   #+begin_example java
+   Authentication auth = new PasswordAuthentication(username, pwd);
+   #+end_example
+5) 消息传输(javax.mail.Transport)
+   #+begin_example java
+   // 使用默认版本发送消息
+   Transport.send(message);
+
+   // 从会话生成消息传输实例
+   Transport transport = session.getTransport("smtp");
+   message.saveChanges();
+   transpot.sendMessage(message, message.getAllRecipients());
+   transport.close();
+   #+end_example
+6) 接收(javax.mail.Store)
+   #+begin_example java
+   Store store = session.getStore("pop3");
+   store.connect(host, username, pwd);
+   #+end_example
+7) Folder(javax.mail.Folder)
+   表示目录的邮件消息的抽象类
+   #+begin_example java
+   Folder folder = store.getFolder("INBOX");
+   folder.open(Folder.READ_ONLY);
+   Message message[] = folder.getMessages();
+   #+end_example
+*** 发送邮件
+
+*** 接收邮件

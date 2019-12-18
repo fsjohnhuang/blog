@@ -2162,7 +2162,9 @@ gc.set_debug(gc.DEBUG_SAVEALL)  # 让回收的对象保存在gc.garbage中，以
 ** 概念
 日志类型：诊断日志、审计日志。
 诊断日志：记录与应用操作相关的日志，如异常日志（用于线上排查问题）
-审计日志：为商业分析而记录的日志，如Apache的访问记录日志（统计PV、UV和最热资源、出错率等信息）
+审计日志(Audit Log)：为商业分析而记录的日志，如Apache的访问记录日志（统计PV、UV和最热资源、出错率等信息）
+以规定格式准确详细记录每笔操作流水，用于后续分析统计。
+
 
 Logger，调用的接口，自身带日志级别特性，一个Logger可对应0~N个Handler；
 LogRecord，将从Logger得到的日志传递到Handler；
@@ -7333,9 +7335,30 @@ for tag, i1, i2, j1, j2 in s:
 ** 静态类型检查工具
 
 *** mypy
-    - 所属组织：Python官方
-    - 特点：
-      1) 最早推出，用户基数大，文档恶化社区经验最丰富
+- 所属组织：Python官方
+- 特点：
+  1) 最早推出，用户基数大，文档恶化社区经验最丰富
+
+**** 使用
+#+begin_example python
+# python3
+from typing import (
+  List,
+  Dict,
+  Iterable,
+  Union,
+  Optional,
+  Any,
+  TypeVar
+)
+
+def greeting(name: str) -> str:
+    return "Hello %s!" % name
+
+x: str = greeting("john")
+
+
+#+end_example
 
 *** pytype
     - 所属组织：Google

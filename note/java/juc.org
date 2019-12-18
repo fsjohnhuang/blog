@@ -29,7 +29,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
       class NonatomicThread() implements Runnable{
         private int i = 0;
         private volatile int j = 0;
-        
+
         public void run(){
           Systme.out.println(i++);
           Systme.out.println(j++);
@@ -61,7 +61,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
 
       class AtomicThread() implements Runnable{
         private AtomicInteger i = new AtomicInteger(0);
-        
+
         public void run(){
           Systme.out.println(i.getAndIncrement());
         }
@@ -105,7 +105,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
           public Object getValue(){
             return this.value;
           }
-          
+
           private void setValue(Object val){
             this.value = val;
           }
@@ -118,7 +118,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
 
               System.out.println(getValue());
             }
-            
+
             return swapped;
           }
         }
@@ -131,7 +131,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
        // 主线程
        ThreadDemo td = new ThreadDemo();
        new Thread(td).start();
-       
+
        while(true){
          if (td.getFlag()){
            System.out.println("------");
@@ -140,7 +140,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
        }
      }
    }
-   
+
    class ThreadDemo implements Runnable {
      // 主存、主线程缓存、线程1缓存都存储flag变量值的副本
      private boolean flag = false;
@@ -265,8 +265,8 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
 
       hm.compute("abc", (k, v) -> v == null ? 1 : v + 1); // 这样就能保证符合操作的原子性
       #+END_EXAMPLE
-  
-   多线程环境中可使用 
+
+   多线程环境中可使用
    - ConcurrentSkipListMap 替代 TreeMap
    - ConcurrentHashMap 替代 HashMap
    - CopyOnWriteArrayList 替代 ArrayList ，当读取操作比写入操作多得多时
@@ -275,7 +275,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
    #+BEGIN_EXAMPLE java
    import java.util.Collections;
    import java.util.HashMap;
-  
+
    public class App{
      public static void main(String[] args){
        HashMap<String, String> hashMap = Collections.synchronizedMap(new HashMap<String, String>());
@@ -311,11 +311,11 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
      String val = q.poll(100, TimeUnit.MILLISECONDS);
      #+END_EXAMPLE
    - ~ArrayBlockingQueue~ 使用圆环数组
-  
+
 ** 其他
    - ~java.concurrent.ConcurrentSkipListMap~ 基于比较键的并发映射
    - ~java.concurrent.ConcurrentSkipListSet~ 基于比较键的并发集合
-   - ~java.concurrent.CopyOnWriteArrayList~ 
+   - ~java.concurrent.CopyOnWriteArrayList~
      当修改集合值时，修改器都会复制一份底层的数组。
      - 场景：构造一个迭代器，迭代器包含一个当前数组的引用。若此时要修改数组元素，那么会先复制一份底层数组，在在新的数组上进行修改操作。而迭代器引用的仍然是旧数组。
    - ~java.concurrent.CopyOnWriteArraySet~
@@ -328,7 +328,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
     public static void main(String[] args){
       int threadCount = 5;
       final CountDownLatch cdl = new CountDownLatch(threadCount);
-      
+
       for (int i = 0; i < threadCount; i++){
         new Thread(new Runnable(){
           public void run(){
@@ -352,8 +352,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
      void run();
      }
      #+END_EXAMPLE
-  2) 
-  3) 实现Callable接口
+  2) 实现Callable接口
      相对与Runnable，实现Callable接口的执行线程可以返回执行结果和抛出异常。
      #+BEGIN_EXAMPLE java
      public class App {
@@ -404,14 +403,14 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
             #+END_EXAMPLE
           - ~boolean isCancelled()~
           - ~boolean isDone()~
-  4) 
+  3)
 
 * 等待唤醒和防止虚假唤醒
   1) 同步方法的方式
      #+BEGIN_EXAMPLE java
      class Clerk{
        private int production = 0;
-       
+
        public synchronized void produce(){
          // 通过将wait放置到循环体中，防止虚假唤醒的出现
          // 虚假唤醒就是两个或多个线程都在判断条件的临界点(如production==1)进入等待状态，当被唤醒时它们都直接往下执行导致共享数据值超出业务范围。
@@ -441,7 +440,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
        private int production = 0;
        private Lock lock = ReentrantLock();
        private Condition condition = lock.newCondition();
-       
+
        public void produce(){
          lock.lock();
          try {
@@ -478,7 +477,7 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
      }
      #+END_EXAMPLE
 
-* 锁
+* TODO 锁
 
 锁的接口 ~java.util.concurrent.Lock~
 #+BEGIN_EXAMPLE java
@@ -493,7 +492,7 @@ public interface Lock {
 }
 #+END_EXAMPLE
 
-** 可重入锁(java.util.concurrent.locks.ReentrantLock)  
+** 可重入锁(java.util.concurrent.locks.ReentrantLock)
    JDK1.5引入的新特性，注意：将 ~unlock~ 放在 finally 语句块中保证解锁。
    #+BEGIN_EXAMPLE java
    import java.util.concurrent.locks.Lock;
@@ -561,7 +560,7 @@ public interface Lock {
        }
      }
 
-    
+
      public void get(){
        rwl.readLock().lock();
        try{
@@ -579,12 +578,13 @@ public interface Lock {
 * 线程
   1) 创建启动线程
      #+BEGIN_EXAMPLE java
-     new Thread(()-> {/* method body of `run` in Runnable*/}).start();
-     
-     // 让当前线程休眠多少毫秒
-     Thread.sleep(ms);
+     Thread t1 = new Thread(()-> {/* method body of `run` in Runnable*/});
+     t1.start();
      // 等待子线程执行完成或超时再执行当前线程
-     Thread.join(ms);
+     t1.join(ms);
+
+     // 让当前线程休眠多少毫秒
+     Thread.currentThread().sleep(ms);
      #+END_EXAMPLE
   2) 线程中断
      - 早期的stop、suspend、resume方法已被废弃。
@@ -636,9 +636,8 @@ public interface Lock {
        #+END_EXAMPLE
 
 * TODO Java中的Promise - ~CompletableFuture<T>~
-  
 * 进程
-  
+
 ** 创建
    #+BEGIN_EXAMPLE java
    // 第一个为可执行命令，第二个参数为命名的参数
@@ -681,7 +680,7 @@ public interface Lock {
        System.out.println(in.nextLine());
      }
    }
-   
+
    // 阻塞当前线程，等待进程完成
    int result1 = p.waitFor();
 
@@ -772,10 +771,10 @@ for (int i = 0; i < 10; ++i){
 
 ** work-stealing(工作窃取)模式
    假如现在有两个线程分别在两个核上工作，然后每个线程队列中分别包含5个任务，当一个线程被阻塞而另一个线程已经将其线程队列中的任务执行完，那么空闲的线程会从被阻塞的线程队列中窃取任务来执行。
-   
+
 ** 示例
    #+BEGIN_EXAMPLE java
-   public class App 
+   public class App
    {
        public static void main( String[] args )
        {
@@ -785,19 +784,19 @@ for (int i = 0; i < 10; ++i){
          System.out.println(sum);
        }
    }
-   
+
    class ForkJoinSum extends RecursiveTask<Long>{
      private static final long serialVersionUID = -6479713183174303413L;
      private static final long THRESHOLD = 100000L; // 临界值
-     
+
      private long start;
      private long end;
-     
+
      public ForkJoinSum(long start, long end) {
        this.start = start;
        this.end = end;
      }
-     
+
      @Override
      public Long compute() {
        long dVal = end - start;
@@ -815,7 +814,7 @@ for (int i = 0; i < 10; ++i){
          right.fork();
          sum = left.join() + right.join();
        }
-     
+
        return sum;
      }
    }

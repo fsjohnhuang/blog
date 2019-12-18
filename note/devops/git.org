@@ -344,6 +344,8 @@ index 5e6a0dc..29f2cd4 100644
   git push -f <remote-repo-name> <local-branch-name>
   # 删除远端仓库分支
   git push <remote-repo-name> --delete <branch>
+  # 若分支名称和标签名称相同时，需要这样删除
+  git push <remote-repo-name> --delete refs/heads/<branch>
 
   # 推送本地标签到远端仓库
   git push --tags

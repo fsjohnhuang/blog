@@ -10,17 +10,8 @@ WAR，用于网站发布的包
 3)
 4) 在pom.xml中自定义的远程仓库私有仓库(代理公共中央仓库)
 
-* 中央仓库
-- search.maven.org
-- mvnrepository.com
-- https://maven.aliyun.com/mvn/view
-
 * Maven配置
   配置文件路径: ~$MAVEN_HOME/conf/setting.xml~
-  - 配置本地仓库路径
-    #+BEGIN_EXAMPLE xml
-    <localRepository>/path/to/local-repository</localRepository>
-    #+END_EXAMPLE
   - 配置远程仓库
     1) 在 ~$MAVEN_HOME/conf/setting.xml~ 或 ~$LOCAL_REPOSITORY/setting.xml~ 中设置
        - 规则
@@ -157,24 +148,90 @@ pom.xml中包含如下信息
 
     <modelVersion>4.0.0</modelVersion> <!-- POM模型版本，当前固定为4.0.0 -->
 
-    <!-- 公司或组织的唯一标识，并且作为包生成规则。
-         如groupId为io.fsjohnhuang.devops，Maven会在src/main/java下执行mkdir -p io/fsjohnhuang/devops
+    <parent>...</parent><!-- 设置父POM -->
+
+    <!-- 1. 公司或组织的唯一标识，并且作为包生成规则。
+            如groupId为io.fsjohnhuang.devops，Maven会在src/main/java下执行mkdir -p io/fsjohnhuang/devops
+
+         2. groupId:artifactId:version 统称为POM坐标，例如 io.fsjohnhuang.devops:cmdb:1.0.0-SNAPSHOT
       -->
     <groupId>io.fsjohnhuang.devops</groupId>
     <artifactId>cmdb</artifactId> <!-- 项目的唯一标识 -->
     <version>1.0.0-SNAPSHOT</version> <!-- 项目版本号 -->
-    <!--
-      groupId:artifactId:version 统称为POM坐标，例如 io.fsjohnhuang.devops:cmdb:1.0.0-SNAPSHOT
+
+    <!-- 打包模式：jar(默认值), war, ear, pom(表示项目仅仅包含了元数据)
+         注意：不同的打包模式对应的不同goal和phase绑定关系
       -->
+    <packaging>pom</packaging>
+
+    <name></name> <!-- 项目名称，Maven产生文档使用 -->
+    <url></url> <!-- 项目主页，Maven产生文档使用 -->
+    <description><![CDATA[]]></description> <!-- 项目详细描述，Maven产生文档使用 -->
+
+    <properties>
+    </properties>
+
+    <modules></modules> <!-- 模块列表 -->
 
     <dependencies>
-     <!-- 通过POM坐标声明依赖项，并由Maven统一下载更新和管理-->
+    <!-- 通过POM坐标声明依赖项，并由Maven统一下载更新和管理-->
     </dependencies>
+
+    <dependencyManagers>
+    <dependencyManagers>
+
+    <repositories>
+    </repositories>
 </project>
 #+end_example
 
 ** Super POM(父 POM)
-所有POM默认都会继承
+   所有POM都会继承一个父POM，父POM包含一些可以被继承的设置(目录结构、输出目录、仓库地址、报表目录等)，子POM可覆盖父POM的配置。
+   设置父POM的方式
+   1) 隐式继承
+      若没有显式指定继承父POM，Maven会默认继承effective pom。
+      - 查看effective pom的配置信息
+        1) 创建工程目录，并创建pom.xml
+           #+begin_example xml
+           <project xmlns = "http://maven.apache.org/POM/4.0.0"
+               xmlns:xsi = "http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation = "http://maven.apache.org/POM/4.0.0
+               http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+               <!-- 模型版本 -->
+               <modelVersion>4.0.0</modelVersion>
+               <!-- 公司或者组织的唯一标志，并且配置时生成的路径也是由此生成， 如com.companyname.project-group，maven会将该项目打成的jar包放本地路径：/com/companyname/project-group -->
+               <groupId>com.companyname.project-group</groupId>
+
+               <!-- 项目的唯一ID，一个groupId下面可能多个项目，就是靠artifactId来区分的 -->
+               <artifactId>project</artifactId>
+
+               <!-- 版本号 -->
+               <version>1.0</version>
+           </project>
+           #+end_example
+        2) 执行 ~mvn help:effective-pom~ 向stdout输出配置信息
+   2) 显式继承
+      #+begin_example xml
+      <parent>
+          <groupId></groupId>
+          <artifactId></artifactId>
+          <version></version>
+          <!-- 父POM的相对路径，默认值为../pom.xml。
+               父POM的搜索顺序：
+               1. 在构建当前项目的目录路径搜索父POM；
+                  例如某项目存在子模块
+                  - project/
+                      - pom.xml
+                      - moduleA/
+                          - pom.xml
+                  那么在目录project下执行mvn，那么project/moduleA/pom.xml的父POM为project/pom.xml。
+               2. relativePath指定路径搜索父POM；
+               3. 本地仓库中搜索父POM。
+          -->
+          <relativePath></relativePath>
+      </parent>
+      #+end_example
 
 ** 依赖声明
 #+begin_example xml
@@ -183,9 +240,21 @@ pom.xml中包含如下信息
     <groupId></groupId>
     <artifactId></artifactId>
     <version></version>
+    <!--
+      compile(默认值)，打包到最终的构建件中
+      provided，编译需要，不打包到最终的构建件中。如Spring Boot生成WAR包，而不是包含Tomcat的JAR包，那么Tomcat依赖就需要设置为provided了。又如lombok也是。
+      runtime，编译不需要，运行时需要(接口和实现分离)，打包到最终的构建件中。如编译时缺少mysql-connector-java不会失败，但运行时就会失败。。
+      test，测试使用，不打包到最终的构建件中。如测试框架。
+      system，加载本地jar，不打包到最终的构建件中。
+    -->
     <scope></scope>
+    <systemPath></systemPath> <!-- 指定scope为system的包路径 -->
+    <!--
+
+    -->
     <type></type>
     <optional></optional>
+
     <exclusions>
       <exclusion>
         <groupId></groupId>
@@ -195,6 +264,258 @@ pom.xml中包含如下信息
   </dependency>
 </dependencies>
 #+end_example
+
+*** 依赖传递
+
+** 仓库
+   3种仓库-本地、中央和远程，搜素下载依赖顺序：
+   1) 在本地仓库搜索，若没有则进行第2步；
+   2) 若设置远程仓库，则从1个或多个远程仓库搜索，搜索失败或没有设置远程仓库均会进行第3步；
+   3) 在中央仓库搜索，若没有则抛出错误。
+
+*** 本地仓库
+    - 默认：位于 ~$HOME/.m2/repository~
+    - 自定义：通过修改配置文件 ~$MAVEN_HOME/conf/setting.xml~
+      #+BEGIN_EXAMPLE xml
+      <localRepository>/path/to/local-repository</localRepository>
+      #+END_EXAMPLE
+
+*** 中央仓库
+https://search.maven.org/
+
+*** 远程仓库
+    1) 在 ~$MAVEN_HOME/conf/setting.xml~ 或 ~$LOCAL_REPOSITORY/setting.xml~ 中设置
+       - 规则
+         1) 一个respository最多配置一个mirror
+       - 示例
+       #+BEGIN_EXAMPLE xml
+       <!-- 设置远程仓库的镜像信息 -->
+       <mirrors>
+         <mirror>
+           <!-- 镜像唯一标识，Maven将id值按字母表顺序查询依赖 -->
+           <id>alimaven</id>
+           <!-- 镜像描述 -->
+           <name>aliyun maven</name>
+           <!-- 镜像地址 -->
+           <url>https://maven.aliyun.com/repository</url>
+           <!-- 仓库镜像中包含多个仓库(如central,google,jcenter等)，通过mirrorOf设置使用该镜像下哪个仓库。
+                * 匹配所有仓库请求，当搭建私有仓库时通常使用*匹配所有仓库请求
+                repo1,repo2 配置repo1或repo2仓库
+                *, !repo1 配置除repo1外的其它所有仓库
+                external:* 配置所有非本地的仓库
+             -->
+           <mirrorOf>central</mirrorOf>
+         </mirror>
+       </mirrors>
+       <!-- 设置远程镜像的帐号密码 -->
+       <servers>
+         <server>
+           <id>alimaven</id>
+           <username></username>
+           <password></password>
+         </server>
+       </servers>
+       #+END_EXAMPLE
+    2) 在项目的 ~pom.xml~ 中设置
+       #+BEGIN_EXAMPLE xml
+       <repositories>
+          <repository>
+            <!-- 唯一标识，Maven将id值按字母表顺序查询依赖 -->
+            <id>alimaven</id>
+            <!-- 仓库描述 -->
+            <name>aliyun maven</name>
+            <!-- 仓库地址，最后的central匹配mirrorOf的值，表示用 -->
+            <url>https://maven.aliyun.com/repository</url>
+            <releases>
+               <enabled>false</enabled> <!-- 设置当依赖为发布版本时，是否使用该仓库 -->
+                <!-- 设置依赖更系策略
+                     always
+                     daily(默认)
+                     interval:x x为分钟数
+                     never
+                 -->
+               <updatePolicy>always</updatePolicy>
+               <!-- Maven发布构建件到仓库时会带上checksum文件。当checksum文件缺失或不正确时，通过ignore,fail,warn设置处理方式 -->
+               <checksumPolicy>warn</checksumPolicy>
+            </releases>
+            <snapshots>
+               <enabled>true</enabled> <!-- 设置当依赖为SNAPSHOT版本时，是否使用该仓库 -->
+               <updatePolicy>never</updatePolicy>
+               <checksumPolicy>fail</checksumPolicy>
+            </snapshots>
+          </repository>
+        </repositories>
+      #+END_EXAMPLE
+
+* 静态资源打包
+
+** 默认配置
+#+begin_example yaml
+- src/
+  - main/
+    - java/
+    - resources/
+  - test/
+    - java/
+    - resources/
+- target/
+  - classes/
+  - test-classes/
+#+end_example
+默认会将main/resources的内容复制到target/classes/resources下，而test/resources的内容复制到target/test-classes/resources下。
+
+** 方式1：通过设置pom.xml的resources属性
+#+begin_example xml
+<build>
+  <resources>
+    <resource>
+      <!-- 设置静态资源目录  -->
+      <directory>src/main/java</directory>
+      <!-- 复制目的目录 -->
+      <targetPath>${build.outputDirectory}</targetPath>
+      <excludes>
+        <exclude>**/*.yaml</exclude>
+      </excludes>
+      <includes>
+        <include>**/*.xml</include>
+      </includes>
+      <!-- 开启资源过滤 -->
+      <filter>true</filter>
+    </resource>
+  </resources>
+</build>
+#+end_example
+
+** 方式2：通过maven-resources-plugin设置
+maven-compile-plugin用于编译Java代码，而maven-resources-plugin用于处理静态资源。
+
+#+begin_example xml
+<plugin>
+  <groupId>org.apache.maven.plugin</groupId>
+  <aritfactId>maven-resources-plugin</artifactId>
+  <version>2.5</version>
+  <exection>
+    <id>copy-xmls</id>
+    <phase>process-sources</phase>
+    <goals>
+      <goal>copy-resources</goal>
+    </goals>
+    <configuration>
+      <outputDirectory>${basedir}/target/classes</outputDirectory>
+      <resources>
+        <resource>
+          <directory>${basedir}/src/main/java</directory>
+          <includes>
+            <include>**/*.xml</include>
+          </includes>
+        </resource>
+        <resource>
+          <directory>${basedir}/src</directory>
+          <includes>
+            <include>*.xml</include>
+          </includes>
+        </resource>
+      </resources>
+    </configuration>
+  </exection>
+</plugin>
+#+end_example
+
+* 打包可执行JAR
+若直接打包为普通JAR，要执行JAR则要调用
+#+begin_example bash
+java -cp xxx.jar io.fsjohnhuang.App
+#+end_example
+若打包为可执行JAR则只需
+#+begin_example bash
+java -jar xxx.jar
+#+end_example
+
+** 方式1
+通过 ~mvn assembly:assembly~ 打包
+1) pom.xml
+   #+begin_example xml
+   <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-assembly-plugin</artifactId>
+       <version>2.2.0</version>
+       <configuration>
+           <archive>
+               <manifest>
+                   <mainClass>io.fsjohnhuang.App</mainClass>
+               </manifest>
+           </archive>
+           <descriptorRefs>
+               jar-with-dependencies
+           </descriptorRefs>
+       </configuration>
+   </plugin>
+   #+end_example
+2) 执行 ~mvn assembly:assembly~
+3) 可执行JAR位于./target/<artifactId>-<version>-jar-with-dependencies.jar
+
+
+通过 ~mvn package~ 打包
+1) pom.xml
+   #+begin_example xml
+   <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-assembly-plugin</artifactId>
+       <version>2.2.0</version>
+       <configuration>
+           <archive>
+               <manifest>
+                   <mainClass>io.fsjohnhuang.App</mainClass>
+               </manifest>
+           </archive>
+           <descriptorRefs>
+               jar-with-dependencies
+           </descriptorRefs>
+       </configuration>
+       <executions>
+           <execution>
+               <id>make-assembly</id>
+               <phase>package</phase>
+               <goals>
+                   <goal>single</goal>
+               </goals>
+           </execution>
+       </executions>
+   </plugin>
+   #+end_example
+
+** 方式2
+将项目依赖的JAR复制到一个目录中，并在MANIFEST文件中添加Class-Path和Main-Class。
+1) pom.xml
+   #+begin_example xml
+   <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-jar-plugin</artifactId>
+       <configuration>
+           <archive>
+               <manifest>
+                   <mainClass>io.fsjohnhuang.App</mainClass>
+                   <addClasspath>true</addClasspath>
+                   <classpathPrefix>dependency/</classpathPrefix> <!-- 依赖的JAR复制到这个目录下 -->
+               </manifest>
+           </archive>
+       </configuration>
+   </plugin>
+   <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-dependency-plugin</artifactId>
+       <executions>
+           <execution>
+               <id>copy-dependencies</id>
+               <phase>package</phase>
+               <goals>
+                   <goal>copy-dependencies</goal>
+               </goals>
+           </execution>
+       </executions>
+   </plugin>
+   #+end_example
+2) 执行 ~mvn package~
 
 * 多模块
 根pom.xml
@@ -309,7 +630,6 @@ mvn archetype:generate -DgroupId=com.john -DartifactId=Test -Dversion=1.0.0-SNAP
 # 查看版本号
 mvn -v
 
-
 # 为Maven项目生成Eclipse项目元数据
 mvn eclipse:eclipse
 # 清理Eclipse项目元数据
@@ -360,43 +680,70 @@ mvn dependency:purge-local-repository -Dexclude=org.slf4j:slf4j-api,org.slf4j:lo
 
 # 清理并重解析当前项目相关的本地仓库依赖，清理不再解析非当前项目的本地依赖
 mvn dependency:purge-local-repository -DmanualInclude=org.apache:apache
+
+# 从本地安装依赖到本地仓库(如ojdbc.jar是收费的，因此中央仓库中没有该资源，只能通过将依赖安装到本地仓库，然后才能在项目中加载安装)
+mvn install:install-file -Dfile=/path/to/jdbc6-11.2.0.3.jar -DgroupId=com.oracle -DartifactId=ojdbc6 -Dversion=11.2.0.3 -Dpackaging=jar -DgeneratePom=true
 #+END_EXAMPLE
 
-* TODO Maven Wrapper
-* TODO Maven生命周期(lifecycle phase)
-Maven包含3个相互独立的生命周期
+特别说明：
+1) 不执行compileTest和test
+   - 命令方式： ~mvn package -Dmaven.test.skip=true~
+   - pom设置方式：
+     #+begin_example xml
+     <plugin>
+         <groupId>org.apache.maven.plugin</groupId>
+         <artifactId>maven-compiler-plugin</artifactId>
+         <version>2.1</version>
+         <configuration>
+             <skip>true</skip>
+         </configuration>
+     </plugin>
+     <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-surefire-plugin</artifactId>
+         <version>2.5</version>
+         <configuration>
+             <skip>true</skip>
+         </configuration>
+     </plugin>
+     #+end_example
+2) 不执行test
+   - 命令方式： ~mvn package -DskipTests~
+   - pom设置方式：
+     #+begin_example xml
+     <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-surefire-plugin</artifactId>
+         <version>2.5</version>
+         <configuration>
+             <skipTests>true</skipTests>
+         </configuration>
+     </plugin>
+     #+end_example
 
+* TODO Maven Wrapper
+* TODO Maven生命周期(Life Cycle, Phase, Goal)
+  Maven包含3个相互独立的生命周期
   1) default lifecycle, handles the project deployment
      1) validate, validate the project is correct and all necessary information is available.
      2) compile, compile the source code of the project.
      3) test, test the compiled source code using a suitable unit testing framework. these tests should not require the code be packaged or deployed.
-     4) package, take the compiled code and package it in its distributable format, such as a JAR.
-        - run the following goals
-          1) validate
-          2) compile
-          3) test
-          4) package the code up in a JAR or WAR file within the target directory. The name of the JAR/WAR file will be based on the project's ~<artifactId>~ and ~<version>~ defined in pom.xml.
-             #+begin_example bash
-             # executes the JAR file.
-             java -jar target/artifactId-version.jar
-             #+end_example
+     4) package, take the compiled code and package it in its distributable format within `target` directory, such as a JAR or WAR.
+        - the name of artifact file will be based on `artifactId` and  `version` defined in pom.xml.
+          #+begin_example bash
+          # executes the JAR file.
+          java -jar target/artifactId-version.jar
+          #+end_example
      5) integration-test, process and deploy the package if necessary into an environment where integration test can be run.
      6) verify, run any checks to verify the package is valid and meets quality criteria.
-     7) install, install the package into the local repository, for use as a denpendency in other projects locally.
-        - run the following goals
-          1) validate
-          2) compile
-          3) test
-          4) package
-          5) copy the JAR/WAR file to local dependency repository, ready for another project to reference as a dependency.
+     7) install, install or copy the package into the local repository, for use as a denpendency in other projects locally.
      8) deploy, done in integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.
   2) clean lifecycle, cleans up artifacts created by prior builds
   3) site lifecycle, generates site documentation for this project
 
   对于以 ~pre-,post-,process-~ 开头的生命周期阶段，并没mvn命令与之对应。因为这些阶段均用于作准备或会产生对外界无用的临时状态数据。
 
-* Maven 插件(goal)
-  Maven的插件称为goal，一个goal可以对应0～N个生命周期阶段，一个生命周期阶段可以对应0~N个goal。
+  1个Life Cycle是多个Phase，1个Goal对应1个Phase；Goal为Phase的具体实现，根据打包模式使用不同的Goal，例如项目类型为jar，那么package phase对应的goal则为jar:jar，若为项目类型为war，那么package phase对应的goal为war:war。
 
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express
