@@ -431,58 +431,123 @@ java -cp xxx.jar io.fsjohnhuang.App
 java -jar xxx.jar
 #+end_example
 
-** 方式1
-通过 ~mvn assembly:assembly~ 打包
+** 方式1——maven-assembly-plugin
+支持自定义的打包结构，可以定制依赖项（Shell脚本、SQL脚本、.properties和.xml文件）等。
 1) pom.xml
    #+begin_example xml
    <plugin>
        <groupId>org.apache.maven.plugins</groupId>
        <artifactId>maven-assembly-plugin</artifactId>
        <version>2.2.0</version>
-       <configuration>
-           <archive>
-               <manifest>
-                   <mainClass>io.fsjohnhuang.App</mainClass>
-               </manifest>
-           </archive>
-           <descriptorRefs>
-               jar-with-dependencies
-           </descriptorRefs>
-       </configuration>
-   </plugin>
-   #+end_example
-2) 执行 ~mvn assembly:assembly~
-3) 可执行JAR位于./target/<artifactId>-<version>-jar-with-dependencies.jar
-
-
-通过 ~mvn package~ 打包
-1) pom.xml
-   #+begin_example xml
-   <plugin>
-       <groupId>org.apache.maven.plugins</groupId>
-       <artifactId>maven-assembly-plugin</artifactId>
-       <version>2.2.0</version>
-       <configuration>
-           <archive>
-               <manifest>
-                   <mainClass>io.fsjohnhuang.App</mainClass>
-               </manifest>
-           </archive>
-           <descriptorRefs>
-               jar-with-dependencies
-           </descriptorRefs>
-       </configuration>
+       <!-- 若绑定到package Phase，那么执行mvn package就会自动执行该Goal;
+            若没有绑定则需要直接执行Goal，mvn assembly:assembly
+       -->
        <executions>
            <execution>
-               <id>make-assembly</id>
-               <phase>package</phase>
-               <goals>
-                   <goal>single</goal>
-               </goals>
+             <id>make-assembly</id>
+             <!-- 绑定到package Phase -->
+             <phase>package</phase>
+             <goals>
+                 <!-- 只运行一次 -->
+                 <goal>single</goal>
+             </goals>
            </execution>
        </executions>
+       <configuration>
+           <!-- 打包出来的项目名称，最终的文件名为$fileName-$descriptorRefs。
+                若不设置该项目，最终的文件名为$artifactId-$version-$descriptorRefs。
+           -->
+           <finalName>name of project</finalName>
+           <archive>
+               <manifest>
+                   <mainClass>io.fsjohnhuang.App</mainClass>
+               </manifest>
+           </archive>
+           <!-- Maven预设置的描述符，或自行配置描述符文件
+                预设置的描述符有：
+                bin
+                src
+                project
+                jar-with-dependencies: 将所有外部依赖JAR都加入生成的JAR包中。
+           -->
+           <descriptorRefs>jar-with-dependencies</descriptorRefs>
+           <!-- 配置描述符文件
+           <descriptor>src/main/assembly/assembly.xml</descriptor> -->
+       </configuration>
    </plugin>
    #+end_example
+2) 执行 ~mvn assembly:assembly~ 或 ~mvn package~
+3) 可执行JAR位于./target/<artifactId>-<version>-jar-with-dependencies.jar
+
+*** 描述符文件
+若要实现自定义打包的效果，则需要配置描述符文件。
+
+#+begin_example xml
+<assembly>
+    <!-- 对应descriptorRef中的值，作为打包文件名的后缀。 -->
+    <id>assembly</id>
+    <!-- 设置打包格式，可同时设置多个。支持以下类型：
+         zip,tar,tar.gz,tar.bz2,jar,war
+    -->
+    <formats>
+        <format>tar.gz</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <fileSets>
+        <fileSet>
+           <directory>src/main/bin</directory>
+           <includes>
+               <include>*.sh</include>
+           </includes>
+           <outputDirectory>bin</outputDirectory>
+           <fileMode>0755</fileMode> <!-- 默认为0644 -->
+        </fileSet>
+        <fileSet>
+           <directory>src/main/conf</directory>
+           <outputDirectory>conf</outputDirectory>
+        </fileSet>
+        <fileSet>
+           <directory>src/main/sql</directory>
+           <includes>
+               <include>*.sql</include>
+           </includes>
+           <outputDirectory>sql</outputDirectory>
+        </fileSet>
+        <fileSet>
+           <directory>target/classes/</directory>
+           <includes>
+               <include>*.properties</include>
+               <include>*.xml</include>
+               <include>*.txt</include>
+           </includes>
+           <outputDirectory>conf</outputDirectory>
+        </fileSet>
+    </fileSets>
+    <files>
+        <file>
+            <source>target/${project.artifactId}-${project-version}.jar</source>
+            <!-- 修改文件名
+               <destName></destName>
+            -->
+            <outputDirectory>.</outputDirectory>
+        <file>
+    </files>
+    <dependencySets>
+        <dependencySet>
+            <!--
+            false：将依赖以原来的JAR形式打包
+            true：将依赖解压为*.class文件的目录结构再进行打包
+            -->
+            <unpack>false</unpack>
+            <!--
+            指定符合哪个作用范围的依赖会被打包。一般compile和provided都不用管，写为runtime即可。
+            -->
+            <scope>runtime</scope>
+            <outputDirectory>lib</outputDirectory>
+        </dependencySet>
+    </dependencySets>
+</assembly>
+#+end_example
 
 ** 方式2
 将项目依赖的JAR复制到一个目录中，并在MANIFEST文件中添加Class-Path和Main-Class。
@@ -721,29 +786,139 @@ mvn install:install-file -Dfile=/path/to/jdbc6-11.2.0.3.jar -DgroupId=com.oracle
      </plugin>
      #+end_example
 
-* TODO Maven Wrapper
-* TODO Maven生命周期(Life Cycle, Phase, Goal)
-  Maven包含3个相互独立的生命周期
-  1) default lifecycle, handles the project deployment
-     1) validate, validate the project is correct and all necessary information is available.
-     2) compile, compile the source code of the project.
-     3) test, test the compiled source code using a suitable unit testing framework. these tests should not require the code be packaged or deployed.
-     4) package, take the compiled code and package it in its distributable format within `target` directory, such as a JAR or WAR.
-        - the name of artifact file will be based on `artifactId` and  `version` defined in pom.xml.
-          #+begin_example bash
-          # executes the JAR file.
-          java -jar target/artifactId-version.jar
-          #+end_example
-     5) integration-test, process and deploy the package if necessary into an environment where integration test can be run.
-     6) verify, run any checks to verify the package is valid and meets quality criteria.
-     7) install, install or copy the package into the local repository, for use as a denpendency in other projects locally.
-     8) deploy, done in integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.
-  2) clean lifecycle, cleans up artifacts created by prior builds
-  3) site lifecycle, generates site documentation for this project
+* Maven Wrapper
+由于Maven插件可能和特定版本的Maven兼容，因此需要通过Maven Wrapper锁定项目所使用的Maven版本。
+mvnw实际调用的是.mvn/wrapper/maven-wrapper.jar中的 ~org.apache.maven.wrapper.MavenWrapperMain~ 。
 
-  对于以 ~pre-,post-,process-~ 开头的生命周期阶段，并没mvn命令与之对应。因为这些阶段均用于作准备或会产生对外界无用的临时状态数据。
+** 安装
+1) 在POM添加插件
+   #+begin_example
+   <plugin>
+     <groupId>com.rimerosolutions.maven.plugins</groupId>
+     <artifactId>wrapper-maven-plugin</artifactId>
+     <version>0.0.4</version>
+   </plugin>
+   #+end_example
+   - 命令 ~mvn wrapper:wrapper~ 就会在当前目录下就会生成mvnw、mvnw.bat和maven/下的maven-wrapper.jar、maven-wrapper.properties和MavenWrapperDownloader.java。
+2) 直接在命令行执行GOAL
+   #+begin_example bash
+   # 安装最新版本的mvnw,然后在当前目录下就会生成mvnw、mvnw.cmd和.mvn/wrapper/下的maven-wrapper.jar、maven-wrapper.properties和MavenWrapperDownloader.java。
+   mvn -N io.takari:maven:wrapper
 
-  1个Life Cycle是多个Phase，1个Goal对应1个Phase；Goal为Phase的具体实现，根据打包模式使用不同的Goal，例如项目类型为jar，那么package phase对应的goal则为jar:jar，若为项目类型为war，那么package phase对应的goal为war:war。
+   # 安装或修改mvnw所使用的maven版本号
+   # 实际就是修改.mvn/wrapper/maven-wrapper.properties中distributionUrl所指向的Maven URL
+   mvn -N io.takari:maven:wrapper -Dmaven=3.1.0
+   #+end_example
+
+** 使用
+使用./mvnw代替mvn命令执行mvn的命令即可。
+#+begin_example bash
+./mvnw clean install
+#+end_example
+
+* Maven生命周期(Life Cycle, Phase, Goal, Plugin)
+Maven包含3个相互独立的生命周期
+1) default lifecycle, handles the project deployment
+   1) validate, validate the project is correct and all necessary information is available.
+   2) initialize
+   3) generate-sources
+   4) process-sources
+   5) generate-resources
+   6) process-resources
+   7) compile, compile the source code of the project.
+   8) process-classes
+   9) generate-test-sources
+   10) process-test-sources
+   11) generate-test-resources
+   12) process-test-resources
+   13) test-compile
+   14) process-test-classes
+   15) test, test the compiled source code using a suitable unit testing framework. these tests should not require the code be packaged or deployed.
+   16) prepare-package
+   17) package, take the compiled code and package it in its distributable format within `target` directory, such as a JAR or WAR.
+       - the name of artifact file will be based on `artifactId` and  `version` defined in pom.xml.
+         #+begin_example bash
+         # executes the JAR file.
+         java -jar target/artifactId-version.jar
+         #+end_example
+   18) pre-integration-test
+   19) integration-test, process and deploy the package if necessary into an environment where integration test can be run.
+   20) post-integration-test
+   21) verify, run any checks to verify the package is valid and meets quality criteria.
+   22) install, install or copy the package into the local repository, for use as a denpendency in other projects locally.
+   23) deploy, done in integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.
+2) clean lifecycle, cleans up artifacts created by prior builds
+   1) pre-clean
+   2) clean
+   3) post-clean
+3) site lifecycle, generates site documentation for this project
+   1) pre-site
+   2) site
+   3) post-site
+   4) site-deploy
+
+对于以 ~pre-,post-,process-~ 开头的生命周期阶段，并没mvn命令与之对应。因为这些阶段均用于作准备或会产生对外界无用的临时状态数据。
+
+1个Life Cycle是多个Phase，每个Phase对应1个或多个Goal；
+Goal为Phase的具体实现，根据打包模式使用不同的Goal，例如项目类型为jar，那么package phase对应的goal则为jar:jar，若为项目类型为war，那么package phase对应的goal为war:war。
+
+** Phase
+#+begin_example bash
+# 下列命令均为执行到Life Cycle中的某个Phase，表示执行这个Phase及之前所有Phase绑定的Goal。
+# 而每个Phase都会绑定Maven默认的Goal或没有对应Goal或对应自定义的Goal。
+mvn clean
+mvn compile
+mvn test
+mvn package
+
+# 也可以跳过某些Phase
+mvn install -Dmaven.test.skip=true
+#+end_example
+
+** Goal
+Goal作为Maven中任务的最小单位。
+分为两类：
+1) 和Phase绑定的，即执行到某个Phase就会触发该Goal；
+2) 不和Phase绑定的，作为单独任务执行，相当于Ant的target。
+   - 前提：项目已经执行到某个Phase，才能执行非绑定Goal。
+
+** Plugin
+插件提供一组Goal，这组Goal可包含Phase绑定和不绑定的，我们也可以重新绑定。
+Plugin的命名规则: ~plugin-artifactId:plugin-version:plugin-goal(goal-execution-id)~
+
+直接调用Plugin的Goal，跳过所有Phase
+#+begin_example bash
+# 格式：plugin-artifactId:plugin-goal
+mvn compiler:compile
+mvn compiler:testCompile
+mvn surefire:test
+mvn jar:jar
+#+end_example
+
+*** 查看Plugin中包含的Goal
+通过help插件(Maven Help Plugin)查看其他插件提供哪些Goal。
+#+begin_example xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-eclipse-plugin</artifactId>
+            <version>2.10</version>
+            <configuration>
+                <downloadSources>true</downloadSources>
+                <downloadJavadocs>true</downloadJavadocs>
+                <wtpversion>2.0</wtpversion>
+                <wtpContextName>spring3</wtpContextName>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+#+end_example
+命令:
+#+begin_example bash
+# 格式：mvn help:describe -Dplugin=groupId:artifactId:version
+mvn help:describe -Dplugin=org.apache.maven.plugins:maven-eclipse-plugin:2.10
+#+end_example
 
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express

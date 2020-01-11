@@ -1,26 +1,5 @@
+
 Python社区中还没出现如Maven/Gradle那样不仅管理依赖，还能初始化项目目录、测试、生成文档等。
-
-* 管理多版本Python
-pyenv用于Python版本管理，可让一台机器安装多个Python版本，并流畅切换。
-https://github.com/pyenv/pyenv
-
-** 安装
-https://github.com/pyenv/pyenv#basic-github-checkout
-
-** 使用
-#+begin_example bash
-# 查看已安装的Python版本
-pyenv versions
-
-# 安装多个指定版本的Python
-pyenv install <version> ...
-
-# 设置默认版本号，当执行python则执行对应版本的Python解释器
-pyenv global <version>
-
-# 仅在当前目录下设置默认版本号，在当前下执行python则执行对应版本的Python解释器
-pyenv local <version>
-#+end_example
 
 * 虚拟环境
 
@@ -159,6 +138,9 @@ pipenv --py
 
     只需要将Pipfile纳入版本控制即可。
 
+** poetry
+pipenv的替代品
+
 ** conda
    Windows下使用
 
@@ -220,16 +202,26 @@ docker-py提供docker支持
 ** Elpy
    1) Automatic Indentation
       - isort，格式化 ~import~ 和 ~from...import~ 等导入语句
-      	#+begin_src bash
-	pip install --user isort
-	#+end_src
-	  #+begin_src elisp
-	  (defvar myPackages
-	    '(elpy
-	      py-isort))
-	  (require 'py-isort)
-	  (add-hook 'before-save-hook 'py-isort-before-save)
-	  #+end_src
+        - 安装和使用
+          #+begin_src bash
+          pip install --user isort
+          isort -ls old.py
+          #+end_src
+        - Emacs配置
+          #+begin_src elisp
+          (defvar myPackages
+	        '(elpy
+	          py-isort))
+	      (require 'py-isort)
+	      (add-hook 'before-save-hook 'py-isort-before-save)
+          #+end_src
+      - yapf，google代码格式化
+        - 安装和使用
+          #+begin_src bash
+          pip install --user yapf
+          yapf old.py > new.py
+          yapf -i old.py # 直接修改源文件
+          #+end_src
    2) Syntax Highlighting
    3) Auto-Completing
       - Jedi，负责让Emacs和后端Python服务通信，获取提示框的内容

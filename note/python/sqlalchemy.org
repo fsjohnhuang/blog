@@ -1,4 +1,5 @@
 官方教程：https://docs.sqlalchemy.org/en/13/core/tutorial.html
+中文教程：https://www.osgeo.cn/sqlalchemy/
 
 * 安装
 #+BEGIN_EXAMPLE bash
@@ -11,6 +12,7 @@ pip install sqlalchemy
 1) SQLite, ~sqlite:///<filepath>~
    1) 绝对路径, ~sqlite:////test.db~
    2) 相对路径, ~sqlite:///test.db~
+2) MySQL, ~mysql+mysqlconnector://root:123@localhost:3306/test~
 
 * 组成
 从上自下分为两大模块（最底层为DBAPI）
@@ -31,6 +33,13 @@ pip install sqlalchemy
 内置DataSource 和 日志功能
 
 * 操作
+
+** 版本检查
+#+begin_example python
+import sqlalchemy
+
+sqlalchemy.__version__
+#+end_example
 
 ** 连接数据库
 #+BEGIN_EXAMPLE python
@@ -63,6 +72,13 @@ conn.execute('select * from dual')
         Column,
         Integer,
         String,
+        Float,
+        Text,
+        Sequence,
+        Date,
+        DateTime,
+        Boolean,
+        Binary,
         ForeignKey,
     )
     from sqlalchemy.orm import mapper
@@ -96,7 +112,6 @@ conn.execute('select * from dual')
     userMapper = mapper(User, userTable)
     addrMapper = mapper(Addr, addrTable)
     #+END_EXAMPLE
-
 2) 通过 ~declarative_base~ 统一定义
    ~declarative_base~ 类用于维护类和表的映射关系， 应用中一个数据库使用唯一一个Base作为该数据库下所有映射的父类。
    #+BEGIN_EXAMPLE python
@@ -108,19 +123,18 @@ conn.execute('select * from dual')
        Integer,
        String,
        ForeignKey,
+       DateTime,
    )
    from sqlalchemy.ext.declarative import declarative_base
 
 
    Base = declarative_base()
-   # 统一定义
+   # 统一定义, 并且不能定义构造函数
    class User(Base):
        __tablename__ = 'user'
        id = Column('id', Integer, primary_key=True)
        name = Column('name', String(20), unique=True, nuallale=False)
-
-       def __init__(self, name, ):
-           self.name = name
+       created_date = Column(DateTime, default=datetime.datetime.utcnow)
 
        def __repr__(self):
            return '<{}({},{})>'.format(self.__class__.__name__, self.id, self.name)
@@ -131,16 +145,14 @@ conn.execute('select * from dual')
        user_id = Column('user_id', None, ForeignKey('user.id'))
        email = Column('email', String(60), nullable=False)
 
-       def __init__(self, user_id, email, ):
-           self.user_id = user_id
-           self.email = email
-
        def __repr__(self):
            return '<{}({},{},{})>'.format(self.__class__.__name__, self.id, self.user_id, self.email)
 
    # 数据库引擎
    engine = create_engine('sqlite:///test.db')
+
    # 以Base子类为依据自动生成Table并调用mapper()，后续可通过User.table获取表定义，通过User.__mapper__获取映射关系对象。
+   # 必须加载所有domain后执行才会自动在数据库建立表格
    Base.metadata.create_all(engine)
    #+END_EXAMPLE
 
@@ -227,9 +239,11 @@ Base.metadata.drop_all()
           #+END_EXAMPLE
        3) 触发返回结果
           1) ~all()~ 返回所有
+             对结果可以执行切片操作。
           2) ~first()~ 返回第一个元素
-          3) ~one()~ 有且仅有一个元素时才返回
-          4) ~count()~ 返回记录数目
+          3) ~one()~ 有且仅有一个元素时才返回，但没有记录或多于一个记录时会抛出异常
+          4) ~one_or_none()~ 有且仅有一个元素时才返回，没有记录则返回None。多于一个记录时会抛出异常
+          5) ~count()~ 返回记录数目
        4) 分组
           #+BEGIN_EXAMPLE python
           from sqlalchemy import func
@@ -245,22 +259,39 @@ Base.metadata.drop_all()
     #+BEGIN_EXAMPLE python
     user = User(name='john')
     session.add(user)
+    # session.add_all(users: Iterable)
     session.commit()
     #+END_EXAMPLE
 
 *** 删除
-    #+BEGIN_EXAMPLE python
-    user = session.query(User).get(0)
-    session.delete(user)
-    session.commit()
-    #+END_EXAMPLE
+1) 先获取Domain再操作
+   #+BEGIN_EXAMPLE python
+   user = session.query(User).get(0)
+   session.delete(user)
+   session.commit()
+   #+END_EXAMPLE
+2) 直接操作
+   #+begin_example python
+   (session
+    .query(User)
+    .limit(1)
+    .delete())
+   #+end_example
 
 *** 更新
-    #+BEGIN_EXAMPLE python
-    user = session.query(User).get(0)
-    user.name = 'johnjohn'
-    session.commit()
-    #+END_EXAMPLE
+1) 先获取Domain后更新
+   #+BEGIN_EXAMPLE python
+   user = session.query(User).get(0)
+   user.name = 'johnjohn'
+   session.commit()
+   #+END_EXAMPLE
+2) 直接更新
+   #+begin_example python
+   (session
+    .query(User)
+    .limit(1)
+    .update({"name": "johnjohn"}))
+   #+end_example
 
 *** 触发flush的时机
     1) ~session.commit()~
@@ -424,10 +455,6 @@ Base.metadata.drop_all()
       user = session.query(User).join(Addr).filter(Addr.email.like('%test')).first()
       #+END_EXAMPLE
 
-
-
-
-
 * Oracle
 cx_Oracle为Python的Oracle连接驱动模块，需要另行下载安装。而cx_Oracle又依赖instant client。
 官网: https://oracle.github.io/python-cx_Oracle/
@@ -524,3 +551,330 @@ Pagination  # has_prev :: bool
 Pagination  # next_num :: int
 Pagination  # prev_num :: int
 #+end_src
+* Python DB API 2.0
+
+** API介绍
+#+begin_example python
+conn = connect() # 返回连接对象
+
+cursor = conn.cursor() # 返回数据库游标
+cursor.callproc(proc_name: str [, params]) # 调用存储过程，支持：Oracle
+cursor.execute(sql: str [, params]) # 执行SQL语句
+cursor.executemany(sql: str, params: Iterable) # 以序列中的参数执行多次SQL语句
+cursor.executescript() #执行DDL，支持：SQLite3
+cursor.fetchone() # 获取查询结果中的一行记录
+cursor.fetchmany(size: int=cursor.arraysize) # 获取查询结果中指定数量的记录
+cursor.fetchall() # 获取所有查询结果，会占用大量内存
+cursor.nextset() # 迭代获取下一个记录
+cursor.arraysize # 用于获取记录总数
+cursor.setinputsize # 用于设置调用存储过程时，设置入参的数量
+cursor.setoutputsize # 用于设置调用存储过程时，设置出参的数量
+
+conn.commit() # 事务提交
+conn.rollback() # 事务回滚
+conn.close() # 关闭连接
+
+# 数据库异常
+StandardError
+  Warning
+  Error
+    InterfaceError
+    DataBaseError
+
+# 参数形式，通过模块级变量paramstyle的值指定
+# qmark:(?)
+# numeric:(:1)
+# named:(:name)
+# format:(%s)
+# pyformat:(%(name)s), 若为整形数时则使用 %(name)d
+#+end_example
+
+** SQLite3实例
+
+*** 特点
+1) 开源的嵌入式关系型数据库
+2) 不用安装、配置、启动
+3) 依赖文件系统
+4) 支持事务
+5) 客户端和服务端在同一个进程空间运行
+
+*** Python操作
+Python标准库中包含SQLite3模块。
+
+**** QA
+1) 报 ~ModuleNotFoundError: No module named '_sqlite3'~
+   - 原因：编译安装Python时缺少SQLite模块
+   - 解决方案：
+     1) 安装SQLite3依赖 ~sudo yum -y install sqlite-devel~
+     2) 重新编译Python
+        #+begin_example bash
+        ./configure --prefix=/usr/local/Python3.6/ --enable-optimizations --enable-loadable-sqlite-extensions
+        make -j `grep processor /proc/cpuinfo  | wc -l`
+        #+end_example
+     3) 删除原有的Python
+        #+begin_example bash
+        rm -rf /usr/local/Python3.6/
+        #+end_example
+     4) 安装Python
+        #+begin_example bash
+        make install
+        #+end_example
+
+**** 基本操作
+#+begin_example python
+from sqlite3 import connect, Row
+
+db_name = ":memory:" # 内存数据库。若为文件路径则保存到文件系统上。
+conn = connect(db_name)
+
+# 行对象(Row)
+# 支持以列名或索引号访问，迭代访问和len()操作
+conn.row_factory = Row
+with conn.cursor() as cur:
+    cur.execute("select * from sys_user")
+    row = cur.fetchone()
+
+    print(row["col1"]) # 以列名访问
+    print(row[1]) # 以索引号访问，从1开始
+    for col in row: # 以迭代方式访问
+        print(col)
+    print("%d" % len(row)) # len()
+
+    # 批量操作
+    # 通过executemany
+    data = [(1,2,3,), (2,3,4,)]
+    cur.executemany("insert into test(id, age, grade) values(?,?,?)", data)
+    # 通过executescript
+    cur.executescript("""
+    insert into test(id, age, grade) values(1,2,3);
+    insert into test(id, age, grade) values(2,3,4);
+    """)
+
+    cur.commt()
+#+end_example
+
+**** 二进制文件操作
+#+begin_example python
+from sqlite3 import connect
+
+conn = connect(":memory:")
+with cur in conn.cursor():
+  # 写入
+  with open("test.jpg") as f:
+      cur.execute("insert into test(id, data) values(1, ?)", (f.read()))
+
+  cur.commit()
+
+  # 读取
+  cur.execute("select data from test where id = 1")
+  row = cur.fetchone()
+  with open("test2.jpg", "wb+") as f:
+      f.write(cur[1])
+#+end_example
+
+**** 自定义函数
+作用：可在SQL语句中调用Python方法
+
+#+begin_example python
+from sqlite3 import connect
+import binascii
+
+
+# 定义Python函数
+def encrypt(data: str) -> str:
+    crc = str(binascii.crc32(data.encode()))
+    while len(crc) < 10:
+        crc = "0" + crc
+
+    return data + crc
+
+
+def check(data: str) -> Optional[str]:
+    if len(data) < 11:
+        return None
+
+    crc_res = str(binascii.crc32(data[:-10].encode()))
+    while len(crc) < 10:
+        crc_res = "0" + crc_res
+
+    if crc_res == data[-10:]:
+        return crc_res[:-10]
+
+class AbsSum(object):
+    def __init__(self,):
+        self.s = 0
+
+    def step(self, v):
+        self.s += v
+
+    def finalize(self,):
+        return self.s
+
+
+db_name = ":memory:"
+conn = connect(db_name)
+
+# 注册基础函数
+# Args:
+#     :str: 注册到SQL中的函数名
+#     :int: 函数参数数量
+#     :Function: Python函数
+conn.create_function("checkk", 1, check)
+
+# 注册聚合函数
+# Args:
+#     :str: 注册到SQL中的函数名
+#     :int: 函数参数数量
+#     :Class: Python类名
+conn.create_aggreate("abssum", 1, AbsSum)
+
+with conn.cursor() as cur:
+    cur.execute("select abssum(id), checkk(name) from test")
+    count = len(cur.fetchall())
+
+    cur.commit()
+#+end_example
+**** 数据类型转换
+None - NULL
+int - integer
+str - text
+bytes - blob
+** MariaDB实例
+MySQL的开源分支，采用CS模式。
+
+*** 搭建数据库
+#+begin_example bash
+mysqld --console # 启动数据库
+mysqladmin -u root -p password # 添加帐号密码
+#+end_example
+
+*** Python操作
+连接库：
+1) 第三方库(支持Python3.x)
+   1) pymysql
+   2) MYSQL-Python
+2) MySQL官方连接库(MySQL connector Python)
+   #+begin_example bash
+   pip install mysql-connector-python
+   #+end_example
+
+#+begin_example python
+# 建立连接对象：mysql.connector.connect
+# 数据库异常：mysql.connector.Error
+# 切换数据库：conn.database = new_database_name
+# 以format或pyformat作为paramstyle，即%s或%(name)s、%(name)d
+
+from mysql.connector import connect
+
+db_name = {
+    "host": "localhost",
+    "database": "test",
+    "user": "john",
+    "password": "pass",
+}
+
+conn = connect(**db_name)
+with conn.cursor() as cur:
+    cur.execute("select * from sys_user where id = %s", 1)
+    cur.execute("select * from sys_user where id = %(id)s", {"id":1})
+#+end_example
+** MongoDB实例
+GrideFS：在数据库中保存文件。
+
+*** Python操作
+驱动库：pymongo
+
+#+begin_example python
+from pymongo import MongoClient
+
+
+# 建立连接对象
+db = MongoClient(host: str, port: int)
+
+db_test = db.test # 获取数据库对象
+stud = db_test.student # 获取数据库对象下的集合
+stud.insert_one({"id":1, "name": "john"}) # 向集合插入文档
+stud.find_one() # 返回一条文档，接收一个字典类型的参数，用于作为选择条件
+
+stud.find()
+stud.insert_many()
+stud.update()
+stud.update_many()
+stud.replace_one()
+stud.delete_one()
+stud.find_one_and_delete()
+stud.find_one_and_replace()
+stud.find_one_and_update()
+stud.count()
+stud.group()
+stud.distinct()
+#+end_example
+
+*** mongoengine
+Object-Document Mapper，类似于ORM。
+
+#+begin_example python
+from mongoengine import *
+
+conn = connect("test")
+
+class User(Document):
+    meta = {"allow_inheritance": True} # 允许继承，默认为False
+
+    def clean(self,):
+        # 在save前被执行，可以用于设置自动计算的值
+        pass
+
+    # 默认建立id字段对应mongodb的_id属性，但可以自定义主键和用id或pk来引用主键
+    # u = User.objects[0]
+    # u.id == u.uid == u.pk
+    uid = SequenceField(primary_key=True)
+    name = StringField() # StringField(regex=None, max_length=None, min_length=None)
+    age = IntField()     # IntField(min_value=None, max_value=None)
+                         # FloatField(min_value=None, max_value=None)
+                         # BooleanField()
+                         # DateTimeFIeld()
+                         # ListField()
+                         # DictField()
+                         # ReferenceField() 参考类型
+                         # SequenceField() 自动产生一个整数序列，自增值
+    ff = FileField()     # FileField()
+
+# 上述Field的通用入参
+# default: Any 默认值
+# required: bool 必填
+# primary_key: bool
+# null: bool
+# choices: List[Any] 值范围
+# unique: bool
+
+# CUD
+user = User(name="john", age=1)
+user.save() # 插入文档
+user.update(age=13) # 更新字段，此时数据库的值已经更新，但user对象还没同步过来
+user.update(inc_age=1) # （修改器）在原值基础上增加1，此时数据库的值已经更新，但user对象还没同步过来
+user.reload() # 从数据库同步数据过来
+user.delete() # 删除文档
+user.drop_collection() # 删除集合
+
+# R
+User.objects # 返回集合中所有文档
+User.objects.count()
+User.objects.filter()
+User.objects.all()
+User.objects.first()
+User.objects.order_by()
+User.objects.limit()
+User.objects.skip()
+
+# 保存文件
+user.ff.put(open("/path/to/file", "rb", content_type="image/jpeg"))
+user.save()
+
+# 读取文件
+with open("/path/to/file", "wb+") as f:
+    f.write(user.ff.read())
+
+# 删除
+user.ff.delete()
+#+end_example

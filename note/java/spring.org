@@ -478,7 +478,6 @@
             | 属性     | 类型    | 说明                               |
             |----------+---------+------------------------------------|
             | required | boolean | 是否必须要存在请求体，默认值为true |
-
     9) ~@ResponseBody~
     10) ~@ResponseStatus~
         - 示例
@@ -2886,7 +2885,7 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
 #+end_example
 
 * Spring Boot
-  通过[[https://start.spring.io/][Spring Initializr]]初始化项目。
+  通过 [[https://start.spring.io/][Spring Initializr]] 初始化项目。
 
 ** Starter Template
    #+begin_example xml
@@ -2906,18 +2905,62 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
    #+end_example
    Spring Boot Starter Template是功能相关的一系列依赖的集合， ~spring-boot-starter-parent~ 用于
 
+** 事例
+#+begin_example java
+@Controller
+@EnableAutoConfiguration
+public class MainController {
+    public static void main(String args) throws Exception {
+        SpringApplication.run(MainController.class, args);
+    }
+
+    @RequestMapping("/")
+    @ResponseBody
+    public String home() {
+        return "Hi";
+    }
+}
+#+end_example
+
+运行： ~maven spring-boot:run~
+
 ** 打包非内置Web容器的Spring Boot应用
+Spring Boot打包时可以内置Tomcat或Jetty。
+但可以独立打包为WAR包，再部署到Tomcat等Web容器。
+
 1) 修改pom.xml
    #+begin_example xml
    <packaging>war</packaging>
    <build>
        <plugins>
            <plugin>
-
+               <groupId>org.apache.maven.plugins</groupId>
+               <artifactId>maven-war-plugin</artifactId>
+               <configration>
+                   <warName>war包名</warName>
+               </configration>
            </plugin>
        </plugins>
    </build>
    #+end_example
+2) 添加src/main/webapp/WEB-INF/web.xml
+   将 ~Tomcat项目目录/webapps/ROOT/WEB-INF/web.xml~ 复制到 ~项目目录/src/main/webapp/WEB-INF/web.xml~
+3) 修改Spring Boot启动类
+   #+begin_example java
+   @SpringBootApplication // 启动Spring Boot程序
+   @@ComponentScan("io.fsjohnhuang")
+   public class StartSpringBootMain extends SpringBootServletInitializer {
+       @Override
+       protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) {
+           return builder.sources(StartSpringBootMain.class);
+       }
+
+       public static void main(String[] args) throws Exception {
+           SpringApplication.run(StartSpringBootMain.class, args)
+       }
+   }
+   #+end_example
+4) 项目编译后将war包复制到 ~Tomcat项目目录/webapps~ 下
 
 * TODO QA
 
@@ -4385,6 +4428,11 @@ thymeleaf模板默认路径为 ~src/main/resources/templates/~
 <!-- #arrays -->
 <!-- #sets -->
 <!-- #maps -->
+#+end_example
+
+使用示例
+#+begin_example html
+<div th:text="${#dates.format(mydata, 'yyyy/MM/dd)}"></div>
 #+end_example
 
 ** 环境相关对象

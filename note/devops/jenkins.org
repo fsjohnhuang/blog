@@ -976,6 +976,8 @@ QA:
    运行环境：
 
 * TODO 凭证
+使用Jenkins Crendentials管理认证信息，不要在脚本中写帐号密码。
+
 9 凭证管理112
 9.1 为什么要管理凭证 112
 9.2 凭证是什么 112
@@ -1067,6 +1069,9 @@ Jenkins插件：MSBuild Plugin
 2. 在Jenkins/Manage Jenkins/Configure System/
    1. 配置gitlab URL(external_url)
    2. 新增Kind为GitLab API token的Credential
+
+* 敏感信息
+Mask Passwords Plugin 实现敏感信息控制台加密输出。
 
 * 集成Git
 插件：Git Parameter Plug-In
@@ -2255,3 +2260,7 @@ https://plugins.jenkins.io/configuration-as-code
         }
         #+end_example
    4) Jenkins Job DSL Plugin
+* TODO Jenkins API
+
+** Python Jenkins
+https://python-jenkins.readthedocs.io/en/latest/

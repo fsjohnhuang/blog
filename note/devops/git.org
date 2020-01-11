@@ -485,6 +485,31 @@ git clone --bare <repo-uri> <repo>
         echo "export PATH=$PATH:/usr/local/git/bin" >> /etc/bashrc
         source /etc/bashrc
         #+END_EXAMPLE
+  4) 对于大型代码仓库，采用shallow下载机制减少数据传输和不必要的历史记录。
+  5) reference机制，可实现私有的代码镜像仓库定期更新。
+  6) archive命令，归档指定代码仓库，保护代码历史记录等重要信息不轻易泄露。
+  7) reflog可追踪引用(分支等)变更记录。
+  8) blame可逐行定位文件内容修改记录、提交人、时间和注释。
+  9) cherry-pick命令对二进制比较分支间差异最有效。
+  10) worktree可同时checkout多条分支，实现并行开发。
+      - Git版本要求：2.6.0+
+      - 使用场景：多分支并行开发
+        - 以往的做法
+          1) 通过 ~git clone~ 实现一个分支对应一个工作目录。
+          2) 一个分支提交合并到主分支后，不会合并到其他分支上。
+      - worktree特点
+        1) 一个分支对应一个worktree，worktree提交会将变更集合并到其他worktree上。
+        2) 删除分支的同时会自动清除对应的worktree。
+      - 使用
+        - ~git worktree list [--porcelain]~ 显示当前仓库的所有worktree情况，包含每个worktree的关联目录。若没有关联分支则显示 ~detached HEAD~
+        - ~git worktree prune~ 彻底删除worktree信息
+        - ~git worktree add <path> [<branch>] [--force]~ 新增worktree和关联的目录，默认关联当前分支。
+        - ~git worktree lock~ Git会定期自动清除丢没有关联目录的worktree，若关联目录是存放在非永久挂载的磁盘上，则用该命令排除清理行为
+        - ~git worktree unlock~ 恢复定期自动清除没有关联目录的worktree的行为。
+
+  11) patch和bundle可实现离线的增量同步和快速更新。
+  12) 对于无法delta compress的二进制文件，让LFS(Large file system)处理。
+  13) 通过定期gc和prune整理对象库文件存储结构，配置合理缓存保存阀值，提升存储访问效率，减少资源浪费。
 
 * 工作流
 

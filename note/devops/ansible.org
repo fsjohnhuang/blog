@@ -888,7 +888,24 @@ class FilterModule(object):
        2) ansible-playbook是playbook同级目录下的优先
        3) ansible和ansible-console是inventory同级目录下的优先
 
+*** 通过命令行传递参数
+1) 传递标量
+   #+begin_example bash
+   -e "var1=1 var2='hello'" -e "var3=no"
+   --extra-vars="var1=1 var2='hello'" -e "var3=no"
+   #+end_example
+2) 传递对象和数组
+   #+begin_example bash
+   -e '{"var1": ["1.0.0.1", 1, "CN\\PASS"], "var2": {"p1":1, "p2":2}}'
+   --extra-vars='{"var1": ["1.0.0.1", 1, "CN\\PASS"], "var2": {"p1":1, "p2":2}}'
+   #+end_example
+3) 从JSON文件读取vars
+   #+begin_example bash
+   -e "@ ./var.json"
+   #+end_example
+
 ** 条件判断
+
    通过 ~when~ 语句实现if语句，其中的逻辑运算由Jinja2提供。
    #+BEGIN_EXAMPLE yaml
    ---
@@ -1994,3 +2011,27 @@ class FilterModule(object):
 
 ** 通过Ansible Vault保护帐号密码等敏感信息
    虽然可以通过 ~ansible-vault~ 对group_vars、host_vars、include_vars和var_files加密，但当执行 ~ansible -v~ 时未加密信息依然会输出到stdout和日志中，这时我们可以通过在任务中设置 ~no_log: true~ 屏蔽日志输出。
+
+* Powershell
+
+** IIS - Managing FTP sites with PowerShell
+https://peter.hahndorf.eu/blog/iisftp.html
+
+#+begin_example cmd
+New-WebFtpSite -Name "MyFTPSite" -Port 21 -PhysicalPath C:\inetpub
+
+Get-ChildItem -path iis:\sites
+
+Remove-Website -name myftpsite
+
+New-WebBinding "MyWebSite"-Port 23 -Protocol ftp -IPAddress *
+
+Set-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST'  -filter "system.applicationHost/sites/site[@name='MyWebSite']/ftpServer/security/ssl" -name "controlChannelPolicy" -value "SslRequireCredentialsOnly"
+
+
+(get-Website -Name "myftpsite").ftpserver.stop()
+(get-Website -Name "myftpsite").ftpserver.start()
+
+Get-ChildItem -path IIS:\sites | where Bindings -match "ftp"
+
+#+end_example
