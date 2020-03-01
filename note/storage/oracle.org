@@ -1,11 +1,1118 @@
+临时表空间，位于磁盘上，如hash join时对Outer Table进行哈希后的结果无法保存到内存，则会将部分结果保存到临时表空间。
+
+段对象必须属于某个表空间。
+非分区表为一个段对象，因此非分区表必须属于某个表空间。
+
+Archive Mode: Archivelog, NoArchivelog
+Object Mode: LOGGING, NOLOGGING
+Redo
+
+物理读
+逻辑读
+一致性读(consistent gets)
+db block gets
+recursive calls
+段对象：分配了空间的对象。
+#+begin_example sql
+-- 查询段对象
+select segment_name, -- 段对象名称
+       bytes -- 段对象大小
+from user_segments
+where segment_name=(select index_name from user_indexes where index_name='idx_i');
+#+end_example
+
+* Oracle角色
+  1) normal 普通角色
+  2) dba 用户对象权限
+     1) 必须为实例加载数据库后才会存在。
+  3) sysdba 系统权限
+     1) 不依赖数据库是否完全启动，只要实例启动就可以使用sysdba加载数据库、打开数据库。
+     2) 创建SPFILE
+     3) 对数据库进行恢复操作
+  4) sysoper 系统操作员身份
+
 * Oracle性能优化
-** 锁
+OLAP：并行会话少，以查询为主。
+OLTP：并行会话多，以CRUD为主。
+
+** TODO sql_trace
+ #+begin_example sql
+
+ alter session set tracefile_identifier=bind;
+
+ alter session set sql_trace=true;
+ set serveroutput on;
+ #+end_example
+
+** 锁(Lock/Enqueues)
+   某个会话独占一个资源，从而阻塞其他会话操作该资源。
+
+   Oracle的锁分类：
+   1) Enqueues，队列类型的锁，通常和业务相关(DML)。
+      #+begin_example sql
+      -- 获取Oracle的锁类型
+      select type, name from V$LOCK_TYPE;
+      #+end_example
+   2) Latches，系统资源方面的锁，比如内存结果、SQL解析。
+
+   |        | Latch                  | Lock                 |
+   |--------+------------------------+----------------------|
+   | 队列性 | 否                     | 是                   |
+   | 时长   | 很短                   | 可能很长             |
+   | 层面   | 数据库资源层           | 业务应用层           |
+   | 目的   | 保证数据库资源的完整性 | 保证业务操作的完整性 |
+
+*** 锁的原则
+    1) 只有被修改时，行才会被锁定
+       - Oracle不存在锁升级，因此一条DML修改多少条记录，就这几条记录被加上行锁(TX)，用于阻止其它事务对相同行进行修改。
+    2) 读(read)永远不会阻止写(update/delete/insert)
+       - 但执行 ~select ... for update~ 会阻止写。
+    3) 写(update/delete/insert)永远不会阻止读(read)
+       - 当一行被修改后，Oracle会通过 *回滚段* 提供给数据的一致性读。
+         - 当更新字段A，还没commit时，Oracle实际已经将新值写入字段A了。但旧值会保存打回滚段，其他会话读取时是从回滚段读取字段A的值。
+
+*** TM锁和TX锁——对单表的锁定
+    TM表锁：发生在insert,update,delete以及select for update操作时，目的是保证操作能够正常进行，并阻止其它人对表执行DDL操作。
+    TX行锁/事务锁：用于正在修改的记录，阻止其它会话进行DML操作。
+
+    TM锁5种模式间的互斥关系
+    | 模式 | 手工锁定的SQL                             | 排斥的模式 | 允许的其它会话的DML                        |
+    |------+-------------------------------------------+------------+--------------------------------------------|
+    |    2 | lock table t in row share mode;           | 6          | select, insert, update, delete, for update |
+    |    3 | lock table t in row exclusive mode;       | 4,5,6      | select, insert, update, delete, for update |
+    |    4 | lock table t in share mode;               | 3,5,6      | select                                     |
+    |    5 | lock table t in share row exclusive mode; | 3,4,5,6    | select                                     |
+    |    6 | lock table t in exclusive mode;           | 2,3,4,5,6  | select                                     |
+    手工锁定的应用
+    #+begin_example sql
+    lock table dept in share mode; /* 其它会话不能修改dept */
+
+    update emp
+      set sal = sal * 1.1
+      where deptno in (select deptno from dept where loc='DALLAS');
+    update budget
+      set total = total * 1.1
+      where deptno in (select deptno from dept where loc='DALLAS');
+
+    commit; /* 释放锁 */
+    #+end_example
+
+*** RI锁——基于引用关系的锁定
+    对具有主外键关系的表做DML操作时，锁会加在操作的表和相应的引用表上。
+    insert主表时会在从表上加TM锁，而update和delete则不会在从表加锁。
+    insert和delete从表时会在主表上加TM锁，update则不会。
+
+    根据Oracle版本有所不同。
+
+*** BI锁和外键索引——没有索引的外键
+    更新主表的主键时，当从表的外键有索引时则通过索引查找从表记录，若没有索引则需要对从表进行全表扫描。这个过程中将一直对主表的记录加TX锁。
+    因此对从表的外键需要加锁，并且不要修改主键。
+
+**** 主从表
+     主键所在的表称为主表；外键所在的表称为从表。从表外键字段的值，必须在主表中主键字段中已存在。
+     #+begin_example sql
+     -- 主表
+     create table user (
+       id number(10) primary key,
+       name varchar(2) not null
+     );
+
+     -- 从表
+     create table user_info (
+       id number(10) primary key,
+       user_id number(10) references user(id),
+       sex varchar2(1) default 'F' check(sex in ('F', 'M'))
+     );
+
+     select u.name, i.sex from user u join user_info i on (u.id = i.user_id);
+     #+end_example
+
+*** 死锁
+    Oracle能自动识别和释放死锁。
+
+*** 示例——会话A和B并发insert主键值相同的记录
+    #+begin_example sql
+    -- 会话A和B并发执行 insert into tbl(id) values(1); 并且均不执行commit
+
+    select sid, type, id1, id2, lmode, request, block from v$lock wheree type in ('TM', 'TX') order by 1,2;
+    -- 假设A被B阻塞了
+    -- sid type id1 id2 lmode request block
+    -- A   TM   123 0   3     0       0
+    -- A   TX   221 323 6     0       0
+    -- A   TX   121 322 0     4       0 仅对数据块修改加排它锁，若现在会话C执行insert into(id) values(2);是不会被阻塞的。
+    -- B   TM   123 0   3     0       0
+    -- B   TX   121 322 6     0       1
+    #+end_example
+
+*** 示例——会话B在主表执行insert，会话A在从表执行insert被阻塞
+    #+begin_example sql
+    select sid, type, id1, id2, lmode, request, block from v$lock wheree type in ('TM', 'TX') order by 1,2;
+    -- 假设A被B阻塞了
+    -- sid type id1 id2 lmode request block
+    -- A   TM   123 0   3     0       0
+    -- A   TX   221 323 6     0       0
+    -- A   TX   121 322 0     4       0 仅对数据块修改加排它锁，若现在会话C执行insert into(id) values(2);是不会被阻塞的。
+    -- B   TM   123 0   3     0       0
+    -- B   TX   121 322 6     0       1
+    #+end_example
+
+*** 示例——select for update
+    #+begin_example sql
+    -- 在会话A执行
+    select * from tbl where id=2 for update;
+    -- 在会话B执行
+    update tbl set name='a' where id=2;
+
+    -- 两个操作顺序反之亦然
+    -- sid type id1 id2 lmode request block
+    -- A   TM   123 0   3     0       0
+    -- A   TX   221 323 6     0       1
+    -- B   TM   123 0   3     0       0
+    -- B   TX   221 323 0     6       0
+    #+end_example
+
+    延伸
+    1) ~for update skip locked~
+       对满足where子句，且尚未加锁的记录加锁。
+    2) ~for update nowait~
+       其它会话锁定了 ~for update nowait~ 语句将要锁定的记录时，不等待锁释放而是直接抛出"ORA-00054"
+    3) ~for update wait <n>~
+       其它会话锁定了 ~for update wait~ 语句将要锁定的记录时，则等待n秒后仍然未释放锁而是抛出"ORA-00054"
+    4) 通过 ~of~ 仅对查询的结果集中满足特定条件的记录加锁
+       - 不使用 ~of~ 则对符合where子句的所有表格的记录加锁
+         #+begin_example sql
+         -- 对tbl1和tbl2中id大于3的记录加锁
+         select a.id, b.id where tbl1 a join tbl2 b on (a.id = b.id) where a.id > 3 for update;
+
+         -- 对tbl1中id大于3的记录加锁
+         select a.id, b.id where tbl1 a join tbl2 b on (a.id = b.id) where a.id > 3 for update of a.id;
+         #+end_example
+
 ** Latch
+   Latches，系统资源方面的锁，比如内存结果、SQL解析。
+   保证资源的串行访问：
+   1) 保护SGA的资源访问(不涉及PGA)；
+      - 共享池的SQL解析、SQL重用
+      - 数据缓冲池的数据访问、磁盘写入、读取到内存、修改数据块和数据段扩展等
+   2) 保护内存的分配，防止内存结构的损坏。
+
+   查看数据库拥有的latch的信息
+   #+begin_example sql
+   select * from v$latchname;
+   #+end_example
+
+   无法立即获取Latch后的行为：
+   1) wait方式
+      - spin，会话继续使用CPU(CPU空转)，达到一个间隔后再次尝试申请Latch，直到达到最大重试次数为止。
+      - sleep，释放CPU并等待一段时间后，再次获取CPU资源来尝试申请Latch，直到达到最大重试次数为止。
+   2) no wait方式，转向申请其它可用的Latch。
+
+*** 相关动态视图
+    1) v$latch，对每个latch的统计信息的汇总，每一条记录表示一种latch。
+       #+begin_example sql
+       -- 查询和Buffer Cache相关的latch
+       select name, -- latch名称
+              gets, -- 以Willing to wait请求模式latch的请求成功数
+              misses, -- 初次尝试不成功次数
+              sleeps, -- 成功获取钱sleeping次数
+              immediate_gets, -- 以Immediate模式latch的请求数
+              immediate_misses -- 以Immediate模式latch的请求失败数
+       from v$latch where name like 'cache%';
+       #+end_example
+    2) v$latchholder，包含当前latch持有者的信息。
+       - 然后通过pid和sid的信息，关联视图v$session,v$session_wait可定位对应的会话信息。
+    3) v$latch_children
+       - 在SGA中某些资源(如library cache)使用多个latch来保护，这些latch保护同一个资源则成为了子latch。
+    4) AWR报告中也会包含全局范围的Latch信息
+
+*** Shared Pool的Latch争用——绑定变量
+    解析SQL时会消耗CPU和Latch争用而产生等待，因此大量动态SQL(非绑定变量)会引发大量的SQL硬解析。
+
+*** Buffer Cache的Latch争用
+    1 Latch->N Hash Bucket->N个以链表结构连接的Buffer Headers->N个Data Blocks
+
+    读取数据块过程：
+    1) 对数据块的地址进行hash(Hash the block address)
+    2) 获取Latch访问Hash Bucket(Get Bucket latch)
+    3) 访问Buffer Headers(Look for header)
+    4) 访问Data Blocks(Found, read block)
+    5) 若缓存命中失败看，则通过Shadow Process从磁盘获取并写入Buffer Cache(Not Found Read block off disk)
+
+**** 热块问题
+     多个Session并行访问由同一个Latch锁定的一组数据块中的某几个数据块，即使不是完全相同的数据块，但它们是由同一个Latch来锁定，所以就会出现访问等待。
+     分类：
+     1) 表数据块争用
+     2) 热块索引数据热块
+     3) 文件头数据块——并发修改
+        ITL(事务槽)，当多个会话对同一个记录进行修改时就会争用这个事物槽。
+
+*** TODO ITL
+
+*** TODO SGA(System Global Area)
+    包含共享池(Shared Pool)、数据缓存池(Buffer Cache)、Library Cache、Log Buffer
+    Buffer Cache: 通过DBWR进程将Buffer Cache的数据写入Data Files，和从Data Files读取数据并进行哈希运算后放到Buffer Cache。
+    Log Buffer: 通过LGWR进程就爱那个Log Buffer的数据写入REDO Log File
+    Library Cache: 位于Shared Pool下，旗下的Shared SQL Area存储解析过执行计划的SQL语句。
+
+*** TODO PGA
+
 ** 优化器和执行计划
+   优化器只能在数学逻辑上优化SQL，但无法按照业务要求优化SQL。高效的SQL来自于对业务的理解和SQL执行过程的理解。
+   示例：
+   #+begin_example sql
+   -- 没有优化过的SQL，其consistant gets为14
+   select t1.id, sum(t2.value) from tbl t1 join tbl t2 on (t1.id >= t2.id) group by t1.id;
+
+   -- 通过使用Oracle的叠加式分析函数，可使consistant gets降低为7
+   select id, sum(value) over (order by id) from tbl;
+   #+end_example
+
+*** 获取执行计划的方式
+1) 方式1
+   - 方式
+     #+begin_example sql
+     explain plan for select * from tbl;
+     select * from table(dbms_xplan.display());
+     #+end_example
+   - 优点
+     无需真正执行，快捷方便。
+   - 缺点
+     1) 无法输出相关统计信息，如逻辑读、物理读和递归调用等。
+     2) 无法判断表执行了多少次。
+2) 方式2
+   - 方式
+     #+begin_example sql
+     set autotrace on;
+     #+end_example
+   - 优点
+     能够输出相关统计信息，如逻辑读、物理读和递归调用等。
+   - 缺点
+     1) 必须等待SQL语句执行完，才能出结果。
+     2) 无法判断表执行了多少次。
+3) 方式3
+   - 方式
+     #+begin_example sql
+     alter session set statistics_level=all;
+     -- 执行要分析的语句 select * from tbl;
+     select * from table(dbms_xplan.display_cursor('sql_id/hash_value', null, 'allstatslast'));
+     #+end_example
+   - 优点
+     1) 从stats能够判断表执行了多少次。
+     2) 从E-Rows得到执行计划预计返回的记录数
+     3) 从A-Rows得到执行计划实际返回的记录数
+     4) 从A-Time得到每一步执行的时间(HH:MM:SS.FF)，从而知道SQL在哪里耗时。
+     5) 从Buffers得到真实的逻辑读或一致性读
+     6) 从Reads得到真实的物理读
+   - 缺点
+     1) 必须等待SQL语句执行完，才能出结果。
+     2) 无法输出物理读和递归调用
+4) 方式4
+   - 方式
+     #+begin_example sql
+     -- 1. 开启跟踪
+     alter session set events '10046 trace name context forever,level 12';
+     -- 2. 执行要分析的语句 select * from tbl;
+     -- 3. 关闭跟踪
+     alter session set events '10046 trace name context off';
+     -- 4. 找到开启跟踪后新增的文件
+     -- 5. 格式化文件
+     tkprof /path/to/trc_file /path/to/target_file sys=no sort=prsela,exeela,fchela
+     #+end_example
+   - 优点
+     1) 可以看到SQL对应的等待事件
+     2) 列出函数内的SQL
+     3) 能够输出相关统计信息，如逻辑读、物理读和递归调用
+     4) 能够输出解析时间和执行时间
+     5) 可跟踪整个程序包
+   - 缺点
+     1) 无法判断表执行了多少次。
+
+*** CBO(Cost Based Optimizer，基于代价)优化器
+8i之后采用的优化器，依据一套数据模型，计算数据访问和处理的成本，择最优成本为执行方案。
+成本计算包含：
+1) 数据访问的成本估算
+   1) IO
+      - 全表扫描（多数据块）
+      - 索引（单数据块，多数据块）
+   2) CPU
+2) 数据处理的成本估算——CPU
+
+
+优化器的2种工作模式：
+1) first_rows(n)，以最快的速度抽取前面的记录。
+   #+begin_example sql
+   -- 如分页查询
+   select name from (
+     select rownum rn, name from (
+       select name from tbl order by name
+     ) where rownum <= 20
+   ) where rn >= 11;
+   #+end_example
+2) all_rows，以最快的速度返回整个结果集，适合在OLAP应用上使用
+   #+begin_example sql
+   -- 全表统计
+   select id, count(*) from tbl;
+   #+end_example
+优化器工作模式设置
+1) 全局参数设置
+   #+begin_example sql
+   optimizer_mode ALL_ROWS;
+   #+end_example
+2) 会话级设置
+   #+begin_example sql
+   alert session set optimizer_mode=all_mode;
+   #+end_example
+3) SQL级Hints
+   #+begin_example sql
+   select /*+ all_rows */ id, count(*) from tbl;
+   #+end_example
+
+优化器的影响因子很多，可以大概知道有以下3个。
+
+**** 优化器的影响因子——Selectivity(选择性)
+1) 表格字段的选择性
+   #+begin_example sql
+   select column_name, num_distinct from user_tab_col_statistics where table_name='<table_name>' order by 2 desc;
+   #+end_example
+   num_distinct表示对应的列中包含多个唯一的值，1/num_distinct为选择率，选择率越低即选择性越高，则越适合建B-tree索引。
+   选择性越低越不适合建B-tree索引。
+   优化器也会根据这个数据来选择是否走相应的索引。
+2) 索引的选择性
+   #+begin_example sql
+   select index_name, distinct_keys from user_indexes where table_name='<table_name>';
+   #+end_example
+   1/distinct_keys为选择率，选择性低则表示该索引越没有效果。
+
+**** 优化器的影响因子——Cardinality
+Cardinality就是在执行计划中表示每一步操作返回的记录数(不是实际返回的记录数，而是Oracle估算出来的)。
+CBO通过对这个值的权重计算，决定使用哪一种方式访问数据。
+10gR2前的执行计划中的 ~Card~ 就是Cardinality，而10gR2以后就是通过 ~Rows~ 表示。
+
+**** 优化器的影响因子——Clustering Factor
+#+begin_example sql
+select index_name, clustering_factor from user_indexes where table_name='<table_name>';
+#+end_example
+多个数据会存储在一个数据块上，若索引对应的值出现在多个数据块上，那么该值的clustering factor值就越大，表示通过索引查找数据时需要在多个数据块间查询，访问代价比较大。
+
+
+**** TODO 直方图
+#+begin_example sql
+-- 直方图统计，for all column size 1表示忽略Cardinality的值
+exec dbms_stats.gather_table_stats(user,
+                                   '<table_name>',
+                                   cascade=>true,
+                                   estimate_percent=>null,
+                                   method_opt=>'for all columns size 1');
+#+end_example
+
+~consistant gets~ 一致性读，数值越少性能越好。
+
+- 表访问方式
+  - tablescan，全表扫描
+  - index range scan，范围扫描
+  - index fast scan，快速扫描
+  - index full scan，全索引扫描
+  - index full fast scan，全索引并行扫描，应用在通过索引就可以获取到结果的场景。如 ~select count(*) from t;~
+  - index skip scan
+  - index unique scan 唯一索引扫描
+- 表关联方式
+  - nested loop join，两张表逐条配对，因此要以小表作为驱动表，关联表则需要建索引。
+  - merge join，两张表各自先排序，然后再配对。
+  - hash join，将一张小表进行hash后与大表的记录进行配对，当小表没有索引时效果更好。
+
+*** RBO(Rule Based Optimizer)优化器
+8i之前采用的优化器，以一套死板的规则来控制数据的访问。
+
+*** 执行计划
+
+**** 产生执行计划
+     1) sqlplus
+        #+begin_example sql
+        set autotrace trace exp; -- 产生执行计划
+        set linesize 120; -- 设置行宽
+        #+end_example
+
+**** 视图格式
+     1) 缩进越靠右越早执行
+     2) 若两行缩进一样，则从上往下执行
+
+***** 示例——全表扫描
+      #+begin_example sql
+      select * from user_info;
+      #+end_example
+      | Id | Operation            | Name      | Rows |  Bytes | Cost(%CPU) |     Time |
+      |----+----------------------+-----------+------+--------+------+----------|
+      |  0 | select statement     |           | 1023 | 761243 |  290 | 00:00:04 |
+      |  1 | -- table access full | USER_INFO | 1023 | 761243 |  290 | 00:00:04 |
+
+***** 示例——index unique scan
+      #+begin_example sql
+      select * from user_info where id=10;
+      #+end_example
+      |  Id | Operation                      | Name         | Rows | Bytes | Cost(%CPU) |     Time |
+      |-----+--------------------------------+--------------+------+-------+------------+----------|
+      |   0 | select statement               |              |    1 |   515 | 1 (0)      | 00:00:01 |
+      |   1 | -- table access by index rowid | USER_INFO    |    1 |   515 | 1 (0)      | 00:00:01 |
+      | * 2 | ---- index unique scan         | SYS_C0011176 |    1 |       | 1 (0)      | 00:00:01 |
+
+      由于 ~select *~ 因此需要通过索引去访问表的所有字段，若索引中包含要返回的字段，那么就不会执行table access by index rowid这一步。
+
+***** 示例——index range scan
+由于索引是已经排序的，所以通过index range scan就是从索引某区块开始顺序扫描。
+优点：只扫描部分索引项
+缺点：无法启用并行读和多块读
+
+      #+begin_example sql
+      select * from user_info where id<10;
+      #+end_example
+      |  Id | Operation                      | Name         | Rows | Bytes | Cost(%CPU) |     Time |
+      |-----+--------------------------------+--------------+------+-------+------------+----------|
+      |   0 | select statement               |              |    8 |   515 | 3 (0)      | 00:00:01 |
+      |   1 | -- table access by index rowid | USER_INFO    |    8 |   515 | 3 (0)      | 00:00:01 |
+      | * 2 | ---- index range scan          | SYS_C0011176 |    8 |       | 2 (0)      | 00:00:01 |
+
+***** 示例——index fast full scan
+      #+begin_example sql
+      select count(*) from user_info;
+      #+end_example
+      |  Id | Operation                 | Name         | Rows | Bytes | Cost(%CPU) |     Time |
+      |-----+---------------------------+--------------+------+-------+------------+----------|
+      |   0 | select statement          |              |    1 |     1 | 68 (0)     | 00:00:01 |
+      |   1 | -- SORT AGGREGATE         | USER_INFO    |    1 |     1 |            |          |
+      | * 2 | ---- index fast full scan | SYS_C0011176 |  100 |  4621 | 68 (0)     | 00:00:01 |
+
+***** 示例——index full scan
+      #+begin_example sql
+      select id from user_info order by id;
+      #+end_example
+      | Id  | Operation          | Name         | Rows | Bytes | Cost(%CPU) |     Time |
+      |-----+--------------------+--------------+------+-------+------------+----------|
+      | 0   | select statement   |              |  100 |  4621 | 68 (0)     | 00:00:01 |
+      | * 1 | -- index full scan | SYS_C0011176 |  100 |  4621 | 68 (0)     | 00:00:01 |
+
+***** 示例——index skip scan
+      #+begin_example sql
+      select id from user_info where object_id=100;
+      #+end_example
+      |  Id | Operation                      | Name         | Rows | Bytes | Cost(%CPU) |     Time |
+      |-----+--------------------------------+--------------+------+-------+------------+----------|
+      |   0 | select statement               |              |    1 |    97 | 32 (0)     | 00:00:01 |
+      |   1 | -- table access by index rowid | USER_INFO    |    1 |    97 | 32 (0)     | 00:00:01 |
+      | * 2 | ---- index skip scan           | SYS_C0011176 |    1 |       | 31         | 00:00:01 |
+
+***** 示例——hash join
+      #+begin_example sql
+      select u1.* from user u1, user_info u2 where u1.id = u2.user_id;
+      #+end_example
+      |   Id | Operation              | Name      | Rows | Bytes | TempSpc | Cost(%CPU) |     Time |
+      |------+------------------------+-----------+------+-------+---------+------------+----------|
+      |    0 | select statement       |           |    1 | 12M   |         | 1269 (1)   | 00:00:16 |
+      | *  1 | -- hash join           |           |    2 | 12M   | 1728K   | 1269 (1)   | 00:00:16 |
+      |    2 | ---- table access full | USER_INFO |    4 | 892K  |         | 290 (1)    | 00:00:04 |
+      |    3 | ---- table access full | USER      |    3 | 11M   |         | 291 (1)    | 00:00:04 |
+
+***** 示例——nested loops
+      #+begin_example sql
+      select u1.* from user u1, user_info u2 where u1.id = u2.user_id;
+      #+end_example
+      |   Id | Operation              | Name      | Rows | Bytes | TempSpc | Cost(%CPU) |     Time |
+      |------+------------------------+-----------+------+-------+---------+------------+----------|
+      |    0 | select statement       |           |    1 | 12M   |         | 1269 (1)   | 00:00:16 |
+      | *  1 | --  nested loops       |           |    2 | 12M   | 1728K   | 1269 (1)   | 00:00:16 |
+      |    2 | ---- table access full | USER_INFO |    4 | 892K  |         | 290 (1)    | 00:00:04 |
+      |    3 | ---- index range scan  | idx_i1    |    3 | 11M   |         | 291 (1)    | 00:00:04 |
+
+***** 示例——merge join
+      |   Id | Operation                   | Name | Rows | Bytes | TempSpc | Cost(%CPU) |     Time |
+      |------+-----------------------------+------+------+-------+---------+------------+----------|
+      |    0 | select statement            |      |    1 | 12M   |         | 1269 (1)   | 00:00:16 |
+      | *  1 | -- merge join               |      |    2 | 12M   | 1728K   | 1269 (1)   | 00:00:16 |
+      |    2 | ---- view                   |      |      |       |         |            |          |
+      |    3 | ------ sort order by        |      |      |       |         |            |          |
+      |    4 | -------- table access full  |      |      |       |         |            |          |
+      |    5 | ---- sort join              |      |      |       |         |            |          |
+      |    6 | ------ index fast full scan |      |      |       |         |            |          |
+
+***** 示例——全表并行扫描
+      | Id | Operation                    | Name | Rows | Bytes | TempSpc | Cost(%CPU) |     Time |
+      |----+------------------------------+------+------+-------+---------+------------+----------|
+      |  0 | select statement             |      |    1 | 12M   |         | 1269 (1)   | 00:00:16 |
+      |  1 | -- sort aggregate            |      |      |       |         |            |          |
+      |  2 | ---- px coordinator          |      |      |       |         |            |          |
+      |  3 | ---- px send qc (random)     |      |      |       |         |            |          |
+      |  4 | ------ sort aggregate        |      |      |       |         |            |          |
+      |  5 | -------- px block iterator   |      |      |       |         |            |          |
+      |  6 | ---------- table access full |      |      |       |         |            |          |
+
+      px就是并行处理，qc为并行的协调进程。
+
 ** Hints
+   使用范畴：尽量避免开发人员使用，而是DBA在排查和优化时使用。
+   注意：hints上的table_name为from后的表名，若表名有别名则table_name必须为别名。
+
+*** Access Path Hints(访问路径的Hints)
+1) ~/*+ full(<table_name>) */~ 全表扫描
+   #+begin_example sql
+   select /*+ full(user) */ * from user where id = 1;
+   #+end_example
+   - 多块读：由于Oralce支持多块读的特性，假如有100条记录，而每次IO读取6个数据块，那么全表扫描在只需17次即可读完。而索引的话还要200次才能读完。因此一次读取表中大部分记录时，全表扫描反而性能更高。
+   - 并行读：
+2) ~/*+ index(<table_name> [<index_name>]) */~ 走索引
+3) ~/*+ no_index(<table_name>) */~ 不走索引
+   #+begin_example sql
+   -- 默认会走索引，但传null或空字符串都会导致走索引效率比不走还低很多
+   select * from user where user_name='';
+
+   select /×+no_index(user)*/ * from user where user_name='';
+   #+end_example
+4) ~/*+ index_ffs(<table_name> [<index_name>] */~ Index Fast Full Scan
+   就是对索引进行多块读和并行读，因此适用于记录多数据块多的情况。记录少数据块少时，就不如index range scan。
+5) ~/*+ index_ss(<table_name>) */~ index skip scan
+   用于替代全表扫描的数据访问方式，对于前导重复率高的复合索引，有时index skip scan性能好些。
+   - 复合索引的前导——就是复合索引的第一个字段
+
+*** Table Join Hints(表关联的Hints)
+1) ~/*+ use_nl(<table_name1>[, <table_name2> ...]) */~ Nested Loop Joins
+   其中的表将作为Inner Table，若其中出现已被Oracle选择为Outer Table的表则会被自动从Inner Table参数中剔除。但可以再通过 ~ordered~ Hints指定Outer Table。
+   - Outer Table(驱动表)，提供查询依据数据的表。一般以记录较少的表作为Outer Table。
+   - Inner Table，被查询的表。一般将Inner Table中已建索引的字段作为连接列。
+   - ~ordered~ 就是指定从from子句的左至右，左边的表为Outer Table。
+     #+begin_example sql
+     -- 虽然dept的记录数明显少于user，但通过ordered设置后仍然会以user作为Outer Table
+     select /*+ ordered use_nl(dept)*/ * from user a join dept d on (a.dept_id=d.id);
+     #+end_example
+2) ~/*+ use_hash(<table_name>[, <table_name2> ...]) */~
+   - 适用场景
+     - 一个大表和一个小表的关联
+     - 表上没有索引
+     - 返回的结果集比较大
+3) ~/*+ use_merge(<table_name>[, <table_name2> ...]) */~ merge join
+   对两个结果集进行排序后再进行Nested Loops，性能比其他两个差。
+   - 适用场景
+     - 关联的结果集因业务需求已经排序。
+4) ~/*+ leading((<table>[, <table_name2> ...]) */~ 设置第一个参数为Outer Table
+   CBO中默认会尝试以每个表作为Outer Table来计算成本，然后以成本最低的作为最终的Outer Table。
+
+*** 其他Hints
+1) ~/*+ append */~ 以直接方式插入数据
+   |--------+------+--------+------+--------+-------------------+------|
+   | in use | free | in use | free | in use | <-high water mark | free |
+   |--------+------+--------+------+--------+-------------------+------|
+   - 传统插入方式
+     会从high water mark左侧的寻找可用的磁盘空间，若空间足够则插入数据。若不足才到high water mark右侧寻找空间插入数据。
+     - 缺点：
+       1) 增加寻找时间
+       2) 存在数据块争用的并发问题
+   - 直接插入方式
+     直接到high water mark右侧寻找空间插入数据，即使左侧存在足够的空间也不管。
+   - 实例
+     #+begin_example sql
+     insert /*+ append */ into t select * from t;
+     #+end_example
+2) ~/*+ dynamic_sampling(<level>)*/~ 设置动态采样的级别
+   #+begin_example sql
+   select /*+ dynamic_sampling(3) */~ count(*) from t;
+   #+end_example
+   - 注意：级别越高收集的信息越多，但效率越低。
+3) ~/*+ parallel([<table_name> <n>])*/~ 指定并行度（OLAP特别适用）
+   #+begin_example sql
+   select /*+ parallel(t 2)*/ * from t;
+   #+end_example
+   - 注意：参数 ~n~ 不是指执行时发起多个进程执行，而是每一步(order by, group by等)有多少个并行进程执行，也就是至少有n个进程处理。
+   - 缺省参数为使用Oracle默认的并行度
+4) ~/*+ driving_site(<table_name>)*/~ 指定操作发生在哪个节点上
+   #+begin_example sql
+   select /*+ driving_site(dept)*/ *
+   from emp, dept@rsite -- emp在本地，而detp在远端
+   where emp.dep_id = dept.id
+   #+end_example
+   默认情况下会将远端表的数据拉取到本地进行操作，但通过 ~driving_site~ 则可将本地数据推送给远端并在远端操作完成后再返回结果集。
+5) ~/*+ cardinality(<table_name> <rows>) */~ 模拟结果集的cardinality，即告知Oracle某表将返回多少条记录
+
 ** 等待事件
+SQL*Net message from client：Oracle自家的数据库通信协议。
+
+要设置baseline再查看等待事件的指标才有用。
+
+*** 事件
+1) ilde wait events(空等待)
+   可能是无法获取资源导致的空等待，也可能是没有要处理的操作而空等待。
+   #+begin_example sql
+   -- state为waiting则为空等待
+   select sid, event, state from v$session;
+   #+end_example
+2) db file sequential read
+   逐个数据块读取到SGA时发生，回滚段读(一致性读)也会发生。假如走索引时出现大量db file sequential read，那么说明索引可能建得有问题。
+   - 如何解决
+     1) 数据的正常读取时，不用解决；
+     2) 可能走错索引；
+     3) 考虑复合索引、位图索引或全文索引；
+     4) 改用全表扫描+并行
+     5) 升级磁盘硬件
+3) log file switch(archiving needed)
+4) data file scattered read
+   在进行full table scan或index fast full scan时，可以以multiblock read的形式将数据块读取到SGA中。通过参数 ~db_file_multiblock_read_count~ 设置一次IO读取的数据块数量。
+   - 解决方法
+     1) 数据的正常读取时，不用解决；
+     2) 等待事件影响性能，考虑建索引；
+     3) 等待事件影响性能，考虑并行。
+5) direct path read/write
+   数据被直接读取到PGA内存中时发生。
+   - 排序时由于内存不足，被写入磁盘的临时表空间，然后重新读取到内存时
+   - 并行操作的slave进程的数据读取/写入
+   - 其他的属于某个会话私有数据的读取操作
+   - 解决方法
+     1) 数据的正常读取时，不用解决
+     2) 增大PGA区域
+     3) 并行
+     4) 升级磁盘硬件
+6) log file sync
+   用户commit/rollback时，lgwr需要将log buffer的数据写入log file上。表示提交太频繁，可以考虑批量写入。
+7) buffer busy waits
+   内存中对相同的数据块有多个并发请求时，将导致该等待。即热块。
+   - 解决方法
+     1) segment header(段头)的热块，则采用ASSM处理(10g默认的处理方式)
+     2) data block的热块，则采用反向索引
+     3) undo header的热块，则采用automatic undo management(默认的处理方式)
+     4) undo block的热块，则增大回滚段
+8) free buffer waits
+   - 系统I/O成为瓶颈
+   - latch争用
+   - SGA太小
+   - SGA太大，dbwr无法快速地把脏数据刷到磁盘上
+   - 解决方法
+     1) 提高I/O性能
+     2) 异步I/O
+     3) 增加多个dbwr进程
+     4) 增大SGA
+
+*** 11g事件分类
+| Administrative | waits resulting from DBA commands that cause users to wait(e.g. index rebuild)                      |
+| Applicaiton    | waits reuslting from user application code                                                          |
+| Cluster        | waits related to real application clusters resources(e.g. gc or block busy)                         |
+| Commit         | wait for redo log write confirmation after a commit.                                                |
+| Concurrency    | waits for internal database resources(e.g. latch)                                                   |
+| Configuration  | caused by inadequate configuration of database or instance resources(e.g. undersized log file size) |
+| Idle           | signify the session is inactive, waiting for work(e.g. SQL*Net message from client)                 |
+| Network        | related to network messaging                                                                        |
+| Queue          | events that signify delay in obtaining additional data in a pipelined environment.                  |
+| Scheduler      | resources mananger related waits                                                                    |
+| System I/O     | backgroud process I/O                                                                               |
+| User I/O       | user I/O                                                                                            |
+| Other          | waits which should not typically occur on a system                                                  |
+
+*** TODO SQL级别定位等待事件
+开启10046 event trace
+
+*** 会话级别定位等待事件 ~v$session_wait~ 和 ~v$session_event~, ~v$system_event~
+#+begin_example sql
+select sid,
+       event, -- 事件名称
+       wait_class, -- 事件类型，如User I/O就是由用户的SQL所引起的等待事件
+       -- 事件的具体描述，不同的event，下列字段的值意义不同
+       p1text,
+       p1, -- 如 读取的文件ID 或 读取的数据块数量
+       p2text,
+       p2, -- 如 读取开始的数据块ID
+       p3text,
+       p3 -- 如 读取的数据块数量
+from v$session_wait;
+
+-- 查看会话的所有等待事件统计数据
+select event, total_waits from v$session_event;
+
+-- 查看数据库实例的所有等待事件统计数据
+select event, total_waits from v$system_event;
+#+end_example
+
 ** 索引和分区(包括11g下新的组合分区)
+
+*** 通过索引访问数据的流程
+ 1) 从索引的root开始读取
+ 2) 读取索引的branch
+ 3) 读取索引的键值
+ 4) 根据键值的rowid读取数据
+ 假如root和branch正好在同一个数据块，则可以合并到一个consistent get，那么整个过程即执行3次consistent gets。否则为4次consistent gets。
+
+*** 索引类型
+    索引中的数据是已经排序的。
+    1) B-tree索引
+       - 原理： 一般为3层：根(root)、分支(branch)、叶(leaf)，叶之间存在链接。
+       - index range scan的过程
+         1) 访问root
+         2) 访问branch
+         3) 访问leaf
+         4) 由于leaf间存在链接，因此直接访问其它leaf即可
+       - 语法
+         #+begin_example sql
+         -- 创建索引
+         create index <index_name> on <table_name>(<column_name>);
+         #+end_example
+    2) Bitmap索引
+       - 场景：适合OLAP中值重复率高的字段，不适合DML频繁操作(因为操作时会将整个表锁定，而不是仅锁定操作的记录)。
+       - 原理：
+         #+begin_example sql
+         select * from user where sex='M' and age > 18;
+
+         |            | Row1 | Row2| Row3 |
+         | M          | 1    | 0   | 1    |
+         | F          | 0    | 1   | 0    |
+         | age > 18   | 1    | 0   | 0    |
+         |M and age>18| 1    | 0   | 0    |
+         将where子句的按位运算判断哪些记录符合条件。
+         #+end_example
+       - 语法
+         #+begin_example sql
+         -- 创建索引
+         create bitmap index <index_name> on <table_name>(<column_name>);
+         #+end_example
+    3) 全文索引(Text Index)
+       - 场景：适合 ~like '%关键字%'~
+       - 原理：利用分词库将字段自拆解后建立一组基表和基表的索引组成，所以全文索引并不是段对象。
+       - 执行计划中出现Domain Index则是使用全文索引。
+       - 缺点：
+         1) 占用过多的磁盘空间（全文索引的大小为原表的1.5倍+）
+         2) 维护成本高（恢复重建成本高）
+         3) bug多，用户少
+       - 语法
+         #+begin_example sql
+         -- 创建索引
+         create index <index_name> on <table_name>(<column_name>) indextype is ctxsys.context;
+
+         select count(*) from user where contains(name, 'john') > 0;
+         #+end_example
+
+*** TODO 反向索引
+*** 操作SQL
+ #+begin_example sql
+ select num_rows,
+        distinct_keys,
+        blevel, -- 索引是多层级的
+        leaf_blocks, -- 索引的叶子的数据块个数
+        clustering_fact,
+        avg_leaf_blocks_per_key,
+        avg_data_blocks_per_key
+ from user_indexes
+ where table_name = '<table_name>';
+ #+end_example
+
+ 查询索引对应表格哪些字段
+ #+begin_example sql
+ select a.table_name, b.index_name, b.column_name
+ from user_indexes a join user_ind_columns b on (a.table_name = b.table_name and a.index_name = b.index_name)
+ where a.table_name = '<table_name>';
+ #+end_example
+
+*** TODO 联合索引
+9i以前的where子句中必须包含联合索引的第一个字段，否则无法使用索引。
+9i以后可通过index skip scan，即使where子句中不包含联合索引的第一个字段，也可以利用该复合索引。
+
+1) 创建
+
+*** 分区表
+    表建立分区后，表则变为一个逻辑名称就不再是段对象，而是分区为段对象，数据是放在分区中。
+    一个分区表的各个分区可以放置在不同的表空间中，那么需要删除某分区时，只需直接删除其所属的表空间即可。
+    分区除了能提高性能外，也为数据管理提供便利。
+
+    自动段管理？？
+
+**** 分区裁剪
+     由于Oracle在扫描时是按段扫描的，对于非分区表即从文件头开始到高水位(high water marker)扫描；而分区表则从某分区的文件头到高水位扫描，而不是所有分区都扫描。
+
+
+**** TODO 分区的分类
+     1) List Partitioning
+        - 场景：分区数量固定的
+     2) Range Partitioning
+        - 场景：以日期时间或数值等范围作为分区条件
+        - 操作
+          1) 创建按日期时间的分区表
+             #+begin_example sql
+             -- 按日、周分区
+             create table <table_name>(<column_definition>+)
+             partition by range(<column_name>) interval (numtodsinterval(1, 'day'))
+             (
+               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当日的分区
+             );
+
+             -- 按月分区
+             create table <table_name>(<column_definition>+)
+             partition by range(<column_name>) interval (numtoyminterval(1, 'month'))
+             (
+               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当月的分区
+             );
+
+             -- 按年分区
+             create table <table_name>(<column_definition>+)
+             partition by range(<column_name>) interval (numtoyminterval(1, 'year'))
+             (
+               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当年的分区
+             );
+             #+end_example
+          2) 创建按数值的分区表
+             #+begin_example sql
+             create table <table_name>(<column_definition>+)
+             partition by range(<column_name>)
+             (
+               partition p1 values less than (1000),
+               partition p2 values less than (2000),
+               partition p3 values less than (3000),
+               partition pmax values less than (maxvalue)
+             );
+             #+end_example
+     3) Hash Partitioning
+        - 场景：通过哈希打散数据后进行分区存储，业务需求不强。
+
+**** 组合分区/子分区(Composite Partitioning)
+     例如Rang-Hash组合分区，就是以时间或数值等范围作为分区条件后，在对分区内容进行Hash分区处理。
+     1) Oracle 10g提供2种组合分区
+        1) Range-Hash
+        2) Range-List
+     2) Oracle 11g提供6种组合分区
+        1) Range-Hash
+        2) Range-List
+        3) Range-Range
+        4) List-Range
+        5) List-Hash
+        6) List-List
+
+**** 分区索引
+     1) Local Index
+        索引对应某个分区，某分区的DDL操作不会导致其他分区索引无效，仅影响其自身的索引而已。
+        - 操作
+          #+begin_example sql
+          -- 创建索引
+          create index <index_name> on <table_name>(<column_name>) local;
+          #+end_example
+     2) Global Index
+        索引对应表的所有分区，某分区的DDL操作会导致整个索引无效。而索引失效则会影响执行计划。
+        - 操作
+          #+begin_example sql
+          -- 创建索引
+          create index <index_name> on <table_name>(<column_name>);
+          #+end_example
+
+     Local Index和Global Index在查询效率上是一样的，甚至Local Index的性能还低于Global Index。因为当需要扫描多个Local Index时则需要重新从索引的root向下读取branch和leaf，而Global Index则是一直在leaf上逐个读取。
+
+** 并行
+   应用场景：
+   1) OLAP数据仓库
+   2) 整块的数据读取操作
+      - FTS(Full Table Scan)
+      - IFFS(Index Fast Full Scan)
+
+   并行执行高效的要素：
+   1) 待处理的数据分布均匀
+   2) 数据库服务器资源充足
+
+*** 机制
+    1) 用户连接数据库
+    2) 数据库启动server process处理用户请求
+    3) 用户发起并行查询，则server process则变为并行协调进程(qc，即Query Coordinator)
+       - QC负责分发任务和接收整合数据
+       - 并行工作进程通过消息和QC进程通信
+       - 每个并行工作进程负责自己分配的工作
+
+*** 并行的执行计划
+    | Operation         | Description                                                                                                                         |
+    |-------------------+-------------------------------------------------------------------------------------------------------------------------------------|
+    | PX BLOCK ITERATOR | the first step in a parallel pipeline. breaks up the table into chunks that are processed by each of the parallel servers involved. |
+    | PX SEND           | indicate that data is being sent from one parallel process to another.                                                              |
+    | PX RECEIVE        | indicate that data is being received by one parallel process from another.                                                          |
+    | PX SEND QC        | this is a send operation to the parallel query coordinator process.                                                                 |
+    | PX COORDINATOR    | indicate that the parallel query coordinator is receiving the data from the parallel streams and returning it to the SQL statement. |
+    | RANGE             | rows are distributed based on ranges of values. this is typical when sort operations are parallelized.                              |
+    | HASH              |                                                                                                                                     |
+    | RANDOM            | rows are randomly assigned to parallel query slaves.                                                                                |
+    | ROUND ROBIN       | rows are distributed one at a time in a circular fashion, just as you would deal cards in a game of poker.                          |
+
+    | In-Out Value | Other Tag Name                | Description                                                                                                                           |
+    |--------------+-------------------------------+---------------------------------------------------------------------------------------------------------------------------------------|
+    | P->S         | PARALLEL_TO_SERIAL            | the top level of parallel query. the results are fed in parallel to  the qc.                                                          |
+    | P->P         | PARALLEL_TO_PARALLEL          | the parallel processing that pass results to a second set of parallel processes.                                                      |
+    | S->P         | PARALLEL_FROM_SERIAL          | indicate a serial bottleneck within a parallel statement, since it suggests that parallel processing might wait on serial processing. |
+    | PCWP         | PARALLEL_COMBINED_WITH_PARENT | output of step goes to next step in same parallel process.                                                                            |
+    | PCWC         | PARALLEL_COMBINED_WITH_CHILD  | input of step comes from prior step in same parallel process.                                                                         |
+
+*** 并行度
+    设置方式
+    1) 表级别
+       #+begin_example sql
+       alter table <table_name> parallel <n>;
+       #+end_example
+    2) SQL级别
+       #+begin_example sql
+       select /*+ parallel */ * from <table_name>;
+       #+end_example
+
+*** 并行的其它用途
+    1) 并行DDL
+       - ~create table ... as select~
+       - ~alter table ... move partition~
+       - ~alter table ... split partition~
+       - ~alter table ... coalesce partition~
+    2) 并行DML(分区表)
+       - update
+       - delete
+       - merge
+
+** 变量绑定
+
+*** 目的
+    1) 减少SQL硬解析的次数
+    2) 减少系统资源的开销
+    3) 减少Latch争用
+
+*** 场景
+    - 适合的应用场景——OLTP
+      1) 用户并发量高
+      2) 表中有主键
+      3) 操作的数据量少
+      4) 执行计划基本相同
+      5) SQL的重复率高
+    - 不适合的应用场景——OLAP(瓶颈在IO)
+      1) 执行计划多变
+         如查询范围和条件变化大，对应的执行计划应该有所不同。
+      2) 用户少
+      3) SQL解析对系统性能影响小
+
+*** 硬解析和软解析
+    - SQL硬解析，语法解析后通过CBO生成执行计划。
+      1) 解析(Parsing)
+         1) 语法分析(Syntax Check)
+         2) 语义分析(Semantic Check)
+         3) 共享池搜索执行计划(Shared Pool Check)，判断是否采用软解析
+      2) CBO分析得到多个执行计划(Optimization)
+      3) 获取最优执行计划(Row Source Generation)
+      4) 执行(Execution)
+    - SQL软解析，语法解析后直接采用之前的执行计划。
+      1) 解析(Parsing)
+         1) 语法分析(Syntax Check)
+         2) 语义分析(Semantic Check)
+         3) 共享池搜索执行计划(Shared Pool Check)，判断是否采用软解析
+      2) 执行(Execution)
+
+    #+begin_example sql
+    -- 一次硬解析，后面使用时都是软解析
+    select * from tbl where id=:id;
+
+    -- 只解析一次
+    begin
+      for i in 1..4 loop
+        execute immediate 'select * from tbl where rn=:i' using i;
+      end loop;
+    end;
+    /
+    #+end_example
+
+*** 操作
+    1) 查看SQL解析数据
+       #+begin_example sql
+       select sql_text, -- SQL脚本
+              parse_calls, -- 解析的总次数，包含硬解析和软解析
+              loads, -- 硬解析的总次数
+              execution -- 执行的总次数
+       from v$sql
+       where sql_text like 'select count(*) from tbl%';
+       #+end_example
+    2) 清理shared pool
+       #+begin_example sql
+       alter system flush shared_pool;
+       #+end_example
+
+*** softer_soft_parse
+    参数：session_cached_cursor
+    对于已经关闭的cursor，可以把它的资源保留在PGA中，用于后续对cursor的继续使用。
+    参数值为当前会话的游标的缓存大小
+    1) 0则不缓存cursor，再次使用时需要创建cursor，并从Shared Pool中搜索SQL的解析，有则软解析无则硬解析；
+    2) 大于0则可缓存相应数量的cursor，再次使用时则从缓存中搜索，若命中则直接打开cursor即可。
+
+    v$sql_shared_cursor
+
+*** Cursor(游标)
+    Cursor是在Session Memory中有个指针指向Shared Pool的Library Cache中的某条已被解析并生成执行计划的SQL语句。
+
+**** 父子游标
+     父游标(parent cursor)：第一条运行的SQL
+     子游标(child cursor)：后续的SQL
+
+     实例：分别在两个不同的用户下执行相同的语句 ~select * from user;~ ，按理在Shared Pool的Library Cache中应该仅有一条记录，但由于是在不同的用户下执行，因此会有两条记录。
+     #+begin_example sql
+     select sql_id, child_number, sql_text from v$sql where sql_text = 'select * from user';
+     #+end_example
+     | SQL_ID | CHILD_NUMBER | SQL_TEXT           |
+     |--------+--------------+--------------------|
+     | abc    |            0 | select * from user |
+     | abc    |            1 | select * from user |
+     #+begin_example sql
+     select sql_id,
+            auth_check_mismatch -- 权限差异产生该子游标，Y为是，N为否
+     from v$sql_shared_cursor where sql_id='abc';
+     #+end_example
+     | SQL_ID | AUTH_CHECK_MISMATCH |
+     |--------+---------------------|
+     | abc    | N                   |
+     | abc    | Y                   |
+
+     还有其它原因导致会产生多个子游标(即无法重用SQL的执行计划)，可以通过查询v$sql_shared_cursor。
+
+**** 游标共享
+     共用某条已被解析并生成执行计划的SQL语句。
+     启用：
+     #+begin_example sql
+     -- exact 仅SQL语句完全相同时才能使用游标共享，即N个SQL就产生N个父子游标对。那么需要开发人员自行采用变量绑定来达到游标共享的使用条件
+     -- force Oracle会自动将where子句的断言值替换为变量绑定，即生成N个SQL产生1个父子游标对。
+     -- similar
+     alter session set cursor_sharing=exact
+     #+end_example
+
+
 ** 导致性能问题的可能原因
 1) 表没有正确建立索引——导致错误的执行计划
 2) 表没有及时的分析——因表提供的信息量不足，导致错误的执行计划
 3) 热块——数据块的争用
+   - 反向索引：本来邻近的数据块，通过建立反向索引就会分散开来。
+4) 锁的阻塞——业务设计缺陷
+5) SQL解析消耗大量CPU——变量绑定
+6) 低效SQL——SQL自身问题
+7) 数据库负载过大——架构设计问题
+
+** 性能问题定位方式
+   原则：从小范围分析问题
+   1) SQL层
+      - 工具：执行计划
+      - 影响因素：数据量会影响同一个SQL是否高效。
+   2) 会话层
+      - 会话层可以定位哪个用户的SQL产生性能问题
+      - 工具
+        - V$SESSION
+        - V$SESSTAT，查看SESSION占用的资源
+        - V$SESSION_WAIT，查询SESSION卡在哪个位置
+          #+begin_example sql
+          select sid, event from V$SESSION_WAIT where sid in (99,232);
+          -- 99  enq: TX - row lock contention 表示会话ID为99的会话正在请求TX锁
+          -- 232 SQL Net message from client
+          #+end_example
+        - V$SQL
+        - V$LOCK，查看数据库中当前的所有锁
+          #+begin_example sql
+          -- 查看动态视图的字段
+          desc V$LOCK;
+
+          select sid,  -- 持有锁的会话ID
+                 type, -- 锁的类型
+                 id1, -- 当type为TM时，id1代表表对象的名称，可以通过 select * from dba_objects where object_id = 来获取该对象的信息。
+                 id2, -- id1+id2是回滚段的位置，加排它锁和请求排它锁的会话的id1+id2相同。
+                 lmode, -- 6 表示排它锁，4 表示数据块头修改的排它锁，3 表示共享锁，0 表示没有获取到锁。级别越高的锁限制越多。
+                 request, -- 0 表示没有请求锁， 6 表示请求排它锁
+                 block -- 0 表示没有阻塞其它会话，1 表示阻塞其它会话
+          from V$LOCK where type in ('TM', 'TX') order by 1,2;
+
+          -- 获取当前会话的SID
+          select sid from V$MYSTAT;
+          #+end_example
+        - SQL_TRACE
+   3) 系统层
+      - 工具
+        - AWR(Oracle8中为STATSPARK) 不结合业务很难分析性能问题。如业务就是负载重，而AWR只能告知负载重，不能说明是性能问题。
+        - OS Tools(top, iostat)

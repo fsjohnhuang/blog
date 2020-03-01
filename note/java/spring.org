@@ -4499,3 +4499,9 @@ Spring Boot1.4+支持Thymeleaf3，支持非闭合标签。通过配置启用：
     <java.version>1.8</java.version>
   </properties>
 #+end_example
+
+* 网关
+
+** 网关和BFF是如何演化出来的
+   BFF(Backend for Frontend)
+   网关和BFF是密不可分的，有时甚至网关就是BFF。
