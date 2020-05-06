@@ -64,7 +64,7 @@ Top-Down(自顶向下)：
 现在解析1+2-3的过程如下：
 1. 词法分析得到Token序列：INTEGER(1),ADD,INTEGER(2),SUB,INTEGER(3)
 2. 将INTEGER(1)移进栈中，且其符合规则3，因此可对其进行归约转换为term。此时栈数据为[term]，符合规则2，继续归约转换为expr，栈数据最终变为[expr]。
-3. 移进下一个Token，栈数据变为[expr ADD]，没有符合的规则，继续移进下一个TokenINTEGER(2)，该Token匹配规则3归约为term，此时栈数据为[expr ADD term]，整体匹配规则2，归约为expr，栈数据由回到[expr]了。
+3. 移进下一个Token，栈数据变为[expr ADD]，没有符合的规则，继续移进下一个Token INTEGER(2)，该Token匹配规则3归约为term，此时栈数据为[expr ADD term]，整体匹配规则2，归约为expr，栈数据由回到[expr]了。
 4. 移进下一个Token，栈数据变为[expr SUB]，继续移进下一个Token INTEGER(3)，最后得到栈数据为[line]
 
 
@@ -149,6 +149,18 @@ LALR(1)的LA就是Look Ahead，即预读1个Token作LR分析。
 LL(n)，前瞻N个Token。
 
 能够被LL(1)解析的语法称为LL(1)语法。
+
+backtrack(回溯)，会浪费CPU时间片，并且当输入为网络IO等不可回退的IO时，回溯是被禁止的。
+因此需要将会产生回溯的EBNF
+```
+expr -> addition | subtraction
+addition -> number + number
+subtraction -> number - number
+```
+提取公因子(factor out)
+```
+expr -> number (+|-) number
+```
 
 ** 无类型语言
 
