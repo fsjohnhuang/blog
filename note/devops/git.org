@@ -278,7 +278,7 @@
   git reset --hard HEAD
   # 恢复工作目录，暂存区和版本历史前一个提交内容一致
   git reset --hard HEAD^
-  # 恢复工作目录，暂存区和版本历史前３个提交内容一致
+  # 恢复工作目录，暂存区和版本历史前３个提交内容一致，从0开始
   git reset --hard HEAD~3
 
   # 将工作目录的变更缓存起来
@@ -404,14 +404,35 @@ index 5e6a0dc..29f2cd4 100644
   git subtree push --prefix <dir> <repo> <branch>
   #+END_EXAMPLE
 
-* 图形界面
-  1) gitk
-     #+BEGIN_EXAMPLE bash
-     # 进入git仓库
-     gitk --all
-     #+END_EXAMPLE
-
-  2) TortoiseGit
+* 回滚远程仓库分支
+  1. 私有远程分支
+     #+begin_src bash
+     git reset --hard HEAD^ # 回滚到上一个版本
+     git push -f # 强行推送到远程分支并覆盖
+     #+end_src
+  2. 公用远程分支
+     1. 采用 ~git reset~ 回滚
+        1. 用户A执行 ~git reset --hard HEAD^^ && git push -f~ 将远端分支回滚到上上个版本
+        2. 用户B、C执行 ~git status~ 会看到 ~Your branch is ahead of 'origin/master' by 2 commits.~ ，也就是B、C的本地分支并没有回滚到上上版本。
+           此时若执行 ~git push~ 那么远端分支将恢复原来的状态，回滚失效。因此B、C要分别执行如下操作，才能保持回滚结果：
+           #+begin_src bash
+           # 以用户B为例
+           git reflog # 找回用户B被回滚丢的提交commit id
+           git checkout -b user_b_backup <commitid> #  备份提交记录
+           git checkout master # 回到主分支
+           git reset --hard origin/master # 保持本地主分支和远端主分支一致
+           git merge user_b_backup # 合并提交到主分支
+           git push # 推送到远端分支
+           #+end_src
+     2. 采用 ~git revert~ 撤销某次提交，并产生一个新的提交记录。因此并不会丢失别人的提交记录。
+        注意点：
+        1. revert是撤销一次提交，因此后面的commit id是你需要回滚到的版本的前一次提交
+           #+begin_src bash
+           git revert HEAD # 撤销最近一次提交
+           git revert HEAD~1 # 撤销上上次提交，回到HEAD~2的版本
+           #+end_src
+        2. 连续执行 ~git revert HEAD~ 相当于没有执行过 ~git revert HEAD~ ，代码没有被撤销但提交记录向前进了。
+        3. 若撤销的不是最近一次提交，那么一定会有代码冲突。
 
 * .git目录
   #+BEGIN_EXAMPLE
