@@ -21,233 +21,46 @@ NIO是ORACLE发明的
 
 * 功能
 1) 虚拟主机
-2) 支持keep-alive和管道连接
-3) 访问日志（支持基于日志缓冲提高其性能）
+2) 支持keep-alive和管道(pipeline)连接
+   10000个非活跃的HTTP keep-alive连接仅占用2.5MB内存
+3) 访问日志（支持基于日志缓冲写操作提高其性能）
 4) url rewrite
    - 请求的是　http://www.test.com/bbs ,让用户重定向到 http://www.test.com/forum
 5) 路径别名
    - 定义/test/dir1的别名为dir1，那么请求/dir1/index.html时实际解析到/test/dir1/index.html上
-6) 基于IP及用户的访问控制
+6) 基于IP及用户的访问控制，限制连接数和或请求数
 7) 支持速率限制及并发数限制
-8) Memcached的GET接口
-
-* 静态资源服务
-1) ~server server_name...~
-   - 作用：设置虚拟主机的主机名
-   - 上下文：http
-   - 示例： ~server localhost;~, ~server localhost fsjohnhuang.io~
-2) ~resolver ip~
-   - 作用：设置DNS服务IP，nginx内部访问域名时均通过这个DNS解析
-   - 上下文：http,server,location
-3) ~resolver_timeout time~
-   - 作用：设置DNS服务解析超时时间
-   - 上下文：http,server,location
-4) ~keepalive_timeout timeout [header_timeout]~
-   - timeout 指定客户端的keep-alive连接超时时间，服务器将这个时间到期时关闭连接。
-   - header_timeout 指定响应头 ~Keep-Alive: timeout=time~ 中的time值。从而让浏览器主动关闭连接。没有这个参数，Nginx不会返回Keep-Alive响应头。
-   - 默认值： ~keepalive_timeout 75s~
-   - 上下文：http,server,location
-5) ~sendfile on | off;~
-   - 作用：启用Linux的零拷贝
-   - 默认值： ~sendfile off~
-   - 上下文：http,server,location
-6) ~tcp_nopush on | off;~
-   - 作用：启用网络缓存，当发送的消息大小达到一定量时才统一发送出去。对于传输大文件而言有优势。
-   - 默认值： ~tcp_nopush off~
-   - 上下文：http,server,location
-   - 注意：仅在 ~sendfile on~ 时生效
-7) ~tcp_nodelay on | off;~
-   - 作用：和 ~tcp_nopush~ 作用相反，启用时立即向网络发送消息。
-   - 默认值： ~tcp_nodelay on~
-   - 上下文：http,server,location
-   - 注意：当连接为keepalive时才生效。
-8) ~gzip on | off;~
-   - 作用：启用gzip压缩
-   - 默认值： ~gzip off~
-   - 上下文：http,server,location
-9) ~gzip_comp_level level~
-   - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
-   - 默认值： ~gzip_comp_level 1~
-   - 上下文：http,server,location
-10) ~gzip_http_version 1.0|1.1~
-    - 作用：设置压缩对应的HTTP协议版本，若HTTP版本与之不匹配则不启用GZip压缩。
-    - 默认值： ~gzip_http_version 1.1~
-    - 上下文：http,server,location
-    - 注意：值为1.1则1.0不压缩，值为1.0则1.0和1.1均启用压缩。
-11) ~gzip_types <mine> <mine>*;~
-    - 作用：设置被压缩的文件的MIME类型，如 ~text/plain~, ~application/x-javascript~
-    - 上下文：http,server,location
-    - 示例
-      #+begin_example
-      gzip_types text/plain application/x-javascript;
-      #+end_example
-12) ~gzip_disable "regex"~
-    - 作用：匹配正则表达式的请求，返回非压缩版本
-    - 示例
-      #+begin_example
-      # IE6及以下的返回非压缩版本
-      gzip_disable "MSIE [1-6]\.";
-      #+end_example
-13) ~gzip_vary on | off;~
-    - 作用：给CDN和反向代理服务器使用，针对相同的URL，根据请求头字段Accept-Encoding来决定返回压缩还是非压缩版本的资源。
-    - 默认值： ~gzip_vary off~
-    - HTTP响应头Vary
-      - 通过指明哪些请求头字段值可以作为缓存有效与否的依据，从而告知缓存代理服务器，其缓存的资源是fresh还是stale。
-      - 详解：
-        1) 用户代理请求A资源，缓存服务器转发请求到应用服务器，然后设置响应头Vary值为Accept-Encoding和User-Agent；(~Vary: Accept-Encoding,User-Agent~)
-        2) 缓存服务器将A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，缓存A资源；
-        3) 用户代理再次请求A资源时，缓存服务器则通过A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，试图读取A资源的缓存副本。
-      - 特点：
-        1) 内容来自请求头，如Accept-Encoding,User-Agent等
-        2) 用户代理会将Vary的值也作为缓存是否有效的依据之一，若缓存中Vary值与服务器返回Vary值不同，则表示缓存失效
-        3) Vary值为*时，表示任何请求都是唯一并且非缓存的
-14) ~gzip_min_length size~
-    - 作用：设置启用压缩的资源最小字节数，建议设置为 ~gzip_min_length 2k~
-    - 默认值： ~gzip_min_length 0~
-15) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
-    - 作用：作为反向代理时,当后端服务响应头包含Via时，启用或关闭后端服务返回的结果。
-    - 默认值： ~gzip_proxied off;~ 关闭所有代理结果数据的压缩
-    - 值解释
-      - expired 若Header中包含Expires信息，则启用压缩
-      - no-cache 若Header中包含Cache-Control: no-cache信息，则启用压缩
-      - no-store 若Header中包含Cache-Control: no-store信息，则启用压缩
-      - private 若Header中包含Cache-Control: private信息，则启用压缩
-      - no_last_modified 若Header中不包含Last-Modified信息，则启用压缩
-      - no_etag 若Header中不包含ETag信息，则启用压缩
-      - auth 若Header中包含Authorization信息，则启用压缩
-      - any 无条件启用压缩
-    - 请求/响应头Via
-      - 作用：用于记录请求从客户端发送到应用服务的过程中，经过的代理服务的信息
-      - 详解：
-        1) 请求经过代理服务A，那么代理服务A转发请求时会在请求头Via上追加服务A的信息；
-        2) 请求经过代理服务B，那么代理服务A转发请求时会在请求头Via上追加服务B的信息，这是Via中包含A和B的信息；
-        3) 请求p到达应用服务，那么应用服务即可通过请求头的Via得知经过的代理服务信息，然后在将信息原封不动地写入响应头Via返回；
-        4) 响应返回到用户代理，那么用户代理也知道经过的代理服务信息。
-16) ~gzip_buffers number size~
-    - 作用：设置系统获取多少个多少字节的存储单元用于存储gzip压缩结果
-    - 默认值：申请和未压缩资源的大小申请
-    - 示例
-      #+begin_example
-      # 申请以8kB为存储单元大小，申请16个存储单元
-      gzip_buffers 16 8k;
-      #+end_example
-17) ~http_gzip_static_module~ 内置模块
-    - 作用：读取任何文件时均会先读取相同目录下的 ~.gz~ 文件，若没有才动态压缩或读取原文件。
-    - 语法： ~gzip_static on | off;~
-    - 默认值： ~gzip_static off;~
-    - 注意：
-      1) 该功能不受 ~gzip_types~ 设置的限制
-      2) ~.gz~ 文件需要自行预先制作并放置好才行
-         #+begin_example bash
-         gzip -c 9 /path/to/uncompressed /path/to/compressed
-         #+end_example
-18) ~http_gunzip_module~
-    - 作用：对于不支持gzip的用户代理，提供另一种压缩方式。一般不用。
-19) ~expires~
-    - 作用：添加响应头Cache-Control和Expires
-    - 语法：
-      1) ~expires time;~
-         - time
-           - 正数
-             1) 当前系统时间+time作为Expires的值
-             2) 将time转换为秒数，作为 ~Cache-Control: max-age=<time>~ 的值
-           - 负数
-             1) 当前系统时间+time作为Expires的值
-             2) 设置 ~Cache-Control: no-cache~
-         - 示例
-           1) ~expires 30s;~ 缓存30秒
-           2) ~expires 30m;~ 缓存30分钟
-           3) ~expires 2h;~ 缓存2小时
-           4) ~expires 30d;~  缓存30天
-      2) ~expires epoch | max | off;~
-         - epoch 则为将Expires设置为 ~1 January 1970 00:00:01 GMT~
-         - max 则为将Expires设置为 ~31 December 2037 23:59:59 GMT~ ，而Cache-Control设置为10年
-    - 默认值： ~expires off;~
-    - 上下文：http,server和location
-    - 示例
-      #+begin_example bash
-      # 缓存有效期为24小时
-      expires 24h;
-      #+end_example
-20) ~add_header name value [always];~
-    - 作用：添加自定义响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
-    - 上下文：server,location, if in location
-    - 示例
-      #+begin_example bash
-      location ~ .*\.html?$ {
-          add_header Access-Control-Allow-Origin http://www.jesonc.com;
-          add_header Access-Control-Allow-Methods GET,POST,PUT,DELETE,OPTIONS;
-          root /opt/app/code;
-      }
-
-      location ~ .*\.html?$ {
-          # *表示允许所有域名跨站访问
-          add_header Access-Control-Allow-Origin *;
-          add_header Access-Control-Allow-Methods GET,POST,PUT,DELETE,OPTIONS;
-          root /opt/app/code;
-      }
-      #+end_example
-21) ~valid_referers none | blocked | server_names | string | regex...;~
-    - 值类型：
-      - none 表示$http_referer为空
-      - blocked 表示$http_referer原来不为空，但被防火墙或代理删除了
-      - server_names 设置$http_referer需要匹配某机器名
-      - string 设置$http_referer需要匹配某IP或某域名
-      - regex 正则表达式匹配
-    - 作用：根据$http_referer变量实现简单的防盗链功能
-    - 上下文：server,location
-    - 示例
-      #+begin_example bash
-      valid_referers none blocked 116.62.12.41 ~/google\./;
-      # valid_referers若匹配失败则会将$invalid_referer设置为1
-      if ($invalid_referer) {
-          return 403;
-      }
-      #+end_example
-22) ~return code [text | url]~ 或 ~return url~
-    - text 可以为普通字符串、json或使用变量，它将作为响应体
-    - url 必须以http或https开头
-    - 作用：向客户端直接返回响应状态码
-    - 上下文：server,location,if
-    - 示例
-      #+begin_example bash
-      return 200 "ok";
-      return 200 '{"name":"john","id": 123}';
-      return 200 "$host $request_uri";
-      # 请求重定向
-      return 301 http://fsjohnhuang.io;
-      # 默认302重定向，302不会影响SEO
-      return http://fsjohnhuang.io;
-      #+end_example
-    - 注意：return指令后的其他指令将不会被执行
-23) ~server_tokens on | off~
-    - on 在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
-    - off 隐藏版本号，形如 ~Server: nginx~
-    - 作用：安全优化-隐藏版本号
-    - 默认值：
-    - 上下文：http,server,location
-
-** QA
-1) 同时启用 ~tcp_nopush~ 和 ~tcp_nodelay~ 是什么意思？
+9) Memcached的GET接口
 
 * 反向代理(reverse proxy)
 ~proxy_pass protocal://ip|domain:port[uri]~
 - 作用：根据URI将请求转发到不同功能的服务器(集群)
 - 上下文：location, if in location, limit_except
 - 示例
-  1) unix domain socket
-     #+begin_example bash
-     proxy_pass unix://tmp/backend.socket:/uri/;
-     #+end_example
-  2) http 和 https
+  1) unix domain socket ~proxy_pass unix://tmp/backend.socket:/uri/;~
+  2) http 和 https ~proxy_pass ip:port[uri];~
      #+BEGIN_EXAMPLE bash
-     location ~* \.go$ {
-       # proxy_pass ip:port[uri]
-       # 注意：
-       # 假如请求为http://127.0.0.1/abc.go
-       # 不设置uri时，那么会将请求转发到http://123.0.0.1/abc.go
-       # 设置uri为/时，那么会将匹配的uri删掉得到http://123.0.0.1/，而这种情况时不允许使用正则匹配的，只能使用普通匹配
-       proxy_pass http://123.0.0.1;
+     server_name test.com;
+
+     # 当客户端访问 http://test.com/forum/index.html
+     # 会被转发到 http://196.168.56.191:8080/bbs/index.html
+     location /forum/ {
+       proxy_pass http://196.168.56.191:8080/bbs/;
+     }
+
+     # 当使用 ~,~*,^~,= 等进行模式匹配时，proxy_pass后的url只能设置为 <protocol>://<ip>:<port> 的形式
+     # location后的URI部分将被直接传递至上游服务器，而不能为其指定转换为另一个URI。
+     # 当客户端访问 http://test.com/forum/index.html
+     # 会被转发到 http://196.168.56.191:8080/forum/index.html
+     location ~* ^/forum/ {
+       proxy_pass http://196.168.56.191:8080;
+     }
+
+     # 当使用URL重定向，那么Nginx将使用重定向后的URI处理请求，而不再考虑上游服务器上定义的URI
+     # 请求被转发到http://196.168.56.191:8080/index.php?page=$1
+     location / {
+       rewrite /(.*)$ /index.php?page=$1 break;
+       proxy_pass http://196.168.56.191:8080/index;
      }
      #+END_EXAMPLE
 
@@ -308,24 +121,29 @@ NIO是ORACLE发明的
      - 上下文：http,server,location
 
 ** 代理重定向
-   ~proxy_redirect default|off|redirect replacement;~ 和
+   ~proxy_redirect default|off|regex replacement;~ 和
    - 作用：当上游服务器返回的响应是重定向或刷新请求（如HTTP响应码是301或者302）时，proxy_redirect可以重设HTTP头部的location或refresh字段。
    - off 即不修改Location和Refresh的值
    - default 则根据server_name和location来设置
      #+begin_example bash
+     listen 80;
+     server_name myproxy.com;
+     
      # 下面两种设置是等价的
      location /one/ {
          proxy_pass http://upstream:port/john/;
-         proxy_direct default;
+         proxy_redirect default;
      }
       location /one/ {
          proxy_pass http://upstream:port/john/;
-         proxy_direct http://upstream:port/john/ /one/;
+         proxy_redirect http://upstream:port/john/ http://myproxy.com:80/one/;
      }
+
+     # 那么当服务端返回的Location为http://upstream:port/john/hi.html时，反向代理返回给客户端的Location就是http://myproxy.com:80/one/hi.html了。
      #+end_example
    - redirect replacement
      #+begin_example bash
-     # 使用代理服务的server_name和port
+     # 使用反向代理服务的server_name和port
      proxy_redirect http://uptstream:port/john/ /;
      # http转换为https
      proxy_redirect ~^http://([^:]+)(:\d+)?(.*)$ https://$1$2$3;
@@ -386,30 +204,24 @@ NIO是ORACLE发明的
    - 默认值： ~slice 0~
    - 上下文：http,server,lcation
 
-** 跨域设置
-#+begin_example
-server {
-    location / {
-        if ( $requeset_method = 'OPTIONS' ) {
-            add_header Access-Control-Allow-Origin "$http_origin";
-            add_header
-        }
-    }
-}
-#+end_example
-
 * if in location
+*注意：if 中仅return和rewrite指令是100%执行安全的，其他指令不保证运行结果安全。*
+
 #+begin_example bash
 location / {
     if ( $http_x_forwarded_for !~ "^176\.42\.12\.228" ) {
         return 403;
     }
+
+    if ( $slow ) {
+      limit_rate 10k; # 限制速度为10Kb
+    }
 }
 #+end_example
 
-if 中仅return和rewrite指令是100%执行安全的，其他指令不保证运行结果安全。
-
 ** 表达式
+注意：所有符号两边必须为空格，否则报语法错误。
+
 | 符号 | 作用             | 示例                          |
 |------+------------------+-------------------------------|
 | -f   | 文件存在         | if ( -f /path/to/file )       |
@@ -420,6 +232,12 @@ if 中仅return和rewrite指令是100%执行安全的，其他指令不保证运
 | !-e  | 文件或目录不存在 | if ( !-e /path/to )           |
 | -x   | 可执行文件       | if ( -x /path/to/file )       |
 | !-x  | 非可执行文件     | if ( !-x /path/to/file )      |
+| ~    | 正则匹配为真           |                               |
+| ~*   | 不区分大小写正则匹配为真     |                               |
+| =    | 等于为真             |                               |
+| !~   |                  |                               |
+| !~*  |                  |                               |
+| !=   |                  |                               |
 
 * 负载均衡
 ISO第7层的负载均衡方案
@@ -439,6 +257,7 @@ ISO第7层的负载均衡方案
    - option
      - down 表示当前server暂时不参与负载均衡
      - backup 表示当前server为备用服务器，当其它所有非备用服务器均down或忙时才将请求转发到这台服务器
+       可实现主备模式。
      - max_fails 设置允许请求失败的次数
      - fail_timeout 设置经过max_fails失败后，服务暂停的时间。如10s, 5m, 6d等
      - max_conns 设置最大的连接数
@@ -453,14 +272,15 @@ http {
   # 轮询(RR,Round-Robin)
   # 后端宕机会自动剔除
   upstream balance1{
-    server 123.0.0.1;
+    server 123.0.0.1 max_fails=1 fail_timeout=10s;
     server 123.0.0.2;
   }
 
   # 加权轮询
   upstream balance2{
-    server 123.0.0.1 weight=2; # 权重2/3
+    server 123.0.0.1 max_fails=1 fail_timeout=10s weight=2; # 权重2/3
     server 123.0.0.2 weight=1; # 权重1/3
+    server 123.0.0.3; # 没有赋予权重则表示该服务器不参与负载均衡
   }
 
   # 源地址散列
@@ -472,7 +292,6 @@ http {
     server 123.0.0.2;
     server 123.0.0.3 backup; # 当其他非backup后端down或忙时则将请求转发到backup后端服务
   }
-
 
   # 第三方负载策略
   # fair，按后端服务器的响应时间来分配请求，响应时间短的优先分配。但由于实际网络环境复杂，因此要慎用。
@@ -499,12 +318,12 @@ http {
       proxy_set_header Host $host:$server_port; # 设置转发到后端服务的请求头主机名为客户端请求头的主机名，而不是转发的主机名
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 向后端服务传输实际客户端IP
-　　　proxy_connect_timeout 60s; # Nginx连接到后端服务的连接超时时间
+      proxy_connect_timeout 60s; # Nginx连接到后端服务的连接超时时间
       proxy_read_timeout 10m; # Nginx接收后端服务响应超时时间
 
       # 返回后端ip和响应状态码
       add_header backendIP $upstream_addr;
- 　　 add_header backendCode $upstream_status;
+      add_header backendCode $upstream_status;
     }
   }
 }
@@ -596,8 +415,14 @@ upstream backend {
 ** QA
 1) 熔断机制
 
-* TODO 代理缓存(proxy cache)
-  Nginx的proxy cache由proxy loader和proxy manager组成
+* 代理缓存(proxy cache)
+  Nginx的proxy cache由proxy loader和proxy manager组成，缓存在磁盘上，而varnish则缓存在内存中(squid则出现比varnish更早)。
+  HTTPD可缓存到磁盘或内存中。
+  现在Nginx已经提供模块连接到Memcached。
+  根据职责单一原理，反向代理应该专门处理请求转发，而静态内容(图片、文本等)应该放在专门的缓存服务器。然后配置反向代理根据请求URL转发请求到缓存服务器或应用服务器。
+  但对于并发量不大的网点，可以将缓存服务集成到反向代理中，从而降低运维复杂度。
+
+  注意：Nginx缓存中的键和缓存对象元数据存储为内存中，而值存储在磁盘上。
 
 ** 配置
    - ~proxy_cache_path~
@@ -610,35 +435,63 @@ upstream backend {
        [purger=on|off] [purger_files=number] [purger_sleep=time] [purger_threshold=time];
        #+end_example
      - path 缓存数据存放的目录路径
-     - keys_zone.name 键空间的名称，一个键空间内包含多个键
-     - keys_zone.size 键空间的大小，1m能存放8000个键
-     - max_size 缓存数据存放的目录的大小上限，若超过该上限Nginx会根据规则清理缓存数据
+     - levels 定义缓存目录的子目录级别数量和各级别目录的文件名由几个字符组成，最多3级子目录，每级子目录文件名多长2个字符。如1:2表示2级子目录，1级子目录的文件名称由1个字符，2级子目录的文件名称由2个字符组成。
+     - keys_zone.name 键空间(位于共享内存中)的名称，一个键空间内包含多个键
+     - keys_zone.size 键空间的大小，1MB能存放8000个键
+     - max_size 缓存数据存放的目录的大小上限，若超过该上限Nginx会根据LRU规则清理缓存数据。
      - inactive 当缓存在指定时间内没有再被访问过，则被清理掉
-     - use_temp_path 设置另一个目录用于存放临时文件，一般设置为关闭。
+     - use_temp_path 设置另一个目录用于存放临时文件，一般设置为关闭，防止不必要的数据拷贝。
      - 上下文：http
      - 示例
        #+begin_example bash
-       proxy_cache_path /opt/app/cache levels=1:2 keys_zone=nginx_cache:10m max_size=10g inactive=60m use_temp_path=off;
+       http {
+         proxy_cache_path /opt/app/cache levels=1:2 keys_zone=nginx_cache:10m max_size=1g inactive=60m use_temp_path=off;
+       }
        #+end_example
-   - ~proxy_cache zone | off~;
+   - ~proxy_cache <zone.name> | off~;
      - 作用：启用代理缓存
      - 默认值： ~proxy_cache off;~
      - 上下文：http,server,location
+     - 示例：
+       #+begin_src
+       location / {
+         proxy_cache nginx_cache;
+       }
+
+       # 若存在多个磁盘，可以将缓存分布到多个磁盘，从而提高读写速度
+       proxy_cache_path /path/to/hdd1 levels=1:2 keys_zone=my_cache_hdd1:10m max_size=10g inactive=60m use_temp_path=off;
+       proxy_cache_path /path/to/hdd2 levels=1:2 keys_zone=my_cache_hdd2:10m max_size=10g inactive=60m use_temp_path=off;
+       split_clients $request_uri $my_cache {
+         50% "my_cache_hdd1";
+         50% "my_cache_hdd2";
+       }
+
+       server {
+          ...
+          location / {
+            proxy_cache $my_cache;
+            proxy_pass http://my_upstream;
+          }
+       }
+       #+end_src
    - ~proxy_cache_valid [code...] time;~
      - code 为返回状态码
      - 作用：配置缓存过期时间
      - 上下文：http,server,location
      - 示例
        #+begin_example bash
-       proxy_cache_valid 200 304 12h;
-       proxy_cache_valid any 10m;
+       location / {
+         proxy_cache nginx_cache; # 要先启用缓存，下面的设置才生效
+         proxy_cache_valid 200 304 12h; #  对于response status code 为 200或304的则缓存12小时
+         proxy_cache_valid any 10m; # 其它情况则缓存10分钟
+       }
        #+end_example
    - ~proxy_cache_key string~
      - 作用：设置缓存的维度
      - 默认值： ~proxy_cache_key $scheme$proxy_host$request_uri~
      - 上下文：http,server,location
    - ~proxy_no_cache string...~
-     - 作用：指定哪些条件下不缓存，当string为空时即为缓存，非空即不缓存。
+     - 作用：指定哪些条件下不缓存，当string为空时即为缓存，若其中某个string非空或为0则不缓存。
      - 上下文：http,server,location
      - 示例
        #+begin_example bash
@@ -650,13 +503,72 @@ upstream backend {
          proxy_no_cache $cookie_nocache;
        }
        #+end_example
+   - ~proxy_cache_use_stale~
+     - 作用：当应用服务器因宕机或繁忙等原因无法响应请求时，Nginx返回已过期的缓存内容给客户端。
+     - 上下文：http,server,location
+     - 示例
+       #+begin_src
+       # pdating表示缓存已过期但正在被别的Nginx Worker进程更新，但先返回了过期内容
+       proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+       #+end_src
+   - ~proxy_cache_revalidate off|on~
+     - 作用：若缓存过期，那么当请求该资源时Nginx会向后端服务发起带If-Modified-Since或If-none-match的请求，若后端返回304，那么缓存自动续期并返回把缓存返回给客户端。
+       默认为off，即即使Expires或Cache-Control过期，但Nginx缓存没有过期，则直接返回缓存内容，而不会先检查后端服务资源是否已更新过。
+     - 当服务单返回304，那么$upstream_cache_status为REVALIDATED
+     - 上下文：http,server,location
+   - ~proxy_cache_min_uses n~
+     - 作用：设置当同一链接被请求达到多少次后才缓存起来，默认为1次。
+     - 上下文：http,server,location
+   - ~proxy_cache_lock off|on~
+     - 作用：防止缓存击穿，即缓存MISS后仅第一个请求会被转发到后端服务，其它请求均被阻塞直到缓存生效，返回缓存内容。
+     - 上下文：http,server,location
+   - ~proxy_cache_lock_age 5s~
+     - 作用：Nginx 1.7.8 新增，在指定时间内缓存还没更新，那么后续请求则会发送到服务端。
+     - 上下文：http,server,location
+   - ~proxy_cache_purge <zone> <key>~
+     - 作用: 清理缓存
+     - 上下文：location
+     - 示例: ~proxy_cache_purge tmpcache $uri$is_args$args;~
+   - ~proxy_cache_bypass~
+     - 作用：绕过缓存，直接转发请求到后端服务。
+     - 上下文：location
+     - $upstream_cache_status为BYPASS
 
 ** 调试
-   在调试阶段于响应头中添加代理缓存命中信息，可有效查看配置是否成功。
+   在调试阶段于响应头中添加代理缓存命中信息，可有效查看配置是否成功。变量值如下
+   1. MISS
+   2. EXPIRED - expired, requesst was passed to backend
+   3. UPDATING - expired, stale response was used dued to proxy/fastcgi_cache_use_stale updating
+   4. STALE - expired, stale response was used dued to proxy/fastcgi_cache_use_stale updating
+   5. HIT
    #+begin_example bash
-   add_header Nginx-Cache "$upstream_cache_status";
+   add_header Nginx-Cache "$upstream_cache_status from $server_addr";
    #+end_example
 
+* 其它缓存
+  1. 日志缓存 ~open_log_cache~
+  2. 静态文件缓存 ~open_file_cache~
+     - 缓存内容
+       1. 文件描述符和相关元数据(大小、修改时间等)
+       2. 文件和目录存在与否，和与查找相关的任何错误信息(权限被拒绝、文件未找到等)
+  3. fastcgi缓存 ~fastcgi_cache~
+
+* 读写分离
+  PUT和DELETE方法由WebDAV提供：
+  WebDAV(Web-based Distributed Authoring and Versioning) 是一种基于 HTTP1.1 协议的通信协议，扩展了HTTP1.1。在GET、POST和HEAD等几个HTTP标准方法以外添加一些新的方法。
+  使应用程序可以对Web Server直接读写，并支持写文件锁定(Locking)和解锁(Unlocking)，还可以支持文件的版本控制。
+
+  #+begin_src
+  # 主节点位于 192.168.56.191
+  # 备份节点位于 192.168.56.192
+  # 若为PUT操作则请求转发到主节点
+  location / {
+    proxy_pass http://192.168.56.192;
+    if ( $request_method = "PUT" ) {
+      proxy_pass http://192.168.56.191;      
+    }
+  }
+  #+end_src
 * 安装
 #+BEGIN_SRC
 # 安装依赖
@@ -672,7 +584,32 @@ useradd -r -g nginx -M nginx
 # --prefix 用于指定nginx编译后的安装目录
 # --add-module 为添加的第三方模块，此次添加了fdfs的nginx模块
 # --with..._module 表示启用的nginx模块，如此处启用了http_ssl_module模块
-./configure --prefix=/usr/nginx　--add-module=../nginx-sticky-module --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module
+# 查看官方配置 ./configure --help | more
+# 其中 --with..._module 表示默认没有启用，需要编译时添加
+# 而 --without..._module 表示默认启用，需要编译时禁用
+./configure \
+  --prefix=/usr \ # 默认安装路径
+  --sbin-path=/usr/sbin/nginx \ # Nginx可执行程序路径，路径不存在自动创建目录
+  --conf-path=/etc/nginx/nginx.conf \ # 主配置路径
+  --error-path=/var/log/nginx/error.log \ # 错误日志
+  --http-log-path=/var/log/nginx/access.log \ # 访问日志
+  --pid-path=/var/run/nginx/nginx.pid \ 
+  --lock-path=/var/lock/nginx.lock \
+  --user=nginx \
+  --group=nginx \
+  --add-module=../nginx-sticky-module \ 
+  --with-http_ssl_module \
+  --with-http_flv_module \
+  --with-http_stub_status_module \ # 提供显示Nginx进程状态的http页面
+  --with-http_gzip_status_module \ # 支持gzip压缩
+  --with-http_realip_module \
+  --with-file_aio \
+  --http-client-body-temp-path=/var/tmp/nginx/client/ \ # 用户请求主体的缓存路径，必须保证路径存在
+  --http-proxy-temp-path=/var/tmp/nginx/proxy/ \ # 代理缓存路径，必须保证路径存在
+  --http-fastcgi-temp-path=/var/tmp/nginx/fcgi/ \
+  --http-uwsgi-temp-path=/var/tmp/nginx/uwsgi/ \
+  --http-scgi-temp-path=/var/tmp/nginx/scgi/ \
+  --with-pcre
 
 # 编译
 ./make
@@ -680,6 +617,9 @@ useradd -r -g nginx -M nginx
 # 安装
 ./make install
 #+END_SRC
+
+/etc/nginx/nginx.conf同级目录下带 ~.default~ 的文件为nginx默认的配置文件，而不带的是根据配置编译而生成的配置文件。
+/etc/nginx/mime.types存储非文本文件类型MIME。
 
 ** 安装过程问题
 1) 报 ~./configure:  error: the HTTP rewrite module requires the PCRE library.~
@@ -694,12 +634,277 @@ useradd -r -g nginx -M nginx
   nginx -t -c /path/to/nginx.conf
 
   # -s reload，重载nginx配置
-  nginx -s reload c /path/to/nginx.conf
+  nginx -s reload -c /path/to/nginx.conf
 
   # 查看安装路径和已安装的模块等信息
   nginx -V 2>&1
   #+end_example
+
 * 配置讲解
+** 配置项
+1) ~server server_name...~
+   - 作用：设置虚拟主机的主机名
+   - 上下文：http
+   - 示例： ~server localhost;~, ~server localhost fsjohnhuang.io~
+2) ~resolver ip~
+   - 作用：设置DNS服务IP，nginx内部访问域名时均通过这个DNS解析
+   - 上下文：http,server,location
+3) ~resolver_timeout time~
+   - 作用：设置DNS服务解析超时时间
+   - 上下文：http,server,location
+4) ~keepalive_timeout timeout [header_timeout]~
+   - timeout 指定客户端的keep-alive连接超时时间，服务器将这个时间到期时关闭连接。
+   - header_timeout 指定响应头 ~Keep-Alive: timeout=time~ 中的time值。从而让浏览器主动关闭连接。没有这个参数，Nginx不会返回Keep-Alive响应头。
+   - 默认值： ~keepalive_timeout 75s~
+   - 上下文：http,server,location
+5) ~sendfile on | off;~
+   - 作用：启用Linux的零拷贝
+   - 默认值： ~sendfile off~
+   - 上下文：http,server,location
+6) ~tcp_nopush on | off;~
+   - 作用：启用网络缓存，当发送的消息大小达到一定量时才统一发送出去。对于传输大文件而言有优势。
+   - Nagle算法
+     - 场景：当发送payload为1个字节而包头却为40个字节(IP头20字节+TCP头20字节)，将容易导致网络由于太多数据包，对于重负荷的网络而言会引发拥塞瘫痪。
+     - 改进点：若发送端打算多次发送少量数据的数据包(即长度小于MSS的数据包)，那么发送端会先发送第一个小包，后面的数据包会缓存起来，直到下列其中一个条件满足才发送
+       1. 发送端接收到接收端返回的ACK确认
+       2. 当前数据属于紧急数据
+       3. 缓存区满
+     - TCP的Nagle算法默认是启用的
+     - 适用场景：发送大批量数据，且接收端会及时作出回应
+       1. telnet、rlogin等远程登录的长时间在线的应用
+       2. 大文件传输
+     - 不适用场景：及时发送小批量数据，或接收端不一定会及时回应
+       1. 游戏服务器要及时跟踪用户的鼠标坐标。
+       2. 没有使用keepalive的HTTP连接。在TCP四次挥手中向服务端向客户端发送FIN报文要等缓存区满才能发送，导致客户端处于FIN__WAIT2时间延长，即阻塞关闭socket的时间延长。
+   - 默认值： ~tcp_nopush off~
+   - 上下文：http,server,location
+   - 注意：仅在 ~sendfile on~ 时生效
+7) ~tcp_nodelay on | off;~
+   - 作用：和 ~tcp_nopush~ 作用相反，启用时立即向网络发送消息。
+   - 默认值： ~tcp_nodelay on~
+   - 上下文：http,server,location
+   - 注意：当连接为keepalive时才生效。
+8) ~gzip on | off;~
+   - 作用：启用gzip压缩
+   - 默认值： ~gzip off~
+   - 上下文：http,server,location
+9) ~gzip_comp_level level~
+   - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
+   - 默认值： ~gzip_comp_level 1~
+   - 上下文：http,server,location
+10) ~gzip_http_version 1.0|1.1~
+    - 作用：设置压缩对应的HTTP协议版本，若HTTP版本与之不匹配则不启用GZip压缩。
+    - 默认值： ~gzip_http_version 1.1~
+    - 上下文：http,server,location
+    - 注意：值为1.1则1.0不压缩，值为1.0则1.0和1.1均启用压缩。
+11) ~gzip_types <mine> <mine>*;~
+    - 作用：设置被压缩的文件的MIME类型，如 ~text/plain~, ~application/x-javascript~
+    - 上下文：http,server,location
+    - 示例
+      #+begin_example
+      gzip_types text/plain application/x-javascript;
+      #+end_example
+12) ~gzip_disable "regex"~
+    - 作用：匹配正则表达式的请求，返回非压缩版本
+    - 示例
+      #+begin_example
+      # IE6及以下的返回非压缩版本
+      gzip_disable "MSIE [1-6]\.";
+      #+end_example
+13) ~gzip_vary on | off;~
+    - 作用：给CDN和反向代理服务器使用，针对相同的URL，根据请求头字段Accept-Encoding来决定返回压缩还是非压缩版本的资源。
+    - 默认值： ~gzip_vary off~
+    - HTTP响应头Vary
+      - 通过指明哪些请求头字段值可以作为缓存有效与否的依据，从而告知缓存代理服务器，其缓存的资源是fresh还是stale。
+      - 详解：
+        1) 用户代理请求A资源，缓存服务器转发请求到应用服务器，然后设置响应头Vary值为Accept-Encoding和User-Agent；(~Vary: Accept-Encoding,User-Agent~)
+        2) 缓存服务器将A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，缓存A资源；
+        3) 用户代理再次请求A资源时，缓存服务器则通过A资源的URL+请求头Accept-Encoding值+请求头User-Agent值作为唯一键，试图读取A资源的缓存副本。
+      - 特点：
+        1) 内容来自请求头，如Accept-Encoding,User-Agent等
+        2) 用户代理会将Vary的值也作为缓存是否有效的依据之一，若缓存中Vary值与服务器返回Vary值不同，则表示缓存失效
+        3) Vary值为*时，表示任何请求都是唯一并且非缓存的
+14) ~gzip_min_length size~
+    - 作用：设置启用压缩的资源最小字节数，建议设置为 ~gzip_min_length 2k~
+    - 默认值： ~gzip_min_length 0~
+15) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
+    - 作用：作为反向代理时,当后端服务响应头包含Via时，启用或关闭后端服务返回的结果。
+    - 默认值： ~gzip_proxied off;~ 关闭所有代理结果数据的压缩
+    - 值解释
+      - expired 若Header中包含Expires信息，则启用压缩
+      - no-cache 若Header中包含Cache-Control: no-cache信息，则启用压缩
+      - no-store 若Header中包含Cache-Control: no-store信息，则启用压缩
+      - private 若Header中包含Cache-Control: private信息，则启用压缩
+      - no_last_modified 若Header中不包含Last-Modified信息，则启用压缩
+      - no_etag 若Header中不包含ETag信息，则启用压缩
+      - auth 若Header中包含Authorization信息，则启用压缩
+      - any 无条件启用压缩
+    - 请求/响应头Via
+      - 作用：用于记录请求从客户端发送到应用服务的过程中，经过的代理服务的信息
+      - 详解：
+        1) 请求经过代理服务A，那么代理服务A转发请求时会在请求头Via上追加服务A的信息；
+        2) 请求经过代理服务B，那么代理服务A转发请求时会在请求头Via上追加服务B的信息，这是Via中包含A和B的信息；
+        3) 请求p到达应用服务，那么应用服务即可通过请求头的Via得知经过的代理服务信息，然后在将信息原封不动地写入响应头Via返回；
+        4) 响应返回到用户代理，那么用户代理也知道经过的代理服务信息。
+16) ~gzip_buffers number size~
+    - 作用：设置系统获取多少个多少字节的存储单元用于存储gzip压缩结果
+    - 默认值：申请和未压缩资源的大小申请
+    - 示例
+      #+begin_example
+      # 申请以8KB为存储单元大小，申请16个存储单元
+      gzip_buffers 16 8k;
+      #+end_example
+17) ~http_gzip_static_module~ 内置模块
+    - 作用：读取任何文件时均会先读取相同目录下的 ~.gz~ 文件，若没有才动态压缩或读取原文件。
+    - 语法： ~gzip_static on | off;~
+    - 默认值： ~gzip_static off;~
+    - 注意：
+      1) 该功能不受 ~gzip_types~ 设置的限制
+      2) ~.gz~ 文件需要自行预先制作并放置好才行
+         #+begin_example bash
+         gzip -c 9 /path/to/uncompressed /path/to/compressed
+         #+end_example
+18) ~http_gunzip_module~
+    - 作用：对于不支持gzip的用户代理，提供另一种压缩方式。一般不用。
+19) ~expires~
+    - 作用：添加响应头Cache-Control和Expires
+    - 语法：
+      1) ~expires time;~
+         - time
+           - 正数
+             1) 当前系统时间+time作为Expires的值
+             2) 将time转换为秒数，作为 ~Cache-Control: max-age=<time>~ 的值
+           - 负数
+             1) 当前系统时间+time作为Expires的值
+             2) 设置 ~Cache-Control: no-cache~
+         - 示例
+           1) ~expires 30s;~ 缓存30秒
+           2) ~expires 30m;~ 缓存30分钟
+           3) ~expires 2h;~ 缓存2小时
+           4) ~expires 30d;~  缓存30天
+      2) ~expires epoch | max | off;~
+         - epoch 则为将Expires设置为 ~1 January 1970 00:00:01 GMT~
+         - max 则为将Expires设置为 ~31 December 2037 23:59:59 GMT~ ，而Cache-Control设置为10年
+    - 默认值： ~expires off;~
+    - 上下文：http,server和location
+    - 示例
+      #+begin_example bash
+      # 缓存有效期为24小时
+      expires 24h;
+      #+end_example
+20) ~add_header name value [always];~
+    - 作用：添加响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
+    - 坑：
+      1. 发生 ~rewrite last~ 时，第一个匹配的location中的add_header指令将失效
+         #+begin_src
+         # 请求 /a 返回的响应头仅有 b: 2, 而没有a: 1。
+         location =/a {
+           add_header a 1;
+            rewrite / /b;
+         }
+         location =/b {
+           add_header b 2;
+            return 204;
+         }
+         #+end_src
+      2. 仅执行添加操作，而不是重写操作。如果已经存在某响应头，那么会出现重复响应头。其中最突出的就是 ~Content-Type~
+         #+begin_src
+         http {
+           default_type application/octet-stream;
+   
+           server {
+             # 响应头包含两个Content-Type
+             # 1. Content-Type: application/octet-stream
+             # 2. Content-Type: text/html; charset=utf-8
+             location /duplicated_content_type {
+               add_header Content-Type "text/html; charset=utf-8";
+             }
+
+             location /normal {
+               default_type ""; # 清理默认Content-Type
+               add_header Content-Type "text/html; charset=utf-8"; 
+             }
+           }
+         }
+         #+end_src
+    - always: 无论response http code是什么都会添加该响应头
+    - 上下文：server,location, if in location
+    - 示例
+      #+begin_example bash
+      location ~ .*\.html?$ {
+          add_header Access-Control-Allow-Origin http://www.jesonc.com;
+          add_header Access-Control-Allow-Methods GET,POST,PUT,DELETE,OPTIONS;
+          root /opt/app/code;
+      }
+
+      location ~ .*\.html?$ {
+          # *表示允许所有域名跨站访问
+          add_header Access-Control-Allow-Origin *;
+          add_header Access-Control-Allow-Methods GET,POST,PUT,DELETE,OPTIONS;
+          root /opt/app/code;
+      }
+
+      location / {
+        if ($request_method = 'OPTIONS') {
+           add_header 'Access-Control-Allow-Origin' '$http_origin';
+           add_header 'Access-Control-Allow-Credentials' 'true';
+           add_header 'Access-Control-Allow-Methods' 'GET,POST,PUT,DELETE,OPTIONS';
+           add_header 'Access-Control-Allow-Headers' 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,appcode,Authorization,InvOrgId';
+           add_header 'Access-Control-Max-Age' 1728000;
+           return 204;
+        }
+        add_header 'Access-Control-Allow-Origin' '$http_origin' always;
+        add_header 'Access-Control-Allow-Credentials' 'true' always;
+        add_header 'Access-Control-Allow-Methods' 'GET,POST,PUT,DELETE,OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,appcode,Authorization,InvOrgId' always;
+
+        proxy_set_header Host $host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://zuul;
+        break;
+      }
+      #+end_example
+21) ~valid_referers none | blocked | server_names | string | regex...;~
+    - 值类型：
+      - none 表示直接从浏览器输入地址访问，那么$http_referer为空
+      - blocked 表示$http_referer原来不为空，但被防火墙或代理删除了
+      - server_names 设置$http_referer需要匹配某机器名
+      - string 设置$http_referer需要匹配某IP或某域名
+      - regex 正则表达式匹配
+    - 作用：根据$http_referer变量实现简单的防盗链功能
+    - 上下文：server,location
+    - 示例
+      #+begin_example bash
+      valid_referers none blocked 116.62.12.41 ~/google\./;
+      # valid_referers若匹配失败则会将$invalid_referer设置为1
+      if ($invalid_referer) {
+          return 403;
+      }
+      #+end_example
+22) ~return code [text | url]~ 或 ~return url~
+    - text 可以为普通字符串、json或使用变量，它将作为响应体
+    - url 必须以http或https开头
+    - 作用：向客户端直接返回响应状态码
+    - 上下文：server,location,if
+    - 示例
+      #+begin_example bash
+      return 200 "ok";
+      return 200 '{"name":"john","id": 123}';
+      return 200 "$host $request_uri";
+      # 请求重定向
+      return 301 http://fsjohnhuang.io;
+      # 默认302重定向，302不会影响SEO
+      return http://fsjohnhuang.io;
+      #+end_example
+    - 注意：return指令后的其他指令将不会被执行
+23) ~server_tokens on | off~
+    - on 在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
+    - off 隐藏版本号，形如 ~Server: nginx~
+    - 作用：安全优化-隐藏版本号
+    - 默认值：
+    - 上下文：http,server,location
 
 ** 组成
 主配置文件：/etc/nginx/conf/nginx.conf
@@ -760,9 +965,12 @@ useradd -r -g nginx -M nginx
 # 若设置user则master process必须用root，即要以root身份启动nginx
 user nobody;
 # 工作进程数，默认为auto，和CPU物理核数相同
+# 当为CPU密集型应用，如SSL或压缩应用则worker进程数与CPU核数相同
+# 当为IO密集型应用，如图片下载服务，则worker进程数为CPU核数的1.5或2倍
 worker_processes 1;
 
-#配置Nginx worker进程最大打开文件数
+# 配置Nginx worker进程最大打开文件数
+# 修改操作系统每个进程最大打开的文件描述符数量，ulimit -n 65535
 worker_rlimit_nofile 65535;
 
 # 全局错误日志
@@ -781,9 +989,15 @@ events {
   # select是轮询
   # 默认会自动选择最优的模型
   use epoll;
-  # 单进程最大连接数（最大连接数=连接数*进程数/4），除以4是经验值来的
+
+  # 单进程最大连接数
+  # 理论的总体最大连接数=连接数*进程数
+  # 实际的总体最大连接数=连接数*进程数/4，除以4是经验值来的
   # 连接为一种文件描述符，因此受到系统文件描述相关设置的限制
   worker_connections 1024;
+
+  # 并行接收链接
+  mulit_accept on;
 }
 
 http {
@@ -791,17 +1005,26 @@ http {
   include /etc/nginx/mime.type;
   # 默认mime类型
   default_type application/octet-stream;
+  # 默认响应报文的字符编码
+  charset utf-8, gbk;
   # 访问日志
   access_log /var/log/nginx/access_log;
-  # ??
+  # 不附加反向代理版本信息到响应头上
   server_tokens off;
 
-  # 零拷贝: 数据直接在内核态从源拷贝到目的文件描述符，不必经过用户态
+  # 若禁用sendfile，那么响应静态的过程是
+  # 1. 内核从磁盘读取数据到内核的receive buffer
+  # 2. 从内核的receive buffer读取并复制数据到用户态的内存空间
+  # 3. 从用户态的内存空间读取并复制数据到内核态的TCP/IP栈封装
+  # 4. 发送给客户端
+  # 若启用sendfile(零拷贝)，那么响应静态的过程是
+  # 1. 内核从磁盘读取数据到内核的receive buffer
+  # 2. TCP/IP栈封装receive buffer数据
+  # 3. 发送给客户端
   sendfile on;
   # 启用buffer: 数据先保存到buffer中，若buffer满或调用flush时才向网络写入
   # 默认关闭，当传输大文件时可能会有问题
   tcp_nopush on;
-  # ??
   tcp_nodelay on;
   # TCP连接保持时间，单位秒
   keepalive_timeout 65;
@@ -816,9 +1039,22 @@ http {
     server_name www.domain1.com;
 
     location / {
-      root html; # 本地目录路径，相对路径为相对于nginx的安装目录而言
+      # 将请求URI的根目录映射到指定的文件系统目录，若这里采用的是相对路径，则为相对于nginx的安装目录而言
+      # 例如 location /abc/123 { root www/htdoc } 那么请求URI为/abc/123/index.html时则会访问 www/htdoc/abc/123/index.html
+      # 若返回404等则可以查看/var/log/nginx/error.log
+      root html;
       autoindex on; # 显示目录结构
+      autoindex_exact_size on; # 显示文件大小
+      autoindex_localtime off; # 以当前操作系统的时区显示文件的修改时间 
     }
+
+    error_page 404 /404.html # 相对于nginx的安装目录
+
+     # 虚拟目录
+     # 访问/virtual_directory/index.html，会返回/home/wwwroot/lnmmp/test/index.html的内容
+     location /virtual_directory/ {
+       alias /home/wwwroot/lnmmp/test/;
+     }
   }
 
   server {
@@ -826,7 +1062,7 @@ http {
     server_name www.domain2.com;
 
     location / {
-      root /mnt;
+      root /mnt; # 绝对路径
       index index.html index.htm; # 默认首页
     }
 
@@ -835,7 +1071,7 @@ http {
     }
 
     error_page 500 505 /50x.html;
-
+    # 通过location定义 /50x.html 的实际路径，而不是直接相对于nginx的安装目录。
     location = /50x.html {
       root /mnt/50x;
       index index.html;
@@ -843,16 +1079,26 @@ http {
 
     # 响应静态文件
     location ~ ^/(images|javascript|js|css|flash|media|static)/ {
-      root /var/www/virtual/htdocs;
+      root /var/www/virtual/htdocs; 
       expires 30d; # 缓存30天
     }
 
     # 查看Nginx状态
     location /NginxStatus {
       stub_status on;
-      access_log on;
+      access_log off;
+      allow 127.0.0.1;
+      deny all;
       auth_basic "NginxStatus";
       auth_basic_user_file conf/htpasswd;
+
+      # 显示的内容
+      # active connection 当前处于打开状态的连接数
+      # server accepts handled requests 下3个数字分别表示
+      # 1 已经接收过的连接数 2 已经处理过的连接数 3 已经处理过的请求数。一个连接可以存在多个请求。
+      # reading 正在读取请求头的连接数
+      # writing 正在读取请求主体、处理请求或响应给客户端的连接数
+      # waiting keep-alive链接，就是处于活动状态的连接数-reading-writing
     }
 
     # 禁止访问.hxxx文件
@@ -866,6 +1112,24 @@ http {
       allow 180.0.0.1;
 
       root /var/www/virtual/htdocs/private;
+      index index.html;
+    }
+  }
+
+  server {
+    listen 443;
+    server_name ssl_server;
+    
+    ssl on; # 启用ssl
+    ssl_certificate cert.pem; # 证书
+    ssl_certificate_key cert.key; # 密钥
+    ssl_session_timeout 5m; # 会话超时为5分钟
+    ssl_protocols SSLv2 SSLv3 TLSv1; # 可选用的协议类型
+    ssl_ciphers HIGH:!aNULL:!MD5; # 加密算法
+    ssl_prefer_server_ciphers on; # Nginx自主选择当前服务器最优加密算法
+
+    location / {
+      root /www;
       index index.html;
     }
   }
@@ -885,12 +1149,14 @@ URL: http://www.baidu.com/abc/test.html
       1) 从上至下匹配，匹配成功马上应用，不再往下匹配
    3) 整体匹配流程
       1) 普通匹配
-         1) 当命中 ~^~~ 和 ~=~ 匹配时就结束整个匹配流程
-         2) 其他情况为最大前缀匹配，则转入正则匹配的子流程
+         1) 命令 ~=~ 匹配时就结束整个匹配流程
+         2) 命中 ~^~~ 匹配时就结束整个匹配流程
+         3) 其他情况为最大前缀匹配，则转入正则匹配的子流程。若正则匹配失败则采用当前最大前缀匹配项。
       2) 正则匹配
 #+BEGIN_SRC
-location [=|~|~*|^~] URI {
-}
+# 注意：模式匹配符与URI之间不要存在空格，尤其是=。
+# 若之间存在空格，那么该location将无效
+location [=|~|~*|^~]URI {}
 #+END_SRC
 #+BEGIN_EXAMPLE bash
 # 匹配当前路径及子路径下的所有对象
@@ -898,20 +1164,35 @@ location URI {}
 # 通用匹配，任何请求都会匹配到
 location / {}
 # 精确匹配指定路径
-location = URI {}
-# 匹配以URI开头的的URL路径
-location ^~ URI {}
+location =URI {}
+# 匹配以URI开头的的URL路径，命中则停止匹配流程
+location ^~URI {}
 # 大小写敏感正则匹配
-location ~ URI {}
+location ~URI {}
 # 大小写不敏感正则匹配
-location ~* URI {}
+location ~*URI {}
 # 区分大小写的正则非匹配
-location !~ URI {}
+location !~URI {}
 # 不区分大小写的正则非匹配
-location !~* URI {}
+location !~*URI {}
 #+END_EXAMPLE
 
-注意： 请求路径为 ~/static/%20/a~ 将匹配 ~location = /static/ /a~
+示例：
+#+begin_src
+location =/ { A }
+location / { B }
+location /documents/ { C }
+location ^~/images/ { D }
+location ~*\.(gif|jpg)$ { E }
+
+/ -> A
+/index.html -> B
+/docments/index.html -> C
+/images/logo.gif -> D
+/documents/logo.gif -> E
+#+end_src
+
+注意： 请求路径为 ~/static/%20/a~ 将匹配 ~location =/static/ /a~
 
 ** Rewrite
 通过使用nginx内置变量和自定义变量,结合正则表达式和标志位实现在同一域名下的URI重写和重定向.
@@ -928,18 +1209,48 @@ location !~* URI {}
 3) 网站更换域名
 4) 根据特殊变量、目录和客户端信息进行跳转
 
+#+begin_src
+server_name test.com;
+
+# 请求 test.com/bbs/index.html 时，那么浏览器URL地址栏不变，但实际返回的是 test.com/forum/index.html 的内容
+location / {
+  root html;
+  index index.html;
+  rewrite ^/bbs/(.*)$ /forum/$1;
+}
+#+end_src
+
 *** flag
-1) last, 表示完成rewrite, 一般写在server和if中
-2) break, 停止执行当前虚拟主机后续的rewrite指令, 一般写在location中
+1) last, 表示完成本次rewrite，重启一下轮检查。一般写在server和if中
+   #+begin_src
+   server_name test.com;
+   # 请求 test.com/bbs/index.html 时，那么浏览器URL地址栏不变，但Nginx内部会重新以 test.com/forum/index.html 来匹配location，并重新进入 location / 块。
+   # 由于 /forum/index.html 不匹配 ^/bbs/(.*)$，因此跳过rewrite指令并返回 $NGINX_HOME/html/forum/index.html 的内容。
+   location / {
+     root html;
+     rewrite ^/bbs/(.*)$ /forum/$1 last;
+   }
+
+   # 请求 test.com/abc/a 时，那么浏览器URL地址栏不变，但Nginx内部会重新以 test.com/abc/a/index.html 来匹配location，并重新进入 location /abc/ 块。
+   # 而 /abc/a/index.html 匹配 ^/abc/(.*)$，因此再次执行rewrite指令，导致陷入rewrite死循环中。
+   location /abc/ {
+     root html;
+     rewrite ^/abc/(.*)$ /abc/$1/index.html last;
+   }
+   #+end_src
+2) break, 表示完成本次rewrite后，不再在Nginx内部重新匹配location，而是直接执行后续操作(如读取文件返回响应)。一般写在location中
    #+begin_example bash
-   # 跳转到其他域名
-   set $domain %http_host;
-   rewrite ^(.*) http://fsjohnhuang.io break;
+   # 请求/abc/a时，返回 $NGINX_HOME/html/abc/a/index.html 的内容
+   location /abc/ {
+     root html;
+     rewrite ^/abc/(.*)$ /abc/$1/index.html break;
+   }
    #+end_example
 3) redirect, 返回302临时重定向
    #+begin_example bash
    if ($http_host !~ "^fsjohnhuang\.io") {
        rewrite ^/(.*) http://fsjohnhuang.io/$1 redirect;
+       # 或直接写成 rewrite ^/(.*) http://fsjohnhuang.io/$1; 即可
    }
    #+end_example
 4) permanent, 返回301永久重定向
@@ -969,12 +1280,19 @@ index index.html index.0.html /index.htm;
    2) 修改 ~ulimit -SHn 123~
 3) 异步IO会产生两个文件描述符
 
-** TODO 日志
+** 日志
    1) 类型
       1) 错误日志
          - 上下文：在配置文件最外层设置 或 http块中设置
          - 语法： ~error_log <path> [level]~
            - <日志文件路径> [日志级别]
+           - debug、info、notice、warn、error、crit、alert、emerg，从左至右，日志详细程度逐级递减，即 debug 最详细，emerg 最少，默认为 error。
+           - 注意：error_log off 并不能关闭错误日志记录，此时日志信息会被写入到文件名为 off 的文件当中。
+             #+begin_src
+             # 关闭错误日志记录
+             error_log /dev/null;
+             # error_log nul; # Windows系统的设置
+             #+end_src
          - 设置方式
            #+begin_example bash
            # crit为默认值，即最简洁的日志消息
@@ -1070,7 +1388,7 @@ shared memory
         - 默认值：on
         - 上下文：http,server和location块中
    4) limit_conn_module
-      - 作用：TCP连接并发限制
+      - 作用：用于限制同一个IP地址的TCP连接并发连接数
       - 使用
         1) 配置连接信息存储空间
            - 语法： ~limit_conn_zone key zone=name:size;~
@@ -1083,6 +1401,7 @@ shared memory
              - zone 为 ~limit_conn_zone~ 中的name
              - number 为并发连接数的限制
            - 上下文：http, server 和 location 块
+      - 示例：
    5) limit_req_module
       - 作用：HTTP请求频率限制
       - 使用
@@ -1149,6 +1468,14 @@ shared memory
            allow 186.10.2.4;
            deny all;
            #+end_example
+        3) 禁止所有人访问
+           #+begin_example
+           deny all;
+
+           # 由于第一个指令已经说明拒绝所有IP访问，因此下面的语句均无效
+           allow 186.10.2.4;
+           allow 186.10.2.3;
+           #+end_example
    7) http_auth_basic_module
       - 作用：基于用户的登录进行访问控制
       - 语法：
@@ -1161,6 +1488,7 @@ shared memory
            - file 为用于存储用户密码的文件路径
              #+begin_example
              # 密码为已加密的版本
+             # 需要使用httpd的htpasswd工具，因此先要安装httpd
              # htpasswd -c /path/to/file <user>，然后通过prompt方式输入密码后，就会在/path/to/file文件中加入<user>:password的记录了
              name1:password1
              name2:password2:comment
@@ -1203,6 +1531,55 @@ shared memory
           }
         }
         #+end_example
+   9) ngx_http_addition_module
+      - 作用：在指定Content-Type(默认为 ~text/html~)的响应报文body标签前后插入其它资源内容(JavaScript或CSS)。
+      - 上下文：http,server,location
+      - 使用方法
+          #+begin_src
+          location =/header.html {
+            # 头部资源位于 $NGINX_HOME/html/header.html
+            root html;
+          }
+          location =/footer.html {
+            # 头部资源位于 $NGINX_HOME/html/footer.html
+            root html;
+          }
+
+          location /path/to/index {
+            default_type "";
+            add_header Content-Type "text/html; charset=utf-8";
+            root /path/to/root/of/index;
+            
+            add_before_body /header.html;
+            add_after_body /footer.html;
+ 
+            # Nginx 0.7.9开始支持
+            # 指定需要被插入header和footer内容的响应报文的MIME类型，可以设置多个，空格分隔。
+            # 默认为text/html
+            # *表示所有
+            # addition_types text/html;
+          }
+          #+end_src
+   10) ngx_http_autoindex_module
+       - 作用：启用目录浏览功能。
+       - 上下文：server,location
+       - 使用
+         #+begin_src
+         autoindex on;
+
+         # 默认为on，显示出文件确切的大小，单位为bytes
+         # off，显示出文件大概的大小，单位为kb、MB或GB
+         autoindex_exact_size off;
+
+         # 默认为off，显示文件时间为GMT时间
+         # on，显示文件时间为服务器的时间
+         autoindex_localtime on;
+
+         # Nginx 1.7.9 开始支持，以哪种风格展示目录
+         # 默认为html，其它值为xml, json 和 jsonp
+         autoindex_format html;
+         #+end_src
+       - 美化：可以通过http_addition_module附加CSS和JavaScript美化页面。
 
 * 测试工具
 ** ab
@@ -1239,6 +1616,7 @@ shared memory
      }
      #+end_example
   3) 使用try_files代替if进行文件是否存在的探测
+     由于if总会被执行从而降低Nginx的处理速度，所以能不用if就不要用if。
      #+begin_example bash
      location / {
        try_files $uri $uri/ /index.html;
@@ -1291,6 +1669,58 @@ shared memory
      rewrite ^ http://example.com/$request_uri permanent;
      return 301 http://example.com/$request_uri;
      #+end_example
+  9) 永远不要使用 ~chmod 777~
+     应该通过 ~namei -om /path/to/check~ 获取一个路径的所有权限，然后在调整。
+  10) 禁用 SSLv3
+      由于SSLv3存在POODLED漏洞，因此禁用SSLv3即可。设置 ~ssl_protocols TLSv1 TLSv1.1 TLSv1.2~
+
+* 静态文件服务器
+  #+begin_src
+  http {
+    # 启用静态资源缓存
+    # max为缓存数量，建议和文件打开数保持一致
+    # inactive为静态资源多久没有被请求则删除缓存，默认为60s
+    open_file_cache max=204800 inactive=20s;
+
+    # 在open_file_cache的inactive时间内至少访问多少次，才被认为该资源活跃不删除缓存。
+    # 默认为1
+    open_file_cache_min_uses 1;
+
+    # 设置定期验证缓存内容是否发生变化的周期，若发生变化则删除该缓存。
+    # 默认为60s
+    open_file_cache_valid 30s;
+
+    # 是否缓存权限被拒绝、文件未找到等信息
+    # 默认off
+    open_file_cache_errors on;
+
+    # 内容压缩
+    # 默认禁用gzip。
+    # gzip能节省带宽，但会增加服务器CPU开销。且默认仅对text/html进行压缩。
+    gzip on;
+    gzip_min_length 1k;
+    gzip_buffers 4 16k;
+    gzip_http_version 1.0;
+    gzip_comp_level 2;
+    gzip_types  text/plain application/x-javascript text/css application/xml;
+
+    server {
+      listen 80;
+      server_name www.test.com;
+      charset utf-8;
+      root /html;
+      index index.html index.htm;
+    }
+  }
+  #+end_src
+
+** TODO 文件描述符
+
+* TODO 性能调优
+  
+
+* TODO OpenResty
+  https://moonbingbing.gitbooks.io/openresty-best-practices/content/openresty/helloworld.html
 
 * QA
   1) 访问目录时返回403
@@ -1317,3 +1747,57 @@ shared memory
      - 原因：请求已被后端服务执行，但执行未完成却被强行中止
   5) 504(Gateway Time-out)
      - 原因：请求无法被后端服务执行，一般为Nginx配置有误引起
+  6) URI的路径中包含中文或unicode编码字符，那么访问该静态资源时会报500且error.log中记录如下异常
+      #+begin_quote
+      1113: No mapping for the Unicode character exists in the target multi-byte code page
+      #+end_quote
+     - 原因：由于URI并不支持中文等非ASCII码字符，因此URI中的中文字符会被编码并转换为escape格式的字符串后再封装到HTTP请求头发送给服务端。而Nginx在接收到请求后会根据服务端系统的字符编码对URI进行解码。
+       那么当操作系统编码为UTF-8，而静态资源路径中各部分名称中包含非UTF-8编码的字符时，将会报该问题。
+     - 具体事例：
+       1. 部署在Windows平台，通过目录页面(~autoindex on~)中的含中文的超链接进入则报异常，直接将中文附加到地址栏则正常。
+          - 问题分析：由于目录页面(~autoindex on~)中a标签href特性值会被以Unicode解码再采用UTF-8编码，当通过a标签访问资源时，Nginx接收到URI并UTF-8解码并转换为GBK编码，而Unicode字符表和GBK字符表并不相同，因此就会出现转换异常。
+          - 解决方案：
+            通过ngx_http_addition_module的 ~add_after_body~ 在页面附加JavaScript脚本替换a标签href特性的值。
+            1. nginx.conf
+               #+begin_src
+               location /path/to/index {
+                 autoindex on;
+                 root /path/to/root;
+                 add_after_body /index_fix_href.html;                                 
+               }
+
+               location =/index_fix_href.html {
+                 root html;
+               }
+               #+end_src
+            2. index_fix_href.html
+               #+begin_src html
+               <script>
+               document.querySelectorAll("pre a").forEach(function(el, i) {el.href = el.textContent})
+               </script>
+               #+end_src
+       2. 若部署在Linux平台，默认采用UTF-8字符编码。那么有可能该要访问的静态资源是从Windows平台复制过来，因此文件名是采用GBK编码。那么按如步骤处理即可：
+          1. 确认并修改系统编码为UTF-8
+             1. CentOS修改/etc/sysconfig/i18n内容，并重启系统
+                 #+begin_src
+                 LANG="en_US.UTF-8"
+                 SYSFONT="latarcyrheb-sun16"
+                 #+end_src
+             2. Debian
+                #+begin_src
+                apt-get install -y locales
+                dpkg-reconfigure locales
+                # 然后在对话框选择 en_US.UTF-8，并重启系统
+                #+end_src
+             3. Ubuntu修改/etc/default/locale内容，然后执行 ~locale-gen en_US en_US.UTF-8~ 最后重启系统
+                #+begin_src
+                LANG="en_US.UTF-8"
+                LANGUAGE="en_US:en"
+                #+end_src
+          2. 通过convmv将非UTF-8编码的文件名转换为UTF-8编码
+             #+begin_src bash
+             # --notest 表示对原文件进行修改
+             convmv -f GBK -t UTF8 -r --notest /path/to/file
+             #+end_src
+            
+       
