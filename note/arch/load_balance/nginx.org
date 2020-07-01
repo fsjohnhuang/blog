@@ -159,7 +159,7 @@ NIO是ORACLE发明的
        #+begin_example bash
        location / {
            proxy_pass https://fsjohnhuang.io;
-           proxy_redirect off;
+           proxy_redirect default;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -633,14 +633,65 @@ useradd -r -g nginx -M nginx
   # -c，指定nginx配置文件路径
   nginx -t -c /path/to/nginx.conf
 
-  # -s reload，重载nginx配置
+  # -s reload，重载nginx配置，会优雅的重启Nginx。
+  # -s stop，立即停止服务
+  # -s quit，优雅地停止服务
+  # -s reopen，重新开始记录日志文件
   nginx -s reload -c /path/to/nginx.conf
 
   # 查看安装路径和已安装的模块等信息
   nginx -V 2>&1
+
+  # 命令行设置指令并覆盖config文件的指令
+  nginx -g "limit_rate 1024;"
+
+  # 指定运行目录
+  nginx -p /path/to/work_directory
+
+  # 查看帮助
+  nginx -h
   #+end_example
 
+* Nginx的热部署
+  Nginx版本升级，或新增模块时使用。
+
+  1. 编译目标版本的Nginx源文件，得到二进制可执行文件
+  2. 备份原版本的Nginx二进制可执行文件 ~cp nginx{,.old}~
+  3. 用目标版本的Nginx二进制可执行文件覆盖原版本的
+  4. 通知正在运行的Nginx主进程将要进行热部署
+     - 原理：旧Nginx进程和新的Nginx进程都在运行，但新的请求都由新的Nginx来处理，旧Nginx进程仅处理已接收到的请求。
+     - 步骤
+       1. 运行新Nginx进程，并保留旧Nginx进程和移交请求处理权 ~kill -USR2 <old nginx master process pid>~
+       2. 通知旧Nginx进程优雅地关闭worker进程，执行后旧Nginx的master进程依然在 ~kill -WINCH <old nginx master process pid>~
+          若新Nginx有问题，则可以 ~nginx -s reload~ 重新拉起旧Nginx进程回滚。
+       3. 新Nginx运行正常后杀死原Nginx的master进程即可, ~kill -QUIT <old nginx master process pid>~
+
 * 配置讲解
+** 组成
+主配置文件：/etc/nginx/conf/nginx.conf
+然后在主配置文件中通过 ~include conf.d/*.conf~ ，引入子配置文件。
+1. 由 *指令* 和 *指令块* 组成；
+2. 每条指令以 ~;~ 结尾，指令与参数间以空格符号分割；
+3. 指令块以 ~{}~ 将多条指令组织在一起；
+4. ~include~ 指令允许引入多个配置文件以提升维护性；
+5. ~#~ 为单行注释；
+6. ~$~ 开头用于引用变量；
+7. 部分指令的参数支持正则表达式；
+8. 时间参数的单位
+   - ms, milliseconds
+   - s, seconds
+   - m, minutes
+   - h, hours
+   - d, days
+   - w, weeks
+   - M, 30 days
+   - y, 365 days
+9. 空间参数的单位
+   - 留空, bytes
+   - k或K, kilobytes
+   - m或M, megabytes
+   - g或G, gigabytes
+
 ** 配置项
 1) ~server server_name...~
    - 作用：设置虚拟主机的主机名
@@ -900,15 +951,36 @@ useradd -r -g nginx -M nginx
       #+end_example
     - 注意：return指令后的其他指令将不会被执行
 23) ~server_tokens on | off~
-    - on 在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
+    - on 作为默认值，在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
     - off 隐藏版本号，形如 ~Server: nginx~
     - 作用：安全优化-隐藏版本号
-    - 默认值：
     - 上下文：http,server,location
-
-** 组成
-主配置文件：/etc/nginx/conf/nginx.conf
-然后在主配置文件中通过 ~include conf.d/*.conf~ ，引入子配置文件。
+24) ~ssi off |  on~
+    - 作用：启用Server Side Include。建议禁用。
+    - SSI
+      - 定义：是一种基于服务端的网页制作技术。就是在将页面内容发送给客户端前，使用SSI指令将文本、图片和其它网页内容添加到当前响应中。
+      - 语法：
+        - 引入资源 ~<!--#include file="layouts/menu.shtml"-->~
+    - 上下文: location
+    - 问题：若找不到相应的资源，那么整个响应会报404异常。而通过http_addition_module的add_before_body引入资源，找不到资源时仅引入内容为空，但不影响原来的响应结果。
+25) ~ssi_slient_errors off | on~
+    - 作用：开启后在处理SSI文件出错时不输出错误提示:”[an error occurred while processing the directive] ”
+    - 上下文: location
+26) ~ssi_types text/shtml~
+    - 作用：默认是ssi_types text/html，所以如果需要htm和html支持，则不需要设置这句，如果需要shtml支持，则需要设置：ssi_types text/shtml
+    - 上下文: location
+27) ~limit_rate <size>~
+    - 作用: 对客户端一个连接设置每秒传输的最大字节数，限速。由于网络带宽有限，因此应该限制某些数据大但相对没有那么重要的资源设置限速，让出带宽给那些重要的数据量小的资源，从而提供重要资源的响应速度。
+    - 默认值: no
+    - 上下文: http, server, location
+    - 示例: ~limit_rate 512k~
+    - 或者通过设置变量的方式设置 ~set $limit_size 512k~
+    - 注意：由于limit_rate仅限制一个连接的每秒传输上限，所以要配置limit_conn限制并发连接数，才能限制总体的每秒传输数据量。
+28) ~limit_rate_after <size>~
+    - 作用: 设置客户端一个连接接收多少字节后将启用限速，如果不超过该值则不限速。
+    - 默认值: no
+    - 上下文: http, server, location
+    - 示例: ~limit_rate_after 1m~
 
 ** TODO 变量
 1) 内置变量：由Nginx模块引入，可直接使用
@@ -959,7 +1031,7 @@ useradd -r -g nginx -M nginx
 3) 用于调试及定位问题的配置
 4) 事件驱动的配置
 
-** 示例
+** 最佳示例
 #+BEGIN_EXAMPLE
 # 工作进程的启用用户，当工作进程被黑掉时也只能操作nobody用户能操作的文件而已
 # 若设置user则master process必须用root，即要以root身份启动nginx
@@ -967,10 +1039,14 @@ user nobody;
 # 工作进程数，默认为auto，和CPU物理核数相同
 # 当为CPU密集型应用，如SSL或压缩应用则worker进程数与CPU核数相同
 # 当为IO密集型应用，如图片下载服务，则worker进程数为CPU核数的1.5或2倍
-worker_processes 1;
+worker_processes 8;
+
+# 为每个进程绑定到指定的CPU物理核上(一个核可以绑定多个进程)，那么在并发和进程切换时效率更高
+worker_cpu_affinity 00000001 00000010 00000100 00001000 00010000 00100000 01000000 10000000;
 
 # 配置Nginx worker进程最大打开文件数
 # 修改操作系统每个进程最大打开的文件描述符数量，ulimit -n 65535
+# 永久调整，在/etc/rc.d/rc.local中添加ulimit -n 65535
 worker_rlimit_nofile 65535;
 
 # 全局错误日志
@@ -1007,10 +1083,16 @@ http {
   default_type application/octet-stream;
   # 默认响应报文的字符编码
   charset utf-8, gbk;
-  # 访问日志
-  access_log /var/log/nginx/access_log;
-  # 不附加反向代理版本信息到响应头上
+  # 访问日志, 设置写入高速IO或设置为关闭 access_log off;
+  access_log /var/log/nginx/access_log main buffer=16k;
+  # 隐藏响应头中的有关操作系统和web server（Nginx）版本号的信息，这样对于安全性是有好处的。
   server_tokens off;
+
+  # 静态资源文件描述符缓存
+  open_file_cache max=2000 inactive=20s;
+  open_file_cache_valid 30s;
+  open_file_cache_min_uses 2;
+  open_file_cache_error on;
 
   # 若禁用sendfile，那么响应静态的过程是
   # 1. 内核从磁盘读取数据到内核的receive buffer
@@ -1022,21 +1104,92 @@ http {
   # 2. TCP/IP栈封装receive buffer数据
   # 3. 发送给客户端
   sendfile on;
+
   # 启用buffer: 数据先保存到buffer中，若buffer满或调用flush时才向网络写入
   # 默认关闭，当传输大文件时可能会有问题
+  # tcp_nopush causes nginx to attempt to send its HTTP response head in  one pack instead of using partial frames.
+  # This is useful for prepending headers before calling sendfile, or for  throughput optimization.
   tcp_nopush on;
+
+  # 对于小数据报文则及时发送，而不采用Nagle算法缓存数据。  
+  # don't buffer data-sends(disable Nagle algorithm). Good for sending frequent small bursts of data in real time.
   tcp_nodelay on;
+
   # TCP连接保持时间，单位秒
-  keepalive_timeout 65;
+  keepalive_timeout 30;
+  # 单个客户端在单个keep-alive链接上可以发送的请求数上线。
+  keepalive_requests 100000;
+
+  # 以下设置为限制缓冲区大小，防止缓冲区溢出攻击(若溢出则会使用swap区，大大降低Nginx处理请求的效率)。
+  # 客户端请求头部(request_line和request_header)的缓冲区，一般设置内存分页大小或整数倍。
+  # getconf PAGESIZE
+  client_header_buffer_size 4k;
+  # 当client_header_buffer_size的大小无法容纳request_line和request_header，
+  # 那么就会根据large_client_header_buffers的容量容纳request_line和request_header，
+  # 若缓存还是空间不足则会返回414(无法缓冲request_line)或400(无法缓冲request_header)
+  # 参数：缓存个数 每个缓存区的容量
+  large_client_header_buffers 4 4k;
+  # 客户端请求体的缓冲区，一般设置内存分页大小或整数倍。
+  client_body_buffer_size 4k;
+  # 设置请求报文主体大小的上限，可以理解为客户端上传文件大小的上限。若超过则返回413。
+  # 原理，就是通过请求头的Content-Length获取主体大小。
+  # 设置为0表示不限制。
+  # 默认为1m
+  # 上下文：http, server, location
+  client_max_body_size 8m;
+
+  # 客户端与Nginx建立连接时，Nginx会先读取HTTP请求头，若在指定时间内读取失败则返回408(Request timed out)
+  # 默认值：60秒
+  # 上下文: http, server, locaiton
+  client_header_timeout 10;
+  # Nginx读取HTTP请求体，若在指定时间内读取失败则返回408(Request timed out)
+  # 默认值：60秒
+  # 上下文: http, server, locaiton
+  client_body_timeout 10;
+  # Nginx向客户端发送数据，若客户端在指定时间内没有开始接收数据则Nginx关闭该连接。
+  # 默认值：60秒
+  # 上下文: http, server, locaiton
+  send_timeout 60;
+  # 
+  # 默认值：off
+  # 上下文: http, server, locaiton
+  reset_timeout_connection on;
+
+  # 限制并发量
+  limit_conn_zone $remote_addr zone=lc:5m;
+
   # 内容压缩
   gzip on;
-  # ??
+  gzip_min_length 10240;
+  gzip_disable "MSIE [1-6].";
+  gzip_types text/plain text/css text/html text/javascript application/x-javascript application/xml application/json;
+  gzip_comp_level 2;
+  gzip_proxied expired no-cache no-store private auth;
+  gzip_vary on;
+  gzip_http_version 1.1;
+  gzip_buffers 4 16k;
+
+  # 为快速通过文件扩展名找到MIME type，Nginx使用散列表存储MIME type和文件扩展名。
+  # 设置每个散列捅占用的内存大小
+  # 默认值: 32
+  # 取值范围：32,64,128
+  # 上下文: http, server, locaiton
+  types_hash_bucket_size 32;
+
+  # 值越大所需内存越大，散列key的冲突越小
+  # 默认值: 1024
+  # 上下文: http, server, locaiton
   types_hash_max_size 2048;
 
   # 虚拟服务器配置节点
   server {
     listen 80; # 多个虚拟服务器可以指向同一个端口，然后通过server_name来区分由哪个虚拟服务器响应
     server_name www.domain1.com;
+
+    # 限制同一个客户端的并发量
+    limit_conn lc 50;
+    limit_conn_log_level notice;
+    limit_conn_status 503;
 
     location / {
       # 将请求URI的根目录映射到指定的文件系统目录，若这里采用的是相对路径，则为相对于nginx的安装目录而言
@@ -1077,10 +1230,24 @@ http {
       index index.html;
     }
 
-    # 响应静态文件
+    # 响应静态文件p
     location ~ ^/(images|javascript|js|css|flash|media|static)/ {
       root /var/www/virtual/htdocs; 
       expires 30d; # 缓存30天
+
+      # 静态资源禁止记录访问日志
+      access_log off;
+
+      # 限制请求方法
+      if ( $request_method !~ ^GET$ ) {
+        return 501;
+      }
+
+      # 防盗链
+      valid_referers none blocked *.myweb.com myweb.com;
+      if ( $invalid_referer ) {
+        return 403;
+      }
     }
 
     # 查看Nginx状态
@@ -1318,8 +1485,39 @@ index index.html index.0.html /index.htm;
              - <日志文件路径> <日志格式名称>
            - 示例
              #+begin_example bash
+             # 设置将访问日志写入缓存，每5秒写入磁盘。
+             # 关闭访问日志 access_log off;
              access_log /path/to/access_log main buffer=32k flush=5s;
              #+end_example
+         - 分割日志
+           - 步骤：
+             1. 复制日志文件 ~cp access_log{,.bk}~
+             2. 执行 ~nginx -s reopen~
+           - 批处理文件
+             #+begin_src bash
+             #!/bin/bash
+             log_path=/apps/var/log/nginx
+             hist_log_path=/apps/var/log/nginx/history
+             yesterday=$(date -d "yesterdy" +%Y-%m-%d)
+             mv ${log_path}/access_log ${hist_log_path}/access_log_${yesterday}
+             mv ${log_path}/error_log ${hist_log_path}/error_log_${yesterday}
+             # 效果和nginx -s reopen一样
+             kill -USR1 $(cat /usr/local/nginx/nginx.pid)
+             #+end_src
+
+** 通过GoAccess可视化access_log
+   1. 安装GoAccess到Nginx所在服务器
+   2. 启动GoAccess
+      #+begin_src bash
+      # 当日志格式采用默认值时，--log-format设置为COMBINED即可
+      goaccess /path/to/nginx/access_log -o $NGINX_HOME/html/access_log.html --real-time-html --time-format='%H:%M:%S' --date-format='%d/%b/%Y' --log-format=COMBINDED
+      #+end_src
+   3. nginx.conf配置
+      #+begin_src
+      location =/access_log {
+        alias html/access_log.html;
+      }
+      #+end_src
 
 * 模块
 1.9.11版本后支持DSO（动态装载和卸载模块）
@@ -1401,9 +1599,26 @@ shared memory
              - zone 为 ~limit_conn_zone~ 中的name
              - number 为并发连接数的限制
            - 上下文：http, server 和 location 块
+        3) 配置请求被拒绝的响应状态码
+           - 语法: ~limit_conn_status 503~
+           - 上下文：http, server 和 location 块
+        4) 配置当达到连接限制时，错误日志的日志级别
+           - 语法: ~limit_conn_log_level info | notice | warn | error~
+           - 上下文：http, server 和 location 块
       - 示例：
-   5) limit_req_module
-      - 作用：HTTP请求频率限制
+        #+begin_src
+        http {
+          limit_conn_zone $remote_addr zone=lc:10m;
+
+          server {
+            limit_conn lc 50;
+            limit_conn_status 503;
+            limit_conn_log_level notice;
+          }
+        }
+        #+end_src
+   5) http_limit_req_module
+      - 作用：限制HTTP请求的处理速率，即限流
       - 使用
         1) 配置连接信息存储空间
            - 语法： ~limit_req_zone key zone=name:size rate=rate;~
@@ -1411,13 +1626,17 @@ shared memory
              - name 指定空间的名称
              - size 指定空间的大小
              - rate 指定处理请求队列中请求的频率，如 ~1r/s~ 表示每秒处理1个， ~5r/s~ 表示每秒处理5个
+               表示允许相同标识的客户端的访问频次，这里限制的是每秒1次，即每秒只处理一个请求，还可以有比如 30r/m ， 即限制每 2秒 访问一次，即每 2秒 才处理一个请求。
            - 上下文：http 块
         2) 配置并发限制
            - 语法： ~limit_req zone=name [burst=number] [nodelay];~
              - zone=name 为 ~limit_req_zone~ 中的name
-             - burst=number 请求队列的长度(默认为0)，清空最大时间为 ~burst/rate~
-             - nodelay 若启用延期，那么rate=5r/s,burst=5时，若来了10个请求，则可以正常处理和响应6个；若禁用延期，则可能只能处理6或以下个请求。
-               - nodelay 表示不等待服务空闲时就从请求队列中获取任务并分派给服务来处理，那么就很有可能被拒绝服务；并且在队列中所占的空间并不有被释放，因此新来的请求也无法暂寸到队列中。
+             - burst=number 请求队列的长度(默认为0)，清空最大时间为 ~burst/rate~. 超过这个缓冲区的请求直接报503并返回.
+             - nodelay 
+               - 默认延期时，采用rate的速率处理请求，超出部分缓存到burst的队列中，然后按rate的速率处理burst队列中的请求。若burst满了则后续请求均返回503
+                 - 例如：rate=5r/s, burst=5, 那么并发11个请求，前5个请求处于处理中，后5个请求入队列，最后的1个请求返回503。最终2秒处理10个请求。
+               - 禁用延期时，则采用rate+burst的速率处理请求，超出部分返回503。
+                 - 例如：rate=5r/s, burst=5, 那么并发11个请求，马上处理rate+burst个请求，后续请求返回503。最终一秒内处理10个请求。
            - 上下文：http, server 和 location 块
       - 注意：
         1) 服务一次仅能处理一个请求，其余并发请求均会放进请求队列中，然后按照rate的频率来处理。
@@ -1426,6 +1645,10 @@ shared memory
            # 由于请求队列的长度默认为0, 因此rate设置为10r/s的效果与设置为1r/s的是一样的；
            # 仅有一个请求能被正常处理并响应，其它均返回503。
            limit_req zone=req_zone;
+
+           limit_req_status 503;
+           # 默认值为error
+           limit_req_log_level info | notice| warn | error;
            #+end_example
         2) 当请求频率超出限制后，后续的请求将被拒绝服务(503)。并且被拒绝的请求记录将被保存到error_log指定的文件中。
       - 示例
@@ -1593,13 +1816,45 @@ shared memory
       #+begin_example bash
       ab -n 50 -c 20 <url>
       #+end_example
-* TODO HTTP缓存机制
+* TODO 分层缓存机制
+** 浏览器层
 1) 用户代理本地的校验是否过期
    Expires(HTTP1.0版本中的定义), Cache-Control(max-age)(HTTP1.1版本中的定义)
 2) 协议中Etag头信息校验
    Etag，基于文件内容和修改时间等信息生成的文件指纹。
 3) Last-Modified头信息校验
    Last-Modified，最小粒度为秒，因此一秒内发生的变化是无法区分的。
+
+** DNS层
+   1. DNS系统本地缓存， 客户端操作系统DNS缓存
+   2. LocalDNS缓存，本地DNS提供商的缓存
+   3. DNS缓存服务器，专用的DNS缓存服务器
+   4. 浏览器DNS缓存，FireFox默认60秒
+  
+** CDN
+   1. 反向代理缓存，基于Squid、Varnish、Nginx、ATS等一级或多级
+
+** Web服务器
+   1. Web服务器缓存，Apache(mod_cache)、Nginx(FastCGI缓存、Proxy cache)
+   2. Local Cache，应用本地缓存，PHP(Yac, Xcache)、Java(ehcache)
+
+** 分布式缓存
+   Memcache, Redis
+
+** 数据库
+   1. MySQL，innodb缓存、MYISAM缓存
+
+** 操作系统
+   1. CPU Cache，L1、L2、L3的数据缓存和指令缓存
+   2. Memory Cache，内存高速缓存
+   3. Page Cache，页缓存
+
+** 磁盘
+   1. Disk Cache，磁盘缓存(Cache memory)
+
+** 硬件
+   1. Raid Cache，磁盘阵列缓存
+   
 * 最佳实践
   1) root定义在server下，而不是在location中
      #+begin_example bash
@@ -1717,7 +1972,35 @@ shared memory
 ** TODO 文件描述符
 
 * TODO 性能调优
-  
+
+** Nginx端优化项目
+1. gzip压缩优化
+2. expires缓存有还
+3. 网络IO事件模型优化
+4. 隐藏软件名称和版本号
+5. 防盗链优化
+6. 禁止恶意域名解析
+7. 禁止通过IP地址访问网站
+8. HTTP请求方法优化
+9. 防DOS攻击单IP并发连接的控制，与连接速率控制
+10. 严格设置web站点目录的权限
+11. 将nginx进程以及站点运行于监牢模式
+12. 通过robot协议以及HTTP_USER_AGENT防爬虫优化
+13. 配置错误页面根据错误码指定网页反馈给用户
+14. nginx日志相关优化访问日志切割轮询，不记录指定元素日志、最小化日志目录权限
+15. 限制上传到资源目录的程序被访问，防止木马入侵系统破坏文件
+16. 有关web服务的Linux内核方面深度优化（网络连接、IO、内存等）
+17. nginx加密传输优化（SSL）
+18. web服务器磁盘挂载及网络文件系统的优化
+19. 使用nginx cache
+
+** TODO 内存分配器
+*** 使用google-perftools优化Nginx的高并发性能
+*** jemalloc
+
+** TODO 降权启用Nginx
+   
+** TODO TCP/IP栈优化配置
 
 * TODO OpenResty
   https://moonbingbing.gitbooks.io/openresty-best-practices/content/openresty/helloworld.html
