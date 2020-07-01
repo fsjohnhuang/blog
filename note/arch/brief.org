@@ -97,3 +97,33 @@ DNS劫持
 * 主备模式
   主写读、备只读。
   同步方式：rsync+inotify或sersync
+
+** rsync
+   Linux下的数据镜像备份工具。
+
+***  特性
+     1. 支持断点续传；
+     2. 支持差量传输；
+        首次为全量备份，后续仅同步修改过的文件。且支持压缩和解压，减少带宽要求。
+     3. 可保持原来文件的权限、时间和软硬链接等；
+     4. 支持匿名传输，方便进行网站镜像。
+
+*** 安装
+    1. 服务端(备份节点)
+       以服务端模式运行rsync守护进程
+       #+begin_src bash
+       /usr/bin/rsync --daemon --config=/etc/rsyncd/rsyncd.conf
+       #+end_src
+    2. 客户端(主节点)
+       定时以客户端模式运行rsync备份服务端的内容。
+       #+begin_src bash
+       # -a 归档模式，等价于-rlptgoD
+       # -z 传输时压缩
+       # -P 显示进度
+       # -v 显示详细信息  
+       rsync -avzP <user>@<ip>::<rsyncd.conf中方括号的内容> /path/to/backup
+       #+end_src
+
+** inotify
+   Linux从2.6.13开始支持inotify，可用于监控文件系统中添加、删除和修改等事件。
+   而inotify-tools则为依赖intoify接口监控文件系统变化并执行相应操作的工具。

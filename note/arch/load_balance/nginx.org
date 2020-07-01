@@ -650,20 +650,69 @@ useradd -r -g nginx -M nginx
 
   # 查看帮助
   nginx -h
+
+  # 立刻停止服务
+  kill -TERM $(cat /path/to/nginx.pid)
+  kill -INT $(cat /path/to/nginx.pid)
+  nginx -s stop
+
+  # 优雅地停止服务
+  kill -QUIT $(cat /path/to/nginx.pid)
+  nginx -s quit
+
+  # 重新打开日志
+  kill -USR1 $(cat /path/to/nginx.pid)
+  nginx -s reopen
+
+  # 升级Nginx二进制可执行文件
+  kill -USR2 $(cat /path/to/nginx.pid)
+
+  # 优雅地关闭Nginx master进程
+  kill -WINCH $(cat /path/to/nginx.pid)
   #+end_example
 
-* Nginx的热部署
+* Nginx的热部署/在线升级
   Nginx版本升级，或新增模块时使用。
 
   1. 编译目标版本的Nginx源文件，得到二进制可执行文件
-  2. 备份原版本的Nginx二进制可执行文件 ~cp nginx{,.old}~
+  2. 备份原版本的Nginx二进制可执行文件 ~cp /path/to/nginx{,.old}~
   3. 用目标版本的Nginx二进制可执行文件覆盖原版本的
   4. 通知正在运行的Nginx主进程将要进行热部署
      - 原理：旧Nginx进程和新的Nginx进程都在运行，但新的请求都由新的Nginx来处理，旧Nginx进程仅处理已接收到的请求。
      - 步骤
        1. 运行新Nginx进程，并保留旧Nginx进程和移交请求处理权 ~kill -USR2 <old nginx master process pid>~
+          - 问题：若原Nginx启动时是通过环境变量(~PATH~)的话(即不是通过绝对路径启动)，那么会报如下错误
+            #+begin_quote
+             execve() failed while executing new binary process “nginx” (2: No such file or directory)
+            #+end_quote
+          - 解决方法：必须采用绝对路径启动Nginx。
+          - pid文件的变化：旧Nginnx的nginx.pid会移动到nginx.pid.oldbin，而nginx.pid则为新Nginx的master进程使用。
        2. 通知旧Nginx进程优雅地关闭worker进程，执行后旧Nginx的master进程依然在 ~kill -WINCH <old nginx master process pid>~
-          若新Nginx有问题，则可以 ~nginx -s reload~ 重新拉起旧Nginx进程回滚。
+          注意：保留旧Nginx的master进程，那么当新Nginx有问题时可以回滚。
+          - 回滚注意事项：若配置文件发生变化，则需要先回滚配置文件。
+          - 回滚方式
+            1. 方式一
+               1. 旧主进程重新配置文件并拉起worker进程
+                  #+begin_src bash
+                  kill -HUP $(cat /path/to/nginx.pid.oldbin)
+                  #+end_src
+               2. 优雅地停止新Nginx的所有进程
+                  #+begin_src bash
+                  kill -QUIT $(cat /path/to/nginx.pid)
+                  #+end_src
+               3. 恢复旧Nginx二进制可执行文件
+                  #+begin_src bash
+                  cp -f /path/to/nginx.old /path/to/nginx
+                  #+end_src
+            2. 方式二
+               1. 立刻停止新Nginx所有进程，旧Nginx主进程会自动拉起worker进程和恢复pid文件
+                  #+begin_src bash
+                  kill -TERM $(cat /path/to/nginx.pid)               
+                  #+end_src
+               2. 恢复旧Nginx二进制可执行文件
+                  #+begin_src bash
+                  cp -f /path/to/nginx.old /path/to/nginx
+                  #+end_src
        3. 新Nginx运行正常后杀死原Nginx的master进程即可, ~kill -QUIT <old nginx master process pid>~
 
 * 配置讲解
