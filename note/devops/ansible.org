@@ -1918,13 +1918,6 @@ class FilterModule(object):
           register: result
           failed_when: 'test' not in result.content
   #+END_EXAMPLE
-* TODO 实例-Zabbix
-
-* TODO 实例-ELK
-
-* TODO 实例-Hadoop
-
-* TODO 实例-HAProxy
 
 * TODO Emacs开发环境配置
 

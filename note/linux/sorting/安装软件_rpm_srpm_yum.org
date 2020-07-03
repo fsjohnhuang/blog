@@ -114,7 +114,7 @@ yum search <关键字>
 
 # 列出已安装的所有程序名称和版本号，相当于rpm -qa
 # 还列出可以更新和未安装的程序
-yum list
+yum list all
 
 # 列出可以更新的程序
 yum list updates

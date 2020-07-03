@@ -656,6 +656,10 @@ useradd -r -g nginx -M nginx
   kill -INT $(cat /path/to/nginx.pid)
   nginx -s stop
 
+  # 重新加载配置
+  kill -HUP $(cat /path/to/nginx.pid)
+  nginx -s reload
+
   # 优雅地停止服务
   kill -QUIT $(cat /path/to/nginx.pid)
   nginx -s quit
@@ -1979,6 +1983,8 @@ shared memory
       由于SSLv3存在POODLED漏洞，因此禁用SSLv3即可。设置 ~ssl_protocols TLSv1 TLSv1.1 TLSv1.2~
 
 * 静态文件服务器
+  当内存已经无法缓存所有静态资源时，sendfile和aio等会退化为阻塞IO，因此Nginx配备线程池来处理磁盘阻塞调用的场景。
+
   #+begin_src
   http {
     # 启用静态资源缓存
@@ -2019,6 +2025,40 @@ shared memory
   #+end_src
 
 ** TODO 文件描述符
+
+* Nginx进程结构
+  开发模式下可以以单进程结构启动Nginx，但生产环境下必须以多进程结构启动Nginx。
+  
+** 多进程结构
+   1. 父进程-Master进程
+      - 作用：负责监控所有Worker进程、Cache进程，配置加载、热部署等。
+      - 第三方模块：允许第三方模块加入自定义功能到Master进程，但基本没有第三方模块会这样做，从而确保Master进程的稳定性。
+   2. 子进程
+      1. Worker进程
+          - 个数：多个
+          - 进程间的通信都是通过共享内存进行。
+      2. Cache相关进程
+         1. Cache Manager
+            - 个数：1个
+         2. Cache Loader
+            - 个数：1个
+
+** 进程信号
+   1. Master进程
+      - 监控Worker进程的CHLD信号，判断Worker进程是否停止运行，若接收到该信号则表示该Worker进程停止，马上启动新的Worker进程。
+      - 可接收其它信号管理Worker进程
+        1. TERM,INT
+        2. QUIT
+        3. HUP
+        4. USR1
+        5. USR2
+        6. WINCH
+   2. Worker进程
+      - 可接收信号来管理Worker进程。当通常会向Master进程发送信号，由Master进程再来管理Worker进程。
+        1. TERM,INT
+        2. QUIT
+        3. USR1
+        4. WINCH
 
 * TODO 性能调优
 
