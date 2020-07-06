@@ -675,6 +675,34 @@ useradd -r -g nginx -M nginx
   kill -WINCH $(cat /path/to/nginx.pid)
   #+end_example
 
+** reload命令的执行过程
+   1. Master进程校验配置语法是否正确。
+   2. Master进程根据配置文件，打开新的监听端口。在Linux中子进程会继承父继承打开的文件描述符，因此Master打开新的监听端口，所有Worker子进程都能访问到该端口。
+   3. Master进程用新的配置文件启动新的Worker子进程。
+   4. Master进程向老的Worker进程法案送QUIT信号。
+   5. 老Worker进程关闭监听的连接(即使为Keep-Alive连接也会被关闭)，处理完当前连接后再结束进程。
+
+   问题：若老Worker进程因长连接导致无法短时间内退出，那么就会影响原有的个别服务无法启用新配置。
+   解决方法：新版本的Nginx提供worker_shutdown_timeout配置，在启动新Worker子进程后多少秒后强制关闭所有旧Worker进程。
+
+** worker优雅的关闭详解
+   - 什么是优雅的关闭
+     Nginx的worker能识别当前连接是否空闲，若为空闲则将连接关闭。
+   - 优雅的关闭的应用条件
+     1. 优雅的关闭仅针对HTTP服务
+        步骤：
+        1. 设置定时器worker_shutdown_timeout
+        2. 关闭监听文件描述符，保证不再接收新的连接请求
+        3. 关闭空闲连接
+        4. 在循环中等待全部连接关闭
+           由于Nginx不会主动关闭连接，而是通过循环检查连接是否可以关闭，若可以即马上关闭。若超过worker_shutdown_timeout的时间，那么即使连接繁忙也有会被强制关闭。
+           - 注意：
+             1. 由于采用循环的方式关闭所有连接，因此退出进程的耗时可能会超过worker_shutdown_timeout设定的时间。
+             2. 有可能存在部分Worker进程优雅关闭，而部分Worker进程的连接是被强制关闭的。
+        5. 退出进程
+     2. 对于WebSocket由于Nginx不解释其通信的帧，因此无法优雅关闭WebSocket的连接
+     3. 对于TCP、UDP，由于Nginx无法知道具体传输多少数据报文才算结束，因此也无法优雅关闭TCP、UDP的连接
+
 * Nginx的热部署/在线升级
   Nginx版本升级，或新增模块时使用。
 
@@ -718,6 +746,10 @@ useradd -r -g nginx -M nginx
                   cp -f /path/to/nginx.old /path/to/nginx
                   #+end_src
        3. 新Nginx运行正常后杀死原Nginx的master进程即可, ~kill -QUIT <old nginx master process pid>~
+
+** 热升级的注意点
+   1. 仅替换Nginx二进制文件，不要替换其它文件(如配置文件)。并且要备份原有的Nginx二进制文件，否则无法回滚。
+   2. 必须向Master进程发送USR2信号，由Master进程操作Worker进程。
 
 * 配置讲解
 ** 组成
@@ -1067,6 +1099,7 @@ useradd -r -g nginx -M nginx
    - ~$request_time~ TTFB
    - ~$response_time~ nginx与upstream建立连接到关闭连接的时间
    - ~$msec~ 日志写入时间，单位为秒，精度到毫秒
+   - ~$bytes_sent~ 已发送了多少字节 
 2) HTTP请求变量
    1) arg_PARMETER
    2) http_HEADER, 客户端发送的请求的HEADER
@@ -1084,6 +1117,28 @@ useradd -r -g nginx -M nginx
 3) 用于调试及定位问题的配置
 4) 事件驱动的配置
 
+** 指令冲突处理
+   
+*** 指令合并
+    1. 值指令(存储配置项的值)——可以合并
+       - 继承规则——向上覆盖
+         1. 子配置不存在时，直接使用父配置块
+         2. 子配置存在时，直接覆盖父配置块
+       - 如：root、access_log、gzip
+       - 例外，第三方模块可能会不遵循该规则，那么就要文档或源码
+         1. 源码中找到 ngx_command_t 数组，内部包含可以应用到该模块的指令
+         2. 若在server块中生效，可从http块向server合并的话，会包含如下代码：
+            ~* char *(*merge_srv_conf)(ngx_conf_t *cf, void *prev, void *conf)~
+         3. 若在location块中生效，可从location合并的话，会包含如下代码：
+            ~* char *(*merge_loc_conf)(ngx_conf_t *cf, void *prev, void *conf)~
+    2. 动作类指令(指定行为)——不可以合并
+       - rewrite
+       - proxy_pass
+       - 生效阶段
+         - server_rewrite阶段(只有http模块提供)
+         - rewrite阶段(只有http模块提供)
+         - content阶段(5个content模块)
+
 ** 最佳示例
 #+BEGIN_EXAMPLE
 # 工作进程的启用用户，当工作进程被黑掉时也只能操作nobody用户能操作的文件而已
@@ -1097,10 +1152,20 @@ worker_processes 8;
 # 为每个进程绑定到指定的CPU物理核上(一个核可以绑定多个进程)，那么在并发和进程切换时效率更高
 worker_cpu_affinity 00000001 00000010 00000100 00001000 00010000 00100000 01000000 10000000;
 
+# 由于Nginx worker进程是采取单线程处理多连接的模式
+# 即用户态代码完成连接切换，因此需要通过提高优先级(即nice值)延长该线程占用的CPU时间片，提高处理效率。
+# 而进程实际的优先级和是 静态设置值 和 操作系统根据当前进程状态进行+-5的调整。
+# 默认情况下，最小CPU时间片为5ms，最大为800ms。
+# 默认值为0，取值范围是 -20~19，-20是最高优先级，19为最低优先级。(内核进程的优先级为-5，因此不建议用户进程的优先级低于-5)
+worker_priority -19;
+
 # 配置Nginx worker进程最大打开文件数
 # 修改操作系统每个进程最大打开的文件描述符数量，ulimit -n 65535
 # 永久调整，在/etc/rc.d/rc.local中添加ulimit -n 65535
 worker_rlimit_nofile 65535;
+
+
+timer_resolution t;
 
 # 全局错误日志
 error_log /var/log/nginx/error.log;
@@ -1122,7 +1187,10 @@ events {
   # 单进程最大连接数
   # 理论的总体最大连接数=连接数*进程数
   # 实际的总体最大连接数=连接数*进程数/4，除以4是经验值来的
-  # 连接为一种文件描述符，因此受到系统文件描述相关设置的限制
+  # 连接为一种文件描述符，因此受到系统文件描述相关设置的限制。
+  # 注意：这里的连接是上下游共用，所有作为反向代理时，一个连接通路占这里2个连接对象。
+  # 64位操作系统中，每个连接对象对应一个ngx_connection_s结构体(大概占232Byte)。每个连接对象又对应两个事件(读写事件)，每个事件对应一个ngx_event_s结构体(大概占96Byte)。
+  # 因此使用一个连接对象需要大概232+96+96Byte。
   worker_connections 1024;
 
   # 并行接收链接
@@ -1140,6 +1208,15 @@ http {
   access_log /var/log/nginx/access_log main buffer=16k;
   # 隐藏响应头中的有关操作系统和web server（Nginx）版本号的信息，这样对于安全性是有好处的。
   server_tokens off;
+
+  # 预分配的连接内存池大小，单位为字节
+  # TCP连接建立时会通过从连接内存池中分配内存空间，连接断开时则释放空间返还给内存池，从而减少操作系统的内存分配和回收。
+  # 这里仅仅设置预分配容量，运行时实际使用的内存可大于该设置。
+  # 上下文：http, server
+  connection_pool_size 256;
+  # 预分配的请求内存池大小
+  # 用于保存请求的HTTP Header等信息，若请求的Header都比较小(如URI短、没有Cookie等信息)，那么可以设置这块小一点，提高并发量。
+  request_pool_size 4k;
 
   # 静态资源文件描述符缓存
   open_file_cache max=2000 inactive=20s;
@@ -1226,6 +1303,7 @@ http {
   # 设置每个散列捅占用的内存大小
   # 默认值: 32
   # 取值范围：32,64,128
+  # 若设置为70则会自动校正为128，现在的CPU Cache Line一般都为64，所以设置64即可。
   # 上下文: http, server, locaiton
   types_hash_bucket_size 32;
 
@@ -1236,6 +1314,10 @@ http {
 
   # 虚拟服务器配置节点
   server {
+    # listen unix:/var/run/nginx.sock 监听本地进程通信，不用走TCP/IP栈
+    # listen <ip>:<port> 当多个网卡时指定监听的地址，默认为80端口
+    # listen <port> 监听多个网卡指定的端口号
+    # listen [::]:8000 ipv6only=on; 绑定IPv6地址
     listen 80; # 多个虚拟服务器可以指向同一个端口，然后通过server_name来区分由哪个虚拟服务器响应
     server_name www.domain1.com;
 
@@ -1573,19 +1655,32 @@ index index.html index.0.html /index.htm;
       #+end_src
 
 * 模块
-1.9.11版本后支持DSO（动态装载和卸载模块）
-
 分类：
-1) 核心模块：core module
+1) 核心模块：ngx_core_module
+   1. core
+   2. errlog
+   3. thread_pool
+   4. openssl
 2) 标准模块：
    1) HTTP：ngx_http_*
       1) HTTP Core modules 默认功能
+         1) upstream 相关模块
+         2) 请求处理模块
+         3) 响应过滤模块
       2) HTTP Optional modules 编译时指定
-   2) Mail：ngx_mail_*
-   3) Stream：ngx_stream_*　TCP/IP转发
-3) 第三方模块：
+   2) Mail：ngx_mail_module
+      1) ngx_mail_core_module
+   3) Stream：ngx_stream_module　TCP/IP转发
+      1) ngx_stream_core_module
+   4) Event: ngx_event_module
+      1) epoll
+      2) event_core
+3) 独立模块：ngx_conf_module
+4) 第三方模块：
    1) https://www.nginx.com/resources/wiki/modules/index.html
 
+注意：
+1. 若模块间存在冲突，那么先加载的模块会启用，后加载的模块将不生效。
 
 分为handler,filter,upstream
 
@@ -1594,6 +1689,9 @@ FastCGI转发请求到PHP，导致并发瓶颈在FastCGI+PHP上，因此通过ng
 map模块
 
 shared memory
+
+** 编译模块
+   执行 ~./configure~ 后在 nginx_modules.c 中就可以看到所有编译到Nginx的模块。
 
 ** 官方模块
    1) http_stub_status_module
@@ -1857,6 +1955,30 @@ shared memory
          #+end_src
        - 美化：可以通过http_addition_module附加CSS和JavaScript美化页面。
 
+** 1.9.11版本后支持DSO（动态装载和卸载模块）
+   编译后不仅得到Nginx二进制可执行文件，还会得到动态库(Module Shared Object)。
+   以后更新动态库时，只需将新的动态库覆盖原有的动态库，然后reload Nginx即可。
+
+   使用步骤：
+   1. Configure加入动态模块(只有部分模块可以动态加入)
+      - 查看动态模块 ~./configure --help | grep =dynamic~
+   2. 编译进binary
+      - 安装目录下的modules目录就是存放动态模块的
+        - Linux当中动态库的扩展名为 ~.so~ , 而静态库则为 ~.a~
+        - Windows当中动态库的扩展名为 ~.dll~
+   3. 启动时初始化模块数组
+   4. 读取load_module配置
+      #+begin_src
+      # 上下文：main
+      load_module modules/ngx_http_image_filter_module.so;
+
+      location / {
+        image_filter resize 15 10; # 缩略图
+      }
+      #+end_src
+   5. 打开动态库并加入模块数组
+   6. 基于模块数组开始初始化
+
 * 测试工具
 ** ab
    ApacheBench could be used to do load testing.
@@ -2060,6 +2182,56 @@ shared memory
         3. USR1
         4. WINCH
 
+** TODO 进程间通信
+   1. 共享内存
+      即申请一块内存区域，所有Worker进程都可以读写这块内存的数据。如集群操作、流控等操作时。
+      - 共享内存的使用者
+        1. ngx_http_lua_api(OpenResty的核心模块)
+           #+begin_src
+           lua_shared_dict dogs 10m;
+           server {
+             location /set {
+               content_by_lua_block {
+                 local dogs = ngx.shared.dogs
+                 dogs:set("Jim", 8)
+                 ngx.say("Stored")
+               }
+             }
+ 
+             location /get {
+               content_by_lua_block {
+                 local dogs = ngx.shared.dogs
+                 ngx.say(dogs:get("Jim"))
+               } 
+             }
+           }
+           #+end_src
+        2. rbtree
+           1. ngx_stream_limit_conn_module
+           2. ngx_http_limit_conn_module
+           3. ngx_stream_limit_req_module
+           4. http cache
+              1. ngx_http_file_cache
+              2. ngx_http_proxy_cache
+              3. ngx_http_scgi_cache
+              4. ngx_http_uwsgi_cache
+              5. ngx_http_fastcgi_cache
+           5. ssl
+              1. ngx_http_ssl_module
+              2. ngx_mail_ssl_module
+              3. ngx_stream_ssl_module
+        3. 单链表
+           1. ngx_http_upstream_zone_module
+           2. ngx_stream_upstream_zone_module
+   2. 自旋锁
+      因为采用自旋锁，因此必须尽快释放锁否则会严重影响Nginx性能。
+   3. Slab内存管理器
+      
+* TODO Nginx网络事件
+
+  传输层的数据部分单元为MSS
+  网络层传输的数据包单元为MTU(以太网中的MTU定义为1500字节)；
+  
 * TODO 性能调优
 
 ** Nginx端优化项目
@@ -2093,6 +2265,14 @@ shared memory
 
 * TODO OpenResty
   https://moonbingbing.gitbooks.io/openresty-best-practices/content/openresty/helloworld.html
+
+* TODO 红黑树
+  自平衡二叉查找树
+  1. 高度不会超过2倍log(n)
+  2. 增删改查算法时间复杂度O(log(n))
+  3. 遍历时间复杂度O(n)
+
+  因此频繁调用底层采用红黑树结构的方法，并不会产生严重的性能问题。
 
 * QA
   1) 访问目录时返回403
