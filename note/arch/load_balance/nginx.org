@@ -54,6 +54,9 @@ NIO是ORACLE发明的
      # 会被转发到 http://196.168.56.191:8080/forum/index.html
      location ~* ^/forum/ {
        proxy_pass http://196.168.56.191:8080;
+       proxy_pass_request_body off; # 不传递请求体给上游服务
+       proxy_set_header Content-Length ""; # 不传递请求体给上游服务
+       proxy_set_header X-Original-URI $request_uri;
      }
 
      # 当使用URL重定向，那么Nginx将使用重定向后的URI处理请求，而不再考虑上游服务器上定义的URI
@@ -778,26 +781,59 @@ useradd -r -g nginx -M nginx
    - g或G, gigabytes
 
 ** 配置项
-1) ~server server_name...~
+1) ~server_name server_name...~
    - 作用：设置虚拟主机的主机名
+   - 3种域名格式
+     1. 精确域名
+        ~server_name host1.com host2.com;~
+     2. 泛域名(2种)
+        ~server_name *.host.com;~, ~server_name test.host.*~
+     3. 正则表达式(以~为前缀)
+        ~server_name ~^www(?<num>\d+)\.test\.com$~
+        - location中可以通过 ~$1,$2,$num~ 等获取server_name的正则分组。
+     4. 其他
+        1. ~.test.com~ 匹配 ~test.com~ 和 ~*.test.com~
+        2. ~_~ 匹配所有的域名
+        3. ~""~ 匹配没有Host请求头的请求
+   - 匹配顺序
+     1. 精确匹配
+     2. *在前的泛域名
+     3. *在后的泛域名
+     4. 按文件中的顺序匹配正则表达式域名
+     5. default server
+        1. 文件中第一个server块
+        2. 通过 ~listen 80 default_server;~ 指定该server块就是default server
    - 上下文：http
-   - 示例： ~server localhost;~, ~server localhost fsjohnhuang.io~
-2) ~resolver ip~
+   - 示例： ~server_name localhost;~, ~server_name localhost fsjohnhuang.io~
+2) ~server_name_in_redirect off|on~
+   - 作用：在301/302时Location值则为主域名
+   - 上下文：http, server, location
+   - 示例：
+     #+begin_src
+     server_name primary.test.com second.test.com;
+     location / {
+       return 302 /redirect;
+     }
+
+     # 当server_name_in_redirect为off时，请求second.test.com返回的为second.test.com/redirect
+     # 当server_name_in_redirect为on时，请求second.test.com返回的为primary.test.com/redirect
+     #+end_src
+3) ~resolver ip~
    - 作用：设置DNS服务IP，nginx内部访问域名时均通过这个DNS解析
    - 上下文：http,server,location
-3) ~resolver_timeout time~
+4) ~resolver_timeout time~
    - 作用：设置DNS服务解析超时时间
    - 上下文：http,server,location
-4) ~keepalive_timeout timeout [header_timeout]~
+5) ~keepalive_timeout timeout [header_timeout]~
    - timeout 指定客户端的keep-alive连接超时时间，服务器将这个时间到期时关闭连接。
    - header_timeout 指定响应头 ~Keep-Alive: timeout=time~ 中的time值。从而让浏览器主动关闭连接。没有这个参数，Nginx不会返回Keep-Alive响应头。
    - 默认值： ~keepalive_timeout 75s~
    - 上下文：http,server,location
-5) ~sendfile on | off;~
+6) ~sendfile on | off;~
    - 作用：启用Linux的零拷贝
    - 默认值： ~sendfile off~
    - 上下文：http,server,location
-6) ~tcp_nopush on | off;~
+7) ~tcp_nopush on | off;~
    - 作用：启用网络缓存，当发送的消息大小达到一定量时才统一发送出去。对于传输大文件而言有优势。
    - Nagle算法
      - 场景：当发送payload为1个字节而包头却为40个字节(IP头20字节+TCP头20字节)，将容易导致网络由于太多数据包，对于重负荷的网络而言会引发拥塞瘫痪。
@@ -815,39 +851,39 @@ useradd -r -g nginx -M nginx
    - 默认值： ~tcp_nopush off~
    - 上下文：http,server,location
    - 注意：仅在 ~sendfile on~ 时生效
-7) ~tcp_nodelay on | off;~
+8) ~tcp_nodelay on | off;~
    - 作用：和 ~tcp_nopush~ 作用相反，启用时立即向网络发送消息。
    - 默认值： ~tcp_nodelay on~
    - 上下文：http,server,location
    - 注意：当连接为keepalive时才生效。
-8) ~gzip on | off;~
+9) ~gzip on | off;~
    - 作用：启用gzip压缩
    - 默认值： ~gzip off~
    - 上下文：http,server,location
-9) ~gzip_comp_level level~
-   - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
-   - 默认值： ~gzip_comp_level 1~
-   - 上下文：http,server,location
-10) ~gzip_http_version 1.0|1.1~
+10) ~gzip_comp_level level~
+    - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
+    - 默认值： ~gzip_comp_level 1~
+    - 上下文：http,server,location
+11) ~gzip_http_version 1.0|1.1~
     - 作用：设置压缩对应的HTTP协议版本，若HTTP版本与之不匹配则不启用GZip压缩。
     - 默认值： ~gzip_http_version 1.1~
     - 上下文：http,server,location
     - 注意：值为1.1则1.0不压缩，值为1.0则1.0和1.1均启用压缩。
-11) ~gzip_types <mine> <mine>*;~
+12) ~gzip_types <mine> <mine>*;~
     - 作用：设置被压缩的文件的MIME类型，如 ~text/plain~, ~application/x-javascript~
     - 上下文：http,server,location
     - 示例
       #+begin_example
       gzip_types text/plain application/x-javascript;
       #+end_example
-12) ~gzip_disable "regex"~
+13) ~gzip_disable "regex"~
     - 作用：匹配正则表达式的请求，返回非压缩版本
     - 示例
       #+begin_example
       # IE6及以下的返回非压缩版本
       gzip_disable "MSIE [1-6]\.";
       #+end_example
-13) ~gzip_vary on | off;~
+14) ~gzip_vary on | off;~
     - 作用：给CDN和反向代理服务器使用，针对相同的URL，根据请求头字段Accept-Encoding来决定返回压缩还是非压缩版本的资源。
     - 默认值： ~gzip_vary off~
     - HTTP响应头Vary
@@ -860,10 +896,10 @@ useradd -r -g nginx -M nginx
         1) 内容来自请求头，如Accept-Encoding,User-Agent等
         2) 用户代理会将Vary的值也作为缓存是否有效的依据之一，若缓存中Vary值与服务器返回Vary值不同，则表示缓存失效
         3) Vary值为*时，表示任何请求都是唯一并且非缓存的
-14) ~gzip_min_length size~
+15) ~gzip_min_length size~
     - 作用：设置启用压缩的资源最小字节数，建议设置为 ~gzip_min_length 2k~
     - 默认值： ~gzip_min_length 0~
-15) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
+16) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
     - 作用：作为反向代理时,当后端服务响应头包含Via时，启用或关闭后端服务返回的结果。
     - 默认值： ~gzip_proxied off;~ 关闭所有代理结果数据的压缩
     - 值解释
@@ -882,7 +918,7 @@ useradd -r -g nginx -M nginx
         2) 请求经过代理服务B，那么代理服务A转发请求时会在请求头Via上追加服务B的信息，这是Via中包含A和B的信息；
         3) 请求p到达应用服务，那么应用服务即可通过请求头的Via得知经过的代理服务信息，然后在将信息原封不动地写入响应头Via返回；
         4) 响应返回到用户代理，那么用户代理也知道经过的代理服务信息。
-16) ~gzip_buffers number size~
+17) ~gzip_buffers number size~
     - 作用：设置系统获取多少个多少字节的存储单元用于存储gzip压缩结果
     - 默认值：申请和未压缩资源的大小申请
     - 示例
@@ -890,7 +926,7 @@ useradd -r -g nginx -M nginx
       # 申请以8KB为存储单元大小，申请16个存储单元
       gzip_buffers 16 8k;
       #+end_example
-17) ~http_gzip_static_module~ 内置模块
+18) ~http_gzip_static_module~ 内置模块
     - 作用：读取任何文件时均会先读取相同目录下的 ~.gz~ 文件，若没有才动态压缩或读取原文件。
     - 语法： ~gzip_static on | off;~
     - 默认值： ~gzip_static off;~
@@ -900,9 +936,9 @@ useradd -r -g nginx -M nginx
          #+begin_example bash
          gzip -c 9 /path/to/uncompressed /path/to/compressed
          #+end_example
-18) ~http_gunzip_module~
+19) ~http_gunzip_module~
     - 作用：对于不支持gzip的用户代理，提供另一种压缩方式。一般不用。
-19) ~expires~
+20) ~expires~
     - 作用：添加响应头Cache-Control和Expires
     - 语法：
       1) ~expires time;~
@@ -928,7 +964,7 @@ useradd -r -g nginx -M nginx
       # 缓存有效期为24小时
       expires 24h;
       #+end_example
-20) ~add_header name value [always];~
+21) ~add_header name value [always];~
     - 作用：添加响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
     - 坑：
       1. 发生 ~rewrite last~ 时，第一个匹配的location中的add_header指令将失效
@@ -1002,7 +1038,7 @@ useradd -r -g nginx -M nginx
         break;
       }
       #+end_example
-21) ~valid_referers none | blocked | server_names | string | regex...;~
+22) ~valid_referers none | blocked | server_names | string | regex...;~
     - 值类型：
       - none 表示直接从浏览器输入地址访问，那么$http_referer为空
       - blocked 表示$http_referer原来不为空，但被防火墙或代理删除了
@@ -1019,11 +1055,23 @@ useradd -r -g nginx -M nginx
           return 403;
       }
       #+end_example
-22) ~return code [text | url]~ 或 ~return url~
+23) ~return code [text | url]~ 或 ~return url~
     - text 可以为普通字符串、json或使用变量，它将作为响应体
     - url 必须以http或https开头
     - 作用：向客户端直接返回响应状态码
     - 上下文：server,location,if
+    - 生效阶段：SERVER_REWRITE、REWRITE阶段，因此其生效后后续阶段将不生效。
+    - server块设置的return优先级高于location块的
+    - 返回状态码
+      - Nginx自定义
+        - 444：关闭连接
+      - HTTP 1.0标准
+        - 301：永久重定向
+        - 302：临时重定向，禁止缓存
+      - HTTP 1.1标准
+        - 303：临时重定向，允许改变方法，禁止缓存
+        - 307：临时重定向，不允许改变方法，禁止缓存
+        - 308：永久重定向，不允许改变方法
     - 示例
       #+begin_example bash
       return 200 "ok";
@@ -1035,12 +1083,12 @@ useradd -r -g nginx -M nginx
       return http://fsjohnhuang.io;
       #+end_example
     - 注意：return指令后的其他指令将不会被执行
-23) ~server_tokens on | off~
+24) ~server_tokens on | off~
     - on 作为默认值，在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
     - off 隐藏版本号，形如 ~Server: nginx~
     - 作用：安全优化-隐藏版本号
     - 上下文：http,server,location
-24) ~ssi off |  on~
+25) ~ssi off |  on~
     - 作用：启用Server Side Include。建议禁用。
     - SSI
       - 定义：是一种基于服务端的网页制作技术。就是在将页面内容发送给客户端前，使用SSI指令将文本、图片和其它网页内容添加到当前响应中。
@@ -1048,20 +1096,20 @@ useradd -r -g nginx -M nginx
         - 引入资源 ~<!--#include file="layouts/menu.shtml"-->~
     - 上下文: location
     - 问题：若找不到相应的资源，那么整个响应会报404异常。而通过http_addition_module的add_before_body引入资源，找不到资源时仅引入内容为空，但不影响原来的响应结果。
-25) ~ssi_slient_errors off | on~
+26) ~ssi_slient_errors off | on~
     - 作用：开启后在处理SSI文件出错时不输出错误提示:”[an error occurred while processing the directive] ”
     - 上下文: location
-26) ~ssi_types text/shtml~
+27) ~ssi_types text/shtml~
     - 作用：默认是ssi_types text/html，所以如果需要htm和html支持，则不需要设置这句，如果需要shtml支持，则需要设置：ssi_types text/shtml
     - 上下文: location
-27) ~limit_rate <size>~
+28) ~limit_rate <size>~
     - 作用: 对客户端一个连接设置每秒传输的最大字节数，限速。由于网络带宽有限，因此应该限制某些数据大但相对没有那么重要的资源设置限速，让出带宽给那些重要的数据量小的资源，从而提供重要资源的响应速度。
     - 默认值: no
     - 上下文: http, server, location
     - 示例: ~limit_rate 512k~
     - 或者通过设置变量的方式设置 ~set $limit_size 512k~
     - 注意：由于limit_rate仅限制一个连接的每秒传输上限，所以要配置limit_conn限制并发连接数，才能限制总体的每秒传输数据量。
-28) ~limit_rate_after <size>~
+29) ~limit_rate_after <size>~
     - 作用: 设置客户端一个连接接收多少字节后将启用限速，如果不超过该值则不限速。
     - 默认值: no
     - 上下文: http, server, location
@@ -1079,6 +1127,8 @@ useradd -r -g nginx -M nginx
    - ~$request~ 请求头部信息, 如 ~HEAD /main/index?a=1 HTTP/1.1~
    - ~$scheme~ 协议,返回HEAD/POST/GET/PUT/DELETE等
    - ~$request_filename~ 表示用户请求通过root或alias转换后的文件路径,默认为index.html
+   - ~$document_root~ 由URI和root/alias规则生成的目录路径
+   - ~$realpath_root~ 将 ~$document_root~ 中的软链接等换成的真实路径
    - ~$host~ 不含端口的域名/主机名/IP
    - ~$remote_addr~ 客户端IP
    - ~$binary_remote_addr~ 客户端IP，比 ~$remote_addr~ 省出1个字节
@@ -1163,7 +1213,6 @@ worker_priority -19;
 # 修改操作系统每个进程最大打开的文件描述符数量，ulimit -n 65535
 # 永久调整，在/etc/rc.d/rc.local中添加ulimit -n 65535
 worker_rlimit_nofile 65535;
-
 
 timer_resolution t;
 
@@ -1336,7 +1385,13 @@ http {
       autoindex_localtime off; # 以当前操作系统的时区显示文件的修改时间 
     }
 
-    error_page 404 /404.html # 相对于nginx的安装目录
+    error_page 401 /401.html; # 相对于nginx的安装目录
+    error_page 404 = @404;
+    location @404 {
+      root 40x;
+      index index.html;
+      log_not_found off;
+    }
 
      # 虚拟目录
      # 访问/virtual_directory/index.html，会返回/home/wwwroot/lnmmp/test/index.html的内容
@@ -1358,15 +1413,23 @@ http {
       try_files /;
     }
 
+    # 保持403状态码，但返回后端资源
+    error_page 403 = @fallback;
+    location @fallback {
+      proxy_pass http://backend;
+    }
+
+    # 将404转换为200状态码，并返回图片资源
+    error_page 404 =200 /empty.gif;
     error_page 500 505 /50x.html;
     # 通过location定义 /50x.html 的实际路径，而不是直接相对于nginx的安装目录。
-    location = /50x.html {
+    location =/50x.html {
       root /mnt/50x;
       index index.html;
     }
 
     # 响应静态文件p
-    location ~ ^/(images|javascript|js|css|flash|media|static)/ {
+    location ~^/(images|javascript|js|css|flash|media|static)/ {
       root /var/www/virtual/htdocs; 
       expires 30d; # 缓存30天
 
@@ -1602,6 +1665,9 @@ index index.html index.0.html /index.htm;
            error_log /var/log/nginx/error.log [level=debug|info|notice|warn|error|crit];
            #+end_example
          - 注意：日志格式不支持自定义
+         - 若经常出现找不到资源，导致该类错误日志偏多时，则可以通过如下配置禁用
+           - ~log_not_found on | off~
+           - 上下文: http, server, location
       2) 访问日志
          - 日志格式 —— ~log_format~
            - 上下文：在http块中设置
@@ -1852,6 +1918,20 @@ shared memory
            #+end_example
    7) http_auth_basic_module
       - 作用：基于用户的登录进行访问控制
+      - 原理：
+        - RFC2617: HTTP Basic Authentication
+          1. 浏览器发送请求
+          2. 服务端返回如下响应
+             #+begin_src
+             HTTP/1.1 401 Unauthorized\r\n
+             WWW-Authenticate: Basic realm="test auth_basic"\r\n
+             #+end_src
+          3. 浏览器弹出模态窗，要求用户输入账号密码
+          4. 浏览器以明文方式发送账号密码给服务端
+             #+begin_src
+             Authorization: Basic zoi1gaoing\r\n
+             Credentials: user:password
+            #+end_src
       - 语法：
         1) ~auth_basic string | off;~
            - string 作为显示到登录界面的信息
@@ -1872,69 +1952,92 @@ shared memory
       - 该模块实际使用时管理效率低，一般采用如下解决方案
         1) 结合LUA实现高效验证
         2) 通过nginx-auth-ldap模块和已有的LDAP系统打通
-   8) secure_link_module
-      - 作用
-        1) 制定并允许检查请求的连接的真实性以及保护资源免遭未经授权的访问
-        2) 限制连接生效周期
+   8) auth_request
+      - 作用：使用第三方做权限控制
+      - 原理：
+        收到请求后生成相同的子请求，通过反向代理技术发送给上游服务。上游服务返回2xx则认为验证通过，返回401或403则直接把该响应返回给客户端。
+      - 编译时需要加入 ~--with-http_auth_request_module~
       - 语法
-        - ~secure_link expression~
-          - 作用：设置校验信息来源
+        - ~auth_request off | uri~
+          - 作用：设置上游服务地址
           - 上下文：http,server,location
-        - ~secure_link_md5 expression~
-          - 作用：指定md5加密字符串
+        - ~auth_request_set $variable value~
           - 上下文：http,server,location
-      - 生成连接和验证过程
-        1) 客户端发起下载请求
-        2) Nginx生成下载连接，形如 ~/download?md5=_1es234&expires=41255~
-        3) 客户端通过下载连接下载资源
-        4) Nginx校验url中的md5和expires信息，有效则提供下载
-      - 示例
-        #+begin_example bash
-        location / {
-          secure_link $arg_md5,$arg_expires;
-          # 下面的md5字符串 和 $(echo -n "${time_num}${download_file} ${secret_num}"|openssl md5 --binary | openssl base64 | tr +/ -_ | tr -d =) 一致
-          secure_link_md5 "$secure_link_expires$uri john";
+   9) satisfy
+      - 作用：默认情况下，在ACCESS阶段的access、auth_basic和auth_request指令必须全部通过才能执行后续模块，但可以通过satisfy修改该行为。
+      - 语法： ~satisfy all | any~
+      - 当设置为any后，任意一模块通过则不用执行后续ACCESS阶段的模块，直接进入下一个阶段。
+        #+begin_src
+        # 有access模块已经通过，因此不会执行auth_basic模块。所以不会返回401让用户输入账号密码。
+        satisfy any;
+        allow all;
+        auth_basic "hi";
+        auth_basic_user_file auth.pass;
+        #+end_src
+      - 上下文：http, server, location
+   10) secure_link_module
+       - 作用
+         1) 制定并允许检查请求的连接的真实性以及保护资源免遭未经授权的访问
+         2) 限制连接生效周期
+       - 语法
+         - ~secure_link expression~
+           - 作用：设置校验信息来源
+           - 上下文：http,server,location
+         - ~secure_link_md5 expression~
+           - 作用：指定md5加密字符串
+           - 上下文：http,server,location
+       - 生成连接和验证过程
+         1) 客户端发起下载请求
+         2) Nginx生成下载连接，形如 ~/download?md5=_1es234&expires=41255~
+         3) 客户端通过下载连接下载资源
+         4) Nginx校验url中的md5和expires信息，有效则提供下载
+       - 示例
+         #+begin_example bash
+         location / {
+           secure_link $arg_md5,$arg_expires;
+           # 下面的md5字符串 和 $(echo -n "${time_num}${download_file} ${secret_num}"|openssl md5 --binary | openssl base64 | tr +/ -_ | tr -d =) 一致
+           secure_link_md5 "$secure_link_expires$uri john";
 
-          # url不含校验信息
-          if ($secure_link = "") {
-            return 403;
-          }
-          # 匹配失败
-          if ($secure_link = "0") {
-            return 410;
-          }
-        }
-        #+end_example
-   9) ngx_http_addition_module
-      - 作用：在指定Content-Type(默认为 ~text/html~)的响应报文body标签前后插入其它资源内容(JavaScript或CSS)。
-      - 上下文：http,server,location
-      - 使用方法
-          #+begin_src
-          location =/header.html {
-            # 头部资源位于 $NGINX_HOME/html/header.html
-            root html;
-          }
-          location =/footer.html {
-            # 头部资源位于 $NGINX_HOME/html/footer.html
-            root html;
-          }
+           # url不含校验信息
+           if ($secure_link = "") {
+             return 403;
+           }
+           # 匹配失败
+           if ($secure_link = "0") {
+             return 410;
+           }
+         }
+         #+end_example
+   11) ngx_http_addition_module
+       - 作用：在指定Content-Type(默认为 ~text/html~)的响应报文body标签前后插入其它资源内容(JavaScript或CSS)。
+       - 上下文：http,server,location
+       - 使用方法
+           #+begin_src
+           location =/header.html {
+             # 头部资源位于 $NGINX_HOME/html/header.html
+             root html;
+           }
+           location =/footer.html {
+             # 头部资源位于 $NGINX_HOME/html/footer.html
+             root html;
+           }
 
-          location /path/to/index {
-            default_type "";
-            add_header Content-Type "text/html; charset=utf-8";
-            root /path/to/root/of/index;
+           location /path/to/index {
+             default_type "";
+             add_header Content-Type "text/html; charset=utf-8";
+             root /path/to/root/of/index;
             
-            add_before_body /header.html;
-            add_after_body /footer.html;
+             add_before_body /header.html;
+             add_after_body /footer.html;
  
-            # Nginx 0.7.9开始支持
-            # 指定需要被插入header和footer内容的响应报文的MIME类型，可以设置多个，空格分隔。
-            # 默认为text/html
-            # *表示所有
-            # addition_types text/html;
-          }
-          #+end_src
-   10) ngx_http_autoindex_module
+             # Nginx 0.7.9开始支持
+             # 指定需要被插入header和footer内容的响应报文的MIME类型，可以设置多个，空格分隔。
+             # 默认为text/html
+             # *表示所有
+             # addition_types text/html;
+           }
+           #+end_src
+   12) ngx_http_autoindex_module
        - 作用：启用目录浏览功能。
        - 上下文：server,location
        - 使用
@@ -1954,6 +2057,48 @@ shared memory
          autoindex_format html;
          #+end_src
        - 美化：可以通过http_addition_module附加CSS和JavaScript美化页面。
+   13) realip
+       - 问题描述
+         - 网络请求链路：User(Intranet IP 192.168.9.x) -> ADSL(Internet IP 115.204.33.1) -> CDN(1.1.1.1) -> 反向代理(2.2.2.2) -> Nginx
+         - ~$remote_addr~ 为2.2.2.2，而不是用户的公网地址115.204.33.1
+         - 而CDN和反向代理会在HTTP请求头中加入如下头字段
+           - X-Forwarded-For 用于传递IP，示例 ~X-Forwarded-For: 115.204.33.1, 1.1.1.1~
+           - X-Real-IP 用于传递实际的用户IP，示例 ~X-Real-IP: 115.204.33.1~
+       - 通过realip模块，编译时加入 ~--with-http_realip_module~ 启动该功能
+         - 通过 ~$binary_remote_addr~ 和 ~$remote_addr~ 访问真实的用户IP
+         - 通过 ~$realip_binary_remote_addr~ 和 ~$realip_remote_addr~ 访问2.2.2.2
+       - 相关指令
+         - ~set_real_ip_from address|CIDR|unix;~
+           - 作用：指定来源地址为某个IP或地址段时，才启用realip模块
+           - 默认值：不限制
+           - 上下文：http, server, location
+         - ~real_ip_header field|X-Real-IP|X-Forwarded-For|proxy_protocol;~
+           - 默认值：X-Real-IP
+           - 若为X-Forwarded-For，则取最后一个值
+           - 上下文：http, server, location
+         - ~real_ip_recursive off|on~
+           - 默认值：off
+           - 若real_ip_header设置为X-Forwarded-For，且real_ip_recursive为on时，当X-Forwarded-For的最后一个IP与来源地址一样时，则往前取上一个IP，直到不一样或第一个为止。
+           - 上下文：http, server, location
+   14) mirror
+       - 作用：实时拷贝流量，应用于多个环境中需要同步用户流量。
+       - 原理：处理请求时生成子请求访问其他服务，对子请求的返回值不处理。
+       - 相关指令(上下文: http, server, location)
+         - ~mirror off | uri~
+         - ~mirror_request_body on | off~ 子请求不复制请求主体
+       - 示例
+         #+begin_src
+         location / {
+           mirror /mirror;
+           mirror_request_body off;
+         }
+
+         location /mirror {
+           proxy_pass http://sdfdsf;
+           proxy_pass_request_body off;
+           proxy_set_header Content-Type "";
+         }
+         #+end_src
 
 ** 1.9.11版本后支持DSO（动态装载和卸载模块）
    编译后不仅得到Nginx二进制可执行文件，还会得到动态库(Module Shared Object)。
@@ -2231,7 +2376,55 @@ shared memory
 
   传输层的数据部分单元为MSS
   网络层传输的数据包单元为MTU(以太网中的MTU定义为1500字节)；
-  
+
+** 接收HTTP请求过程
+   1. Nginx的TCP/IP连接模块调用 ~epoll_wait~ 接收TCP/IP连接。
+   2. TCP/IP三次握手完成，触发accept事件。
+   3. Nginx的TCP/IP连接模块根据配置项 ~connection_pool_size 512~ 申请连接内存池。
+   4. 通过 ~epoll_ctl~ 订阅读事件，回调方法为HTTP模块的 ~ngx_http_init_connection~ 方法。并且根据配置项 ~client_header_timeout 60s~ 设置读超时定时器。
+   5. Nginx的TCP/IP连接模块调用 ~epoll_wait~ 接收请求
+   6. HTTP请求到时，调用HTTP模块的 ~ngx_http_wait_request_handler~ 并根据配置项 ~client_header_buffer_size 1k~ 在Nginx的用户态内存中分配HTTP头的读缓冲区内存空间。
+   7. HTTP模块根据 ~request_pool_size 4k~ 分配请求内存池。
+   8. 通过状态机解析请求行。
+   9. 若请求行内容较大，则会根据 ~large_client_header_buffers 4 8k~ 先增加1个8k(剩余3个8k未分配)或2个8k(剩余2个8k未分配)，然后继续通过状态机解析请求行。
+   10. 通过指针标识URL，那么内部变量$reqeust_uri就有值了。
+   11. 通过状态机解析请求头。
+   12. 若请求头内容较大，则会根据 ~large_client_header_buffers 4 8k~ 继续增加内存空间，请求行和请求头最大共用4*8k空间，然后继续通过状态机解析请求头。
+   13. 标识header。
+   14. 移除 ~client_header_timeout 60s~ 设置读超时定时器。
+   15. 进入HTTP请求处理的11个阶段
+
+** HTTP请求处理的11个阶段
+   1. POST_READ
+      - 作用：读取完HTTP Header后执行
+      - 模块：realip
+   2. SERVER_REWRITE
+      - 模块：rewrite
+   3. FIND_CONFIG
+      - 作用：匹配Location块
+   4. REWRITE
+      - 模块：rewrite
+   5. POST_REWRITE
+   6. PREACCESS
+      - 模块：limit_req, limit_conn
+   7. ACCESS
+      - 模块：access, auth_basic, access_request
+   8. POST_ACCESS
+   9. PRECONTENT
+      - 作用：可以将一个请求分为多个子请求
+      - 模块：try_files, mirrors
+   10. CONTENT
+       - 模块：concat, random_index, index, autoindex, static
+       - 执行顺序注意点：当random_index运行成功则后面的模块都不会执行，直接跳转到LOG阶段。
+   11. LOG
+       - 模块：access_log
+
+*** 执行顺序
+    规则：
+    1. 每个阶段都有1个或多个模块，阶段中不是每一个模块都有机会被执行
+    2. 前一个阶段的模块不向下传递，那么后面阶段的模块就不会被执行
+    3. 每个阶段模块的执行顺序可以通过执行 ~./configure~ 后代码中的 ~char *ngx_module_name~ 得到，数组中的顺序和实际的顺序相反。
+
 * TODO 性能调优
 
 ** Nginx端优化项目
