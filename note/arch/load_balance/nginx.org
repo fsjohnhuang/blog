@@ -208,6 +208,8 @@ NIO是ORACLE发明的
    - 上下文：http,server,lcation
 
 * if in location
+空字符和0为false，其他字符为true。
+
 *注意：if 中仅return和rewrite指令是100%执行安全的，其他指令不保证运行结果安全。*
 
 #+begin_example bash
@@ -967,7 +969,7 @@ useradd -r -g nginx -M nginx
 21) ~add_header name value [always];~
     - 作用：添加响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
     - 坑：
-      1. 发生 ~rewrite last~ 时，第一个匹配的location中的add_header指令将失效
+      1. 发生 ~rewrite~ 时，第一个匹配的location中的add_header指令将失效
          #+begin_src
          # 请求 /a 返回的响应头仅有 b: 2, 而没有a: 1。
          location =/a {
@@ -1040,10 +1042,10 @@ useradd -r -g nginx -M nginx
       #+end_example
 22) ~valid_referers none | blocked | server_names | string | regex...;~
     - 值类型：
-      - none 表示直接从浏览器输入地址访问，那么$http_referer为空
-      - blocked 表示$http_referer原来不为空，但被防火墙或代理删除了
+      - none 表示直接从浏览器输入地址访问，没有 ~Referer~ 请求头。
+      - blocked 表示存在 ~Referer~ 请求头，但被防火墙或代理删除了值。即看到的是 ~Referer:~
       - server_names 设置$http_referer需要匹配某机器名
-      - string 设置$http_referer需要匹配某IP或某域名
+      - string 设置$http_referer需要匹配某IP或某域名，域名可以以*作为前缀或后缀
       - regex 正则表达式匹配
     - 作用：根据$http_referer变量实现简单的防盗链功能
     - 上下文：server,location
@@ -1055,7 +1057,36 @@ useradd -r -g nginx -M nginx
           return 403;
       }
       #+end_example
-23) ~return code [text | url]~ 或 ~return url~
+23) ~secure_link~
+    - 作用：由于伪造Referer请求头的成本非常低，因此通过 ~valid_referers~ 模块实现防盗链非常容易被破解。而secure_link则通过验证URI中哈希值的方式提供更好的防盗链功能。
+    - 过程：
+      1. 由某服务器或Nginx生成加密后的安全链接URL，返回给客户端
+      2. 客户端使用安全链接URL访问Nginx，由Nginx的secure_link变量判断是否验证通过
+    - 原理：
+      - 哈希算法不可逆
+      - 客户端只能拿到执行过哈希算法的URL
+      - 仅生成和验证安全链接URL的Nginx才能通过安全链接URL拿到原始字符串
+      - 原始字符串通常由以下部分有序组成
+        1. 资源位置，如HTTP中指定的资源URI，防止攻击者拿到一个安全URL后可以访问任意资源
+        2. 用户信息，如用户IP等，限制其他用户盗用安全URL
+        3. 时间戳，使用安全URL的有效时间
+        4. 密钥，仅服务端拥有，增加非法用户的破解成本
+    - 安装： ~--with-http_secure_link_module~
+    - 相关指令
+      - ~secure_link expression~
+        - 上下文：http, server, location
+      - ~secure_link_md5 expression~
+        - 上下文：http, server, location
+      - ~secure_link_secret word~
+        - 上下文：location
+    - 相关变量
+      - ~secure_link~ 值为空字符串——验证不通过，0——URL过期，1——验证通过
+      - ~secure_link_expires~ 时间戳的值
+    - 示例
+      #+begin_src
+      
+      #+end_src
+24) ~return code [text | url]~ 或 ~return url~
     - text 可以为普通字符串、json或使用变量，它将作为响应体
     - url 必须以http或https开头
     - 作用：向客户端直接返回响应状态码
@@ -1083,12 +1114,12 @@ useradd -r -g nginx -M nginx
       return http://fsjohnhuang.io;
       #+end_example
     - 注意：return指令后的其他指令将不会被执行
-24) ~server_tokens on | off~
+25) ~server_tokens on | off~
     - on 作为默认值，在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
     - off 隐藏版本号，形如 ~Server: nginx~
     - 作用：安全优化-隐藏版本号
     - 上下文：http,server,location
-25) ~ssi off |  on~
+26) ~ssi off |  on~
     - 作用：启用Server Side Include。建议禁用。
     - SSI
       - 定义：是一种基于服务端的网页制作技术。就是在将页面内容发送给客户端前，使用SSI指令将文本、图片和其它网页内容添加到当前响应中。
@@ -1096,32 +1127,52 @@ useradd -r -g nginx -M nginx
         - 引入资源 ~<!--#include file="layouts/menu.shtml"-->~
     - 上下文: location
     - 问题：若找不到相应的资源，那么整个响应会报404异常。而通过http_addition_module的add_before_body引入资源，找不到资源时仅引入内容为空，但不影响原来的响应结果。
-26) ~ssi_slient_errors off | on~
+27) ~ssi_slient_errors off | on~
     - 作用：开启后在处理SSI文件出错时不输出错误提示:”[an error occurred while processing the directive] ”
     - 上下文: location
-27) ~ssi_types text/shtml~
+28) ~ssi_types text/shtml~
     - 作用：默认是ssi_types text/html，所以如果需要htm和html支持，则不需要设置这句，如果需要shtml支持，则需要设置：ssi_types text/shtml
     - 上下文: location
-28) ~limit_rate <size>~
+29) ~limit_rate <size>~
     - 作用: 对客户端一个连接设置每秒传输的最大字节数，限速。由于网络带宽有限，因此应该限制某些数据大但相对没有那么重要的资源设置限速，让出带宽给那些重要的数据量小的资源，从而提供重要资源的响应速度。
     - 默认值: no
     - 上下文: http, server, location
     - 示例: ~limit_rate 512k~
     - 或者通过设置变量的方式设置 ~set $limit_size 512k~
     - 注意：由于limit_rate仅限制一个连接的每秒传输上限，所以要配置limit_conn限制并发连接数，才能限制总体的每秒传输数据量。
-29) ~limit_rate_after <size>~
+30) ~limit_rate_after <size>~
     - 作用: 设置客户端一个连接接收多少字节后将启用限速，如果不超过该值则不限速。
     - 默认值: no
     - 上下文: http, server, location
     - 示例: ~limit_rate_after 1m~
 
-** TODO 变量
+** 变量
+*** 原理
+    - 提供变量的模块
+      - preconfiguration模块在读取nginx.conf前定义新的变量，如 ~$valid~
+        定义新的变量实际上是定义 *变量名* 和 *解析出变量的方法* 及其映射关系。
+    - 使用变量的模块
+      - nginx.conf中定义变量的使用方式，并根据 *变量名* 找到 *解析出变量的方法* 并调用方法获取变量值。
+
+*** 变量相关配置(上下文http)
+    - ~variable_hash_bucket_size 64~
+      - 存放变量的哈希表大小，默认为64字节
+      - 若变量名特别长则需要增加该值
+    - ~variable_hash_max_size 1024~
+      - 存放变量个数的上限，默认1024字节
+      - 若变量名特别多则需要增加该值
+
+*** 使用变量
 1) 内置变量：由Nginx模块引入，可直接使用
    - ~$uri~ 不含query string的以/开头的请求路径
    - ~$document_uri~ 与 ~$uri~ 一样
    - ~$args~ query-string
+   - ~$arg_参数名~ URI中某个具体参数的值
    - ~$query_string~ 与 ~$args~ 一样
    - ~$is_args~ 若请求中带有query_string则返回 ~?~, 否则返回空字符串
+   - ~$content_length~ Content-Length头部的值
+   - ~$content_type~ Content-Type头部的值
+   - ~$uri~ 不包含?后的参数
    - ~$request_uri~ 含query-string的完整的客户端请求路径
    - ~$request_method~ 请求方式
    - ~$request~ 请求头部信息, 如 ~HEAD /main/index?a=1 HTTP/1.1~
@@ -1129,33 +1180,73 @@ useradd -r -g nginx -M nginx
    - ~$request_filename~ 表示用户请求通过root或alias转换后的文件路径,默认为index.html
    - ~$document_root~ 由URI和root/alias规则生成的目录路径
    - ~$realpath_root~ 将 ~$document_root~ 中的软链接等换成的真实路径
-   - ~$host~ 不含端口的域名/主机名/IP
+   - ~$host~ 取值步骤如下
+     1. 先从请求行中获取
+     2. 若有Host头部，则用其值替代请求行中的主机名
+     3. 若前两者都取不到，则使用匹配上的server_name的主域名
    - ~$remote_addr~ 客户端IP
-   - ~$binary_remote_addr~ 客户端IP，比 ~$remote_addr~ 省出1个字节
+   - ~$binary_remote_addr~ 客户端IP的整型格式，对于IPv4是4个字节，对于IPv6是16字节。
+   - ~$connection~ 递增的连接序号
+   - ~$connection_requests~ 当前连接上执行过的请求数，对keepalive连接有意义
+   - ~$proxy_protocol_addr~ 若使用了proxy_protocol协议则返回协议中的地址，否则返回空
+     proxy_protocol是用来解决TCP，WebSocket等类似于realip的问题。
+   - ~$proxy_protocol_port~  若使用了proxy_protocol协议则返回协议中的端口，否则返回空
    - ~$remote_port~ 客户端端口号
    - ~$remote_user~ 使用Auth Basic Module时定义的用户名
-   - ~$http_user_agent~ 客户端代理信息
-   - ~$http_referer~ 获取REFERER请求头
-   - ~$http_x_forwarded_for~ 记录客户端、代理服务器的IP地址列表，每个IP间以逗号分隔
+   - ~$http_头部名字~ 除了其中6个特殊变量外，其他都返回具体的请求头部值
+     - 特殊变量
+       - ~$http_user_agent~ 客户端代理信息
+       - ~$http_referer~ 获取REFERER请求头
+       - ~$http_x_forwarded_for~ 记录客户端、代理服务器的IP地址列表，每个IP间以逗号分隔
+       - ~$http_host~
+       - ~$http_via~
+       - ~$http_cookie~
    - ~$hostname~ nginx所在机器的主机名
    - ~$server_addr~ 服务器IP
    - ~$server_name~ 服务域名
    - ~$server_port~ 服务端口号
    - ~$server_protocol~ 服务器向客户端响应的协议,返回HTTP/1.1 或 HTTP/1.0
+   - TCP内核层参数
+     - ~$tcpinfo_rtt~
+     - ~$tcpinfo_rttvar~
+     - ~$tcpinfo_snd_cwnd~
+     - ~$tcpinfo_rcv_space~
    - ~$time_local~ 服务器本机时间
    - ~$status~ 响应返回码
    - ~$body_bytes_sent~ 响应消息的字节数，不包含响应头的字节数
    - ~$bytes_sent~ 响应消息的总字节数
-   - ~$request_time~ TTFB
+   - ~sent_trailer_名字~ 把响应结尾内容的值法案会
+   - ~$sent_http_头部名字~ 除了其中9个特殊变量外，其他都返回具体的响应头部值
+     - ~$sent_http_content_type~
+     - ~$sent_http_content_length~
+     - ~$sent_http_location~
+     - ~$sent_http_last_modified~
+     - ~$sent_http_connection~
+     - ~$sent_http_keep_alive~
+     - ~$sent_http_transfer_encoding~
+     - ~$sent_http_cache_control~
+     - ~$sent_http_link~
+   - ~$request_time~ Nginx从开始处理该请求至今耗时多少，单位为秒，精确到毫秒
    - ~$response_time~ nginx与upstream建立连接到关闭连接的时间
-   - ~$msec~ 日志写入时间，单位为秒，精度到毫秒
-   - ~$bytes_sent~ 已发送了多少字节 
+   - ~$request_completion~ 若请求处理完毕则返回OK，否则返回空
+   - ~$request_id~ 以16进制输出的请求标识id，该id共含16个字节，是随机生成的。
+   - ~https~ 是否开启TLS/SSL，on开启，空禁用
+   - ~$msec~ 1970/1/1到现在的毫秒数，用于日志写入时间，单位为秒，精度到毫秒
+   - ~$bytes_sent~ 已发送了多少字节
+   - ~$request_body_file~ 临时粗放请求包体的文件
+     - 若包体非常则不会存文件，那么该变量则为空。若使用 ~client_body_in_file_only on~ 指令，则会强制所有包体存入文件，则能保证该变量有值。
+   - ~$request_body~ 请求中的包体，当且仅当使用反向代理，且设置用内存暂存包体时有效。
+   - ~$time_local~ 以服务器本地时间标准输出的当前时间，例如 ~14/Nov/2018:15:55:37 +0800~
+   - ~$time_iso8601~ 使用ISO 8601标准输出的当前时间，例如 ~2018-11-14T15:55:37+0800~
+   - ~$nginx_version~ Nginx版本号
+   - ~$pid~ 所属worker的进程号
+   - ~$pipe~ 是否使用管道，是则返回p，否则返回空
+   - ~$hostname~ 和bash命令hostname一样
 2) HTTP请求变量
    1) arg_PARMETER
    2) http_HEADER, 客户端发送的请求的HEADER
       - ~$http_user_agent~ 获取请求头的USER-AGENT
    3) sent_http_HEADER，服务端返回的响应的HEADER
-
 3) 自定义变量：用户通过 ~set variable_name value;~ 定义
 4) 使用变量： ~$variable_name~
 
@@ -1559,6 +1650,14 @@ location ~*\.(gif|jpg)$ { E }
 
 注意： 请求路径为 ~/static/%20/a~ 将匹配 ~location =/static/ /a~
 
+*** ~merge_slashes on | off~
+    作用：合并URI中相邻的斜杆，当URI中存在Base64编码字符时可能要设置为off。
+    上下文：http, server
+
+*** ~internal~
+    作用：指定当前location仅能通过rewrite内部访问。
+    上下文：location
+
 ** Rewrite
 通过使用nginx内置变量和自定义变量,结合正则表达式和标志位实现在同一域名下的URI重写和重定向.
 语法： ~rewrite regex replacement [flag]~ ,根据正则表达式匹配原URL中的PATH、QueryString和Hash信息，然后跳转到replacement指定的地址。
@@ -1567,6 +1666,7 @@ location ~*\.(gif|jpg)$ { E }
 1) 执行server块的rewrite命令
 2) 执行location匹配
 3) 执行匹配的location中的rewrite命令
+注意：当replacement以 ~http://~ 或 ~https://~ 或 ~$schema~ 开头，则直接返回302重定向。
 
 应用场景：
 1) 调整用户浏览器URL
@@ -1586,7 +1686,25 @@ location / {
 #+end_src
 
 *** flag
-1) last, 表示完成本次rewrite，重启一下轮检查。一般写在server和if中
+1) 没有，标识执行完当前块后再执行rewrite的结果。
+   #+begin_src
+   location / {
+     rewrite .* /test; # 没有flag，因此继续执行
+     return 404 "test"; # 由于执行return指令，因此直接返回404响应不执行rewrite指令的内容
+   }
+
+
+   # 访问/test跳转到/hi，并响应头字段包含X-My-Var 123
+   location /test {
+     rewrite .* /hi;
+     set $my_var 123; # 由于rewrite没有带flag，因此会执行完当前块
+   }
+   location /hi {
+     add_header X-My-Var $my_var;
+     root html;
+   }
+   #+end_src
+2) last, 表示完成本次rewrite，重启一下轮检查。一般写在server和if中
    #+begin_src
    server_name test.com;
    # 请求 test.com/bbs/index.html 时，那么浏览器URL地址栏不变，但Nginx内部会重新以 test.com/forum/index.html 来匹配location，并重新进入 location / 块。
@@ -1594,6 +1712,7 @@ location / {
    location / {
      root html;
      rewrite ^/bbs/(.*)$ /forum/$1 last;
+     return 404; # 由于rewrite采用last，因此这个指令不会被执行。直接跳转到location /forum/$1块。
    }
 
    # 请求 test.com/abc/a 时，那么浏览器URL地址栏不变，但Nginx内部会重新以 test.com/abc/a/index.html 来匹配location，并重新进入 location /abc/ 块。
@@ -1603,22 +1722,28 @@ location / {
      rewrite ^/abc/(.*)$ /abc/$1/index.html last;
    }
    #+end_src
-2) break, 表示完成本次rewrite后，不再在Nginx内部重新匹配location，而是直接执行后续操作(如读取文件返回响应)。一般写在location中
+3) break, 表示完成本次rewrite后，不再在Nginx内部重新匹配location，而是直接执行后续操作(如读取文件返回响应)。一般写在location中。效果等价于独立的break指令。
    #+begin_example bash
    # 请求/abc/a时，返回 $NGINX_HOME/html/abc/a/index.html 的内容
    location /abc/ {
      root html;
      rewrite ^/abc/(.*)$ /abc/$1/index.html break;
+     return 404; # 由于rewrite采用break，因此这个指令不会被执行。直接返回 $NGINX_HOME/html/abc/a/index.html 的内容。
+
+     # 效果与上面的指令一样
+     rewrite ^/abc/(.*)$ /abc/$1/index.html;         
+     break;
+     return 404; # 由于rewrite采用break，因此这个指令不会被执行。直接返回 $NGINX_HOME/html/abc/a/index.html 的内容。
    }
    #+end_example
-3) redirect, 返回302临时重定向
+4) redirect, 返回302临时重定向
    #+begin_example bash
    if ($http_host !~ "^fsjohnhuang\.io") {
        rewrite ^/(.*) http://fsjohnhuang.io/$1 redirect;
        # 或直接写成 rewrite ^/(.*) http://fsjohnhuang.io/$1; 即可
    }
    #+end_example
-4) permanent, 返回301永久重定向
+5) permanent, 返回301永久重定向
    #+begin_example bash
    if ($http_host !~ "^fsjohnhuang\.io") {
        rewrite ^/(.*) http://fsjohnhuang.io/$1 permanent;
@@ -1682,13 +1807,23 @@ index index.html index.0.html /index.htm;
                              '"$http_user_agent" "$http_x_forwarded_for"';
              #+end_example
          - 日志定义 —— ~access_log~
-           - 语法： ~access_log <path> <log_format_name>;~
+           - 语法： ~access_log <path> [<log_format_name> [buffer=size] [gzip[=level]] [flush=time] [if=condition]];~
              - <日志文件路径> <日志格式名称>
            - 示例
              #+begin_example bash
-             # 设置将访问日志写入缓存，每5秒写入磁盘。
+             # 若日志路径包含变量的情况下，在不打开cache时，每记录一条日志都要打开、关闭日志文件。
+             # 可通过open_log_file_cache设置缓存优化。
+             # max 缓存内的最大文件句柄数，超过后用LRU算法淘汰。按将有多个不同的日志文件设置。
+             # inactive 文件访问完后再这段时间内不会被关闭， 默认为10s
+             # min_uses 在inactive期间最少使用过这么多次则重新计时，默认为1
+             # valid 超出valid时间后，将对缓存的日志文件检查是否存在，默认为60秒
+             # off 关闭缓存功能，默认值。
+             # 上下文：http, server, location
+             open_log_file_cache max=10 inactive=10s min_uses=1 valid=60s
+
+             # 设置将访问日志写入缓存，每5秒写入磁盘, 压缩1最快(默认值)9最慢。
              # 关闭访问日志 access_log off;
-             access_log /path/to/access_log main buffer=32k flush=5s;
+             access_log /path/to/access_log main buffer=32k flush=5s gzip=4;
              #+end_example
          - 分割日志
            - 步骤：
@@ -1751,8 +1886,6 @@ index index.html index.0.html /index.htm;
 分为handler,filter,upstream
 
 FastCGI转发请求到PHP，导致并发瓶颈在FastCGI+PHP上，因此通过ngx_lua处理动态内容提高并发数．
-
-map模块
 
 shared memory
 
@@ -2099,6 +2232,123 @@ shared memory
            proxy_set_header Content-Type "";
          }
          #+end_src
+   15) ngx_http_sub_filter_module
+       - 作用：将响应中指定的字符串，替换为新的字符串。
+       - 安装: ~--with-http_sub_module~
+       - 相关指令(上下文：http, server, location)
+         - ~sub_filter string replacement~
+           - 注意：string不支持正则
+         - ~sub_filter_last_modified off | on~
+           - 作用：是否需要响应头包含Last-Modified
+         - ~sub_filter_once on | off~
+           - 作用：是否替换第一个匹配项即返回。为off时则替换所有才返回。
+         - ~sub_filter_types text/html~
+   16) ngx_http_map_module
+       - 作用：通过映射新变量，如同 ~switch (已有变量) {case ...; default ...;}~ 运算结果作为新变量的值。
+       - 相关指令(上下文：http)：
+         - ~map $defined_variable $new_variable {}~
+           - 示例
+             #+begin_src
+             # 已有变量：字符串、一个或多个变量、变量与字符串的组合
+             # case规则：
+             #   字符串严格匹配
+             #   使用hostnames指令，可以对域名使用前/后缀*泛域名匹配
+             #   使用~或~*正则表达式匹配
+             # default规则：
+             #    没有匹配到任何规则时，使用default
+             #    缺失default时，返回空字符串给新变量
+             # 其他：
+             #    使用include指令提升可读性
+             #     使用volatile禁止变量值被缓存
+
+
+             map $http_host $name {
+               hostnames;
+
+               default 0;
+
+               ~map\.tao\w+\.org.cn 1;
+               *.tao.org.cn 2;
+               map.tao.t 3;
+               map.tao.* 4;
+               "~*oPERA mINE" 5;
+             }
+
+             server {
+               location / {
+                 return 200 "$name";
+               }
+             }
+             #+end_src
+         - ~map_hash_bucket_size 32|64|128~
+         - ~map_hash_max_size 2048~
+   17) ngx_http_split_clients_module
+       - 作用：实现AB测试
+       - 安装： 默认已经安装，卸载可通过 ~--without-http_split_clients_module~
+       - 原理
+         1. 对已有变量的值执行MurmurHash2算法得到32位整型哈希数字，记为hash
+         2. 将32位无符号整型的最大值2^32-1，记为max
+         3. percent=hash/max
+         4. 配置指令中配置各百分比范围，以及对应的值。当percent命中该范围则以对应的值作为新变量的值。
+       - 注意：
+         1. 百分比范围的 ~xx.xx%~ ，支持小数后2位；
+         2. 所有项目的百分比相加不能大于100%；
+         3. ~*~ 表示匹配剩余的百分比。
+       - 示例
+         #+begin_src
+         http {
+           # 只能定义在http下
+           split_clients $remote_addr $app_version {
+             10.01% 1; # 0~10.01%的命中则返回1
+             50.02% 2; # 10.01%~50.02%的命中则返回2
+             * 3; # 其他返回3
+           }
+
+           server {
+             .......
+
+             location / {
+               return 200 @"$app_version";
+             }
+
+             location @1 {
+               proxy_pass  http://xxx;
+             }
+             location @2 {
+               proxy_pass  http://yyy;
+             }
+             location @3 {
+               proxy_pass  http://zzz;
+             }
+           }
+         }
+         #+end_src
+
+** 第三方模块
+   1. ngx_http_concat_module
+      - 作用：将多个那文件的内容合并到同一个响应中，提升性能。
+      - 安装：下载淘宝的Nginx插件(https://github.com/alibaba/ngxin-http-concat)，编译时 ~--add-module=./nginx-http-concat/~
+      - 使用：在URI的Path加上??，然后逗号分隔多个文件。而查询参数照常以?开头书写即可。
+        例如 ~http://test.com/??image/test.png,css/style.css?compress=9~
+      - 相关指令
+        - ~concat off | on~
+          - 作用：是否启用concat功能
+          - 上下文：http, server, location
+        - ~concat_types text/css application/x-javascript~
+          - 作用：哪些MIME类型的资源会启用concat功能
+          - 上下文：http, server, location
+        - ~concat_unique on | off~
+          - 作用：是否仅合并同类MIME类型的资源
+          - 上下文：http, server, location
+        - ~concat_max_files 10~
+          - 作用：文件上限
+          - 上下文：http, server, location
+        - ~concat_delimiter NONE~
+          - 作用：响应中多个文件内容之间的分隔符。
+          - 上下文：http, server, location
+        - ~concat_ignore_file_error off | on~
+          - 作用：若找不到，是否忽略。默认会导致整个请求失败。
+          - 上下文：http, server, location
 
 ** 1.9.11版本后支持DSO（动态装载和卸载模块）
    编译后不仅得到Nginx二进制可执行文件，还会得到动态库(Module Shared Object)。
@@ -2291,6 +2541,19 @@ shared memory
   }
   #+end_src
 
+** 访问目录的URI不以/结尾会怎么样？
+   static模块实现的route和alias功能，发现访问的资源为目录，而且URI不以/结尾，那么会返回301永久重定向。
+   3个指令控制重定向响应头Location的值
+   - ~absolute_redirect on | off~
+     - 作用：Location值是否包含域名等信息
+     - 上下文：http, server, location
+   - ~server_name_in_redirect off | on~
+     - 作用：配置Location值的域名，off则采用请求头的Host，on则为server_name的主域名。
+     - 上下文：http, server, location
+   - ~port_in_redirect on | off~
+     - 作用：Location值是否包含端口号
+     - 上下文：http, server, location
+
 ** TODO 文件描述符
 
 * Nginx进程结构
@@ -2416,6 +2679,16 @@ shared memory
    10. CONTENT
        - 模块：concat, random_index, index, autoindex, static
        - 执行顺序注意点：当random_index运行成功则后面的模块都不会执行，直接跳转到LOG阶段。
+       - 然后执行HTTP过滤模块
+         - copy_filter模块
+           - 作用：从内核态内存中复制包体内容到用户态内存，供后续其他模块(如gzip)使用。
+           - 注意：因此使用gzip功能，将会自动禁用sendfile功能。
+         - postpone_filter模块
+           - 作用：处理子请求
+         - header_filter模块
+           - 作用：构造响应头部
+         - write_filter模块
+           - 作用：发送响应(先发送header再发送body)
    11. LOG
        - 模块：access_log
 
