@@ -38,7 +38,7 @@ NIO是ORACLE发明的
 - 上下文：location, if in location, limit_except
 - 示例
   1) unix domain socket ~proxy_pass unix://tmp/backend.socket:/uri/;~
-  2) http 和 https ~proxy_pass ip:port[uri];~
+  2) http 和 https ~proxy_pass <http|https>://(ip:port[uri] | upstream_name);~
      #+BEGIN_EXAMPLE bash
      server_name test.com;
 
@@ -48,7 +48,7 @@ NIO是ORACLE发明的
        proxy_pass http://196.168.56.191:8080/bbs/;
      }
 
-     # 当使用 ~,~*,^~,= 等进行模式匹配时，proxy_pass后的url只能设置为 <protocol>://<ip>:<port> 的形式
+     # 当使用 ~,~*,^~,= 等进行模式匹配或@名字时，proxy_pass后的url只能设置为 <protocol>://<ip>:<port> 的形式
      # location后的URI部分将被直接传递至上游服务器，而不能为其指定转换为另一个URI。
      # 当客户端访问 http://test.com/forum/index.html
      # 会被转发到 http://196.168.56.191:8080/forum/index.html
@@ -67,6 +67,31 @@ NIO是ORACLE发明的
      }
      #+END_EXAMPLE
 
+** HTTP反向代理流程
+   1. 处理connect阶段：proxy_pass指令；若开启cache且命中则执行步骤3，否则执行步骤2
+   2. 未开启cache或击穿cache：
+      1. 根据指令生成发往上游的HTTP头部及包体(由于一般上游服务的并发量并没有Nginx强大，因此先准备好数据再建立和上游服务的连接，从而缩短连接时间来降低
+      2. 此时Nginx仅接收到HTTP头部的信息，然后根据 ~proxy_request_buffering~ 的值执行后续步骤，默认on。
+         - on 缓冲HTTP请求包体到磁盘，等待HTTP请求包体完整后再执行后续步骤
+           - 优点：缩短和上游服务连接的打开时间，从而降低对上游服务负载的影响。
+           - 缺点：增大上游服务处理的迟延。
+         - off 马上执行后续步骤，并且边读取HTTP请求包体边转发到上游服务
+           - 优点：提高上游服务处理的时效性
+           - 缺点：延长上游服务连接的打开时间。
+      3. 根据负载均衡策略选择上游服务器
+      4. 根据参数连接上有服务器
+      5. 发送请求到上游服务
+      6. 接收上游服务返回的响应头部
+      7. 处理响应头部
+      8. 根据 ~proxy_buffering~ 执行后续步骤，默认为on
+         - on 通过临时文件缓冲响应包体(若Nginx和上游服务器均位于内网，那么它们间的网速非常快)
+         - off 边接收响应包体，边发送给下游客户端(速度受限于Nginx和下游客户端的网速)
+      9. 进入第3步骤
+   3. 发送响应头部给下游客户端
+      1. 发送响应包体给下游客户端
+      2. 若打开cache则将包体加入缓存
+      3. 关闭或复用连接
+
 ** 缓冲(buffer)
    1) 缓冲(buffer)和缓存(cache)的区别
       - 缓冲(buffer)
@@ -83,11 +108,55 @@ NIO是ORACLE发明的
       - 注意：
         1) 缓冲(buffer)针对的是从应用服务返回的响应消息，是接收后尽快返回给客户端，还是先暂存在缓冲区然后当buffer被写满或应用服务返回的响应消息被读取完毕(EOF)后才开始向客户端传输。
         2) 下列指定的数值均为针对每个http response的上限，而不是对于整个buffer区指定的上限。
+      - ~proxy_request_buffering on | off~
+        - 作用：接收下游客户端请求的包体，是接收完再和上游服务建立连接发送，还是先建立连接边接收边发送
+        - 上下文：http,server,location
+        - on的应用场景
+          1. 下游客户端网络较慢
+          2. 上游服务并发处理能力较弱
+          3. 需要高吞吐量的场景，利用Nginx的高性能特点
+        - off的应用场景
+          1. 需要更及时的响应
+          2. 降低Nginx读写磁盘的消耗
+          3. 一旦开始发送内容，proxy_next_upstream功能失效
+      - ~client_body_buffer_size 8k | 16k~
+        - 作用：若存在请求包体，则按情况分配缓冲区。
+          1. 若接收请求头部时，已经接收完全部的包体，则不用分配缓冲区内存
+          2. 若剩余待接收的包体长度小于等于client_body_buffer_size的值，则按实际需要分配缓冲区内存
+          3. 若剩余待接收的包体长度大于client_body_buffer_size的值，则按client_body_buffer_size分配缓冲区内存。
+             然后按照client_body_buffer_size的大小接收请求包体，若 ~proxy_request_buffering~ 为 on 则执行 步骤1， 否则执行 步骤2
+             1. 若还没接收完，则将缓冲区内存的数据写入临时文件，并释放缓冲区内存空间继续按照client_body_buffer_size的大小接收请求包体，直到接收完毕。
+             2. 及时将缓冲区内存的数据发送给上游服务器。
+        - 上下文：http,server,location
+      - ~client_body_in_single_buffer off | on~
+        - 作用：将请求包体全部存放在缓冲区内存中。
+        - 上下文：http,server,location
+      - ~client_max_body_size 1m~
+        - 作用：检查Content-Length表示的请求包体长度，若超过则返回413错误。
+        - 上下文：http,server,location
+      - ~client_body_temp_path path [level1 [level2 [level3]]]~
+        - 作用：client_body_buffer_size 缓冲区对应的临时文件路径
+        - 默认值: ~client_body_temp_path client_body_temp~ 及在Nginx目录下的client_body_temp目录
+        - 由于目录下存放太多文件会严重影响磁盘IO性能，因此需要通过level1,level2,level3定义多级子目录路径
+        - 上下文：http,server,location
+      - ~client_body_in_file_only off | on | clean~
+        - 作用：包体必须存放在文件中
+          - on 即使响应结束也不会删除存放请求包体的临时文件
+          - off 当包体长度小于client_body_buffer_size时则不写入临时文件，若写入则响应结束删除存放请求包体的临时文件
+          - clean 包体一定要写入临时文件，响应结束删除存放请求包体的临时文件
+        - 上下文：http,server,location
+      - ~client_body_timeout 60s~
+        - 作用：读取请求包体超时，返回408错误
+        - 上下文：http,server,location        
       - ~proxy_buffering on | off~
         - 作用：缓存从应用服务返回的内容，然后再统一返回给客户端。返回的内容会暂存到由 ~proxy_buffers~ 和 ~proxy_buffer_size~ 指定的内存缓冲区中，若内存缓冲区已满则写入磁盘上。
         - 默认值： ~proxy_buffering on;~
         - 上下文：http,server,location
-        - 注意：对于采用长轮训的应用而言，必须关闭缓冲区。
+        - off的适用场景：
+          1. 对于采用长轮训的应用而言，必须关闭缓冲区。
+          2. 响应大文件。
+        - 上游服务启用/禁用proxy_buffering的方式
+          - 响应头部 X-Accel-Buffering 设置为yes或no
         ~proxy_buffers number size~
         - 作用：设置缓冲区数量和每个缓冲区的大小
         - 上下文：http,server,location
@@ -95,23 +164,33 @@ NIO是ORACLE发明的
           #+begin_example bash
           proxy_buffers 4 8k;
           #+end_example
-        ~proxy_buffer_size~
+        ~proxy_buffer_size 4k|8k~
         - 作用：设置仅用于缓冲应用服务响应头的缓冲区容量，因此其值一般比 ~proxy_buffers~ 小。
         - 上下文：http,server,location
         - 注意：
           1) 即使 ~proxy_buffering off~ 这个缓冲区也会被开启
           2) 当 ~proxy_buffering off~ 那么Nginx会尽快转发应用服务的响应消息给客户端，期间的缓冲区最大值为 ~proxy_buffer_size~ 的值
-        ~proxy_busy_buffers_size~
-        - 作用：缓冲区被写入后，直到缓冲区中的数据被完整地传输完，这个缓冲区一直处于busy状态，即不能对该缓冲区作任何操作。因此 ~proxy_busy_buffers_size~ 用于控制同时传输数据给客户端的缓冲区最大容量
+          3) 若上游服务的响应头部的长度大于 ~proxy_buffer_size~ 的值，那么Nginx会直接结束流程，而且error.log会记录upstream sent too big header。
+        ~proxy_busy_buffers_size 8k|16k~
+        - 作用：缓冲区被写入后，直到缓冲区中的数据被完整地传输完，这个缓冲区一直处于busy状态，即不能对该缓冲区作任何操作。因此 ~proxy_busy_buffers_size~ 用于控制同时传输数据给客户端的缓冲区最大容量。
         - 上下文：http,server,location
-        ~proxy_temp_file_write_size size~
-        ~proxy_max_temp_file_size size~
+        ~proxy_temp_path path [level1 [level2 [level3]]]~
+        - 作用：设置临时文件的目录
+        - 默认值: ~proxy_temp_path proxy_temp~
+        - 上下文：http,server,location        
+        ~proxy_temp_file_write_size 8k|16k~
+        - 作用：每次写入临时文件的大小
+        - 上下文：http,server,location
+        ~proxy_max_temp_file_size 1024m~
         - 作用：设置缓冲区耗尽时，写入磁盘的文件大小上限。
+        - 上下文：http,server,location
+        ~proxy_limit_rate 0~
+        - 作用：设置读取上游服务响应的速度，0为无上限。
         - 上下文：http,server,location
 
 ** 代理超时
    - ~proxy_connect_timeout second~
-     - 作用：代理服务与应用服务建立TCP连接的超时时间
+     - 作用：代理服务与应用服务建立TCP连接的超时时间，返回502错误
      - 默认值： ~proxy_connect_timeout 60s;~
      - 上下文：http,server,location
    - ~proxy_send_timeout second~
@@ -154,9 +233,14 @@ NIO是ORACLE发明的
    - 默认值： ~proxy_redirect default;~
    - 上下文：http,server,location
 
-** 设置发送给后端服务的请求头
+** 修改发送给上游服务的内容
    - ~proxy_set_header header value;~
-     - 作用：设置发送给应用服务的请求头
+     - 作用：设置发送给应用服务的请求头，若value为空字符串则整个Header都不会向上游服务发送
+     - 默认自动添加：
+       #+begin_src
+       proxy_set_header Host $proxy_host;
+       proxy_set_header Connection close;
+       #+end_src
      - 上下文：http,server,location
      - 示例
        #+begin_example bash
@@ -171,8 +255,52 @@ NIO是ORACLE发明的
    - ~proxy_hide_header header~
      - 作用：默认情况下代理接收的请求头将被复制到发送给应用服务的请求头上，通过该指令可以移除指定的请求头
      - 上下文：http,server,location
-   - ~proxy_set_body~
+   - ~proxy_pass_request_headers on | off~
+     - 作用：是否直接下游服务的请求头部发送给上游服务
      - 上下文：http,server,location
+   - ~proxy_set_body value~
+     - 作用：自定义发送给上游服务的请求包体
+     - 上下文：http,server,location
+   - ~proxy_pass_request_body on | off~
+     - 作用：是否直接下游服务的请求包体发送给上游服务
+     - 上下文：http,server,location
+   - ~proxy_method method~
+     - 上下文：http,server,location
+   - ~proxy_http_version 1.0 | 1.1~
+     - 上下文：http,server,location
+
+** 处理上游服务返回的响应头部
+   - ~proxy_ignore_headers field...~
+     - 作用：某些响应头部可以改变Nginx的行为，适用proxy_ignore_headers可以禁止它们生效
+     - 可以禁止的头部
+       - ~X-Accel-Redirect~ 由上游服务指定在Nginx内部重定向，控制请求的执行
+       - ~X-Accel-Limit-Rate~ 由上游设置发往客户端的速度限制，等同proxy_limit_rate指令
+       - ~X-Accel-Buffering~ 由上游控制是否缓存上游的响应
+       - ~X-Accel-Charset~ 由上游控制Content-Type中的Charset
+       - 缓存相关
+         - ~X-Accel-Expires~ 设置响应在Nginx的缓存时间，单位秒；@开头表示一天某时刻
+         - ~Expires~ 控制Nginx缓存时间，优先级低于X-Accel-Expires。同时可以控制浏览器的缓存时间
+         - ~Cache-Control~ 控制Nginx缓存时间，优先级低于X-Accel-Expires。同时可以控制浏览器的缓存时间
+         - ~Set-Cookie~ 响应出现Set-Cookie则Nginx不缓存，可通过proxy_ignore_headers启用Nginx缓存
+         - ~Vary~ 响应中出现 Vary: * 则Nginx不缓存，可通过proxy_ignore_headers启用Nginx缓存
+     - 上下文：http, server, location
+   - ~proxy_hide_header field~
+     - 作用：设置某些响应头部不转发给下游客户端
+     - 默认不转发的头部：
+       - ~Date~ 由ngx_http_header_filter_module过滤模块写入，值为nginx发送响应头部的时间
+       - ~Server~ 由ngx_http_header_filter_module过滤模块写入，值为nginx版本号
+       - ~X-Pad~ 通常是Apache为避免浏览器BUG生成的头部
+       - ~X-Accel-*~ 用于控制Nginx行为的响应头部
+     - 上下文：http, server, location
+   - ~proxy_pass_header field~
+     - 作用：转发被proxy_hide_header禁止转发的上游响应头部
+     - 上下文：http, server, location
+   - ~proxy_cookie_domain (off | domain replacement)~
+     - 作用：将匹配domain的Set-Cookie头部(可能是多个)中domain的值替换为replacement的值
+     - 上下文：http, server, location
+   - ~proxy_cookie_path (off | path replacement)~
+     - 作用：将匹配path的Set-Cookie头部(可能是多个)中path的值替换为replacement的值
+     - 上下文：http, server, location
 
 ** 容灾和重复处理
    ngx_http_proxy_module中的
@@ -201,11 +329,51 @@ NIO是ORACLE发明的
      - 作用：设置重试次数，0表示不限制。
      - 默认值： ~proxy_next_upstream_tries 0;~
 
+  注意：当 ~proxy_request_buffering off~ 时，已经建立连接并发送数据，那么中途失败也不会触发重置机制。
+
+** 下游客户端关闭连接
+   ~proxy_ignore_client_abort off | on~
+   - 作用：当下游客户端关闭连接，是否保持与上游服务间的连接。
+   - 上下文：http, server, location
+
+** 上游包体的持久化
+   - ~proxy_store_access users:permissions ...~
+     - 作用：设置文件的权限
+     - 上下文：http, server, location
+   - ~proxy_store off | on | string~
+     - 作用：为on时，则会以root为持久化目录；string则可以指定路径作为持久化目录。
+     - 上下文：http, server, location
+
 ** 分片请求
    通过位于http_slice_module的分片请求，将一个客户端的一个大文件的请求分片为向后端服务的小的请求。从而实现并行下载，和独立缓存、独立重试。
    ~slice size~
    - 默认值： ~slice 0~
    - 上下文：http,server,lcation
+
+** TODO IP透传
+   1. 通过 ~proxy_set_header~ 实现
+      #+begin_src
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $server_addr"
+      #+end_src
+   2. 通过 ~proxy_bind~ 实现
+      - 作用：直接修改TCP/IP连接的Source IP Address字段
+      - ~proxy_bind address [transparent] | off~
+      - 默认值为off
+      - 上下文：http, server, location
+      - 示例
+        #+begin_src
+        proxy_bind $server_addr;
+        # 当address不是Nginx所在服务器的IP时
+        # 1. 必须添加 transparent.
+        # 2. run nginx worker processes with the superuser privileges.
+        # 3. configure kernel routing table to intercept network traffic from the proxied server.
+        proxy_bind $remote_addr transparent;
+        #+end_src
+** 启用TCP keepalive
+   ~proxy_socket_keepalive off | on~
+   - 作用：启动时会定时发送探测包检查TCP连接，并关闭已失效的TCP连接。
+   - 上下文：http, server, location
 
 * if in location
 空字符和0为false，其他字符为true。
@@ -247,6 +415,19 @@ location / {
 * 负载均衡
 ISO第7层的负载均衡方案
 
+** AKF扩展立方体
+   - X Axis
+     - 水平/横向扩展
+     - 算法：Round-Robin、Least-Connected
+     - 成本：最低
+     - 缺点：无法解决数据量大的问题，因此水平扩展后每台服务器所操作的数据量并没有发生变化。
+   - Y Axis
+     - 垂直扩展
+     - 算法：按功能将单体应用重构为系统群或微服务，并基于URI通过location转发请求。
+     - 成本：最高
+   - Z Axis
+     - 算法：基于用户IP或其他信息转发请求到特定上游服务。
+
 ** GSLB和SLB
    GSLB为全局负载均衡，以省甚至国家为范围实现负载均衡。
    SLB则调度节点和逻辑节点位于同一组部署单位上。Nginx实现的就是属于SLB。
@@ -263,17 +444,15 @@ ISO第7层的负载均衡方案
      - down 表示当前server暂时不参与负载均衡
      - backup 表示当前server为备用服务器，当其它所有非备用服务器均down或忙时才将请求转发到这台服务器
        可实现主备模式。
-     - max_fails 设置允许请求失败的次数
-     - fail_timeout 设置经过max_fails失败后，服务暂停的时间。如10s, 5m, 6d等
-     - max_conns 设置最大的连接数
+     - max_fails 设置在fail_timeout时间段内，允许请求失败的次数。若达到则会在fail_timeout秒内请求不会转发到该台上游服务。
+     - fail_timeout 设置经过max_fails失败后，服务暂停的时间。如10s, 5m, 6d等。默认为10s
+     - max_conns 设置单worker进程最大的并发连接数，默认为0即没有限制
+     - weight 服务访问的权重，默认为1
    - 上下文：http
 
 ** 内置均衡策略
 #+BEGIN_EXAMPLE bash
 http {
-  # 做负载均衡时要把这个设置为0
-  keepalive_timeout 0;
-
   # 轮询(RR,Round-Robin)
   # 后端宕机会自动剔除
   upstream balance1{
@@ -289,6 +468,9 @@ http {
   }
 
   # 源地址散列
+  # 以客户端的IP作为hash算法的关键字，映射到特定的上游服务器中。
+  # 对IPv4地址使用前3个字节作为关键字，对IPv6则使用完整的地址。
+  # 可以基于realip模块修改用于执行算法的IP地址。
   upstream balance3{
     ip_hash;
     # max_fails 连续请求失败n次后，后续请求不转发到该后端
@@ -298,11 +480,11 @@ http {
     server 123.0.0.3 backup; # 当其他非backup后端down或忙时则将请求转发到backup后端服务
   }
 
-  # 第三方负载策略
   # fair，按后端服务器的响应时间来分配请求，响应时间短的优先分配。但由于实际网络环境复杂，因此要慎用。
   # least_conn，分发到最少连接数的后端服务
-  # hash关键值，hash自定义的key
-  # 语法：hash key [consistent];
+
+  # 基于任意关键字实现Hash算法的负载均衡
+  # 语法：hash key [consistent]; 其中key可以是字符串、变量或两者结合，如 user_$arg_username
   # 上下文：upstream
   # 版本要求：version 1.7.2
   upstream balance4 {
@@ -312,6 +494,23 @@ http {
      server c;
    }
 
+  # least conn 优先选择连接最少的上游服务器的负载均衡
+  # 若上游服务器的连接数一样，则使用round-robin算法。
+  upstream balance5 {
+     least_conn;
+     server a;
+     server b;
+  }
+  
+  # 上述的负载均衡都是针对单个Worker进程进行
+  # 通过zone name [size]可以针对所有Worker进程进行
+  upstream balance5 {
+    least_conn;
+    # 分配出共享内存，让所有Nginx Worker进程都可以读写。
+    # 设置了zone name [size]的upstream的负载均衡策略数据、运行时每个上游服务器状态数据都会存放到共享内存上。
+    zone balance5 10m;
+  }
+
   server {
     listen 80;
     server_name www.john.com;
@@ -319,12 +518,30 @@ http {
     location /abc.go {
       proxy_pass http://balance1;
 
-      proxy_redirect off;
+      proxy_redirect default;
       proxy_set_header Host $host:$server_port; # 设置转发到后端服务的请求头主机名为客户端请求头的主机名，而不是转发的主机名
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 向后端服务传输实际客户端IP
       proxy_connect_timeout 60s; # Nginx连接到后端服务的连接超时时间
       proxy_read_timeout 10m; # Nginx接收后端服务响应超时时间
+
+      # proxy_next_upstream error | timeout | invalid | invalid_header | http_500 | http_502 | http_503 | http_504 | http_403 |  http_404 | http_429 | non_idempotnet | off
+      # non_idempotent 默认情况对于POST、LOCK和PATCH方式的非幂等请求不会执行重试机制，若要重试则要添加该项目（Nginx 1.9.13后生效）
+      # 上游服务出现指定问题时，转发请求到同组的下一个服务
+      # 默认值：error timeout
+      # 上下文：http, server, location
+      proxy_next_upstream error timeout http_500 non_idempotent;
+
+      # 设置重试操作的超时时间。0表示不限制，即直到重试次数达到proxy_next_upstream_retries为止。
+      # 默认值为0
+      # 上下文：http, server, location
+      proxy_next_upstream_timeout 0;
+
+      # 在proxy_next_upstream_timeout时间访问内可以执行的重试次数，若超时或超出重试次数则结束本轮请求转发操作。
+      # 0表示不限制。由于该次数是包含第一次转发，因此1表示转发失败后不再重试。
+      # 默认值为0
+      # 上下文：http, server, location
+      proxy_next_upstream_tries 0;
 
       # 返回后端ip和响应状态码
       add_header backendIP $upstream_addr;
@@ -407,15 +624,12 @@ client <-TCP/IP-> nginx <-TCP/IP-> web app
 3) 若后端服务有问题，则再次将请求转发到另一个健康的后端服务；
 
 *** IP Hash
-默认不会自动剔除，需要设置配置如下
-#+BEGIN_EXAMPLE
-upstream backend {
-    ip_hash;
-    server 192.1.2.1 down; # 设置这台后端状态为down，即不再转发这台后端
-    server 192.1.2.2;
-}
-#+END_EXAMPLE
-通过插件如health check监控和修改配置
+    在宕机或扩容时，hash算法会引发大量路由变更，可能会导致缓存大范围失效。
+    因此使用 ~ip_hash~ 算法实现负载均衡，当某台上游服务器宕机后，并不会自动移除该台服务器，而是通过 ~proxy_next_upstream~ 配置将请求转发到下一个健康的上游服务器，并在fail_timeout时间内不转发请求到该台服务器。
+    但修改配置(移除或设置为down)并reload配置后，会导致大量路由变更。
+
+    而通过 ~hash $remote_addr consistent;~ 启用一致性Hash算法，则可以减少因宕机或扩容造成路由变更的范围和数量。
+    因此建议使用 ~hash $remote_addr consistent~ 代替 ~ip_hash~ 实现IP Hash算法。
 
 ** QA
 1) 熔断机制
@@ -446,6 +660,12 @@ upstream backend {
      - max_size 缓存数据存放的目录的大小上限，若超过该上限Nginx会根据LRU规则清理缓存数据。
      - inactive 当缓存在指定时间内没有再被访问过，则被清理掉
      - use_temp_path 设置另一个目录用于存放临时文件，一般设置为关闭，防止不必要的数据拷贝。
+     - manager_files，cache manager进程在1次淘汰过程中，淘汰的最大文件数，默认100
+     - manager_sleep，执行1次淘汰循环后cache manager进程的休眠时间，默认200ms
+     - manager_threshold，执行1次淘汰循环的最大耗时，默认50ms
+     - loader_files，cache loader进程载入磁盘中缓存文件到共享内存，每次最多处理的文件数，默认100
+     - loader_sleep，执行1次加载缓存文件到共享内存后，cache loader进程休眠时间，默认200ms
+     - loader_threshold，执行1次加载的最大耗时，默认50ms
      - 上下文：http
      - 示例
        #+begin_example bash
@@ -491,6 +711,14 @@ upstream backend {
          proxy_cache_valid any 10m; # 其它情况则缓存10分钟
        }
        #+end_example
+       - 通过上游服务的响应头部控制缓存时长
+         - ~X-Accel-Expires~ 单位秒
+           - 0表示禁止Nginx缓存此资源
+           - @开头设置缓存到最近下一个时刻
+         - 含 ~Set-Cookie~ 则禁止Nginx缓存
+         - 含 ~Vary: *~ 则禁止Nginx缓存
+           - ~Vary: *~ 表示所有请求都被视为唯一并且非缓存的，效果和使用 ~Cache-Control: private~ 一致。
+           - ~Vary: <header name>, <header name>, ...~ 逗号分隔一系列HTTP头部名称，用于确定缓存是否可用。
    - ~proxy_cache_key string~
      - 作用：设置缓存的维度
      - 默认值： ~proxy_cache_key $scheme$proxy_host$request_uri~
@@ -510,12 +738,23 @@ upstream backend {
        #+end_example
    - ~proxy_cache_use_stale~
      - 作用：当应用服务器因宕机或繁忙等原因无法响应请求时，Nginx返回已过期的缓存内容给客户端。
+     - 默认值：off
      - 上下文：http,server,location
      - 示例
        #+begin_src
-       # pdating表示缓存已过期但正在被别的Nginx Worker进程更新，但先返回了过期内容
        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
        #+end_src
+     - error 当与上游建立链接、发送请求读取响应头部等情况出错时，使用缓存
+     - timeout 当与上游建立链接、发送请求读取响应头部等情况超时，使用缓存
+     - http_* 当上游返回这些响应状态码时，使用缓存
+     - updating 表示缓存已过期但正在被别的Nginx Worker进程更新，但先返回了过期内容
+       - stale-while-revalidate 缓存内容过期后，定义一段时间且在期间内updating设置有效，否则转发请求到上游服务
+         - 例如： ~Cache-Control: max-age=600, stale-while-revalidate=30~
+       - stale-if-error 缓存内容过期后，定义一段时间且在期间内上游服务出错则使用缓存，否则转发请求到上游服务。stale-while-revalidate包含stale-if-error。
+         - 例如： ~Cache-Control: max-age=600, stale-if-error=30~         
+   - ~proxy_cache_background_update off | on~
+     - 作用：当proxy_cache_use_stale允许使用过期响应时，将同步生成一个仔请求，访问上游服务获取最新缓存
+     - 上下文：http,server,location
    - ~proxy_cache_revalidate off|on~
      - 作用：若缓存过期，那么当请求该资源时Nginx会向后端服务发起带If-Modified-Since或If-none-match的请求，若后端返回304，那么缓存自动续期并返回把缓存返回给客户端。
        默认为off，即即使Expires或Cache-Control过期，但Nginx缓存没有过期，则直接返回缓存内容，而不会先检查后端服务资源是否已更新过。
@@ -527,13 +766,12 @@ upstream backend {
    - ~proxy_cache_lock off|on~
      - 作用：防止缓存击穿，即缓存MISS后仅第一个请求会被转发到后端服务，其它请求均被阻塞直到缓存生效，返回缓存内容。
      - 上下文：http,server,location
-   - ~proxy_cache_lock_age 5s~
-     - 作用：Nginx 1.7.8 新增，在指定时间内缓存还没更新，那么后续请求则会发送到服务端。
+   - ~proxy_cache_lock_timeout 5s~
+     - 作用：Nginx 1.7.8 新增，在第一个请求在指定时间内缓存还没更新，那么后续其它请求则全部会发送到服务端。
      - 上下文：http,server,location
-   - ~proxy_cache_purge <zone> <key>~
-     - 作用: 清理缓存
-     - 上下文：location
-     - 示例: ~proxy_cache_purge tmpcache $uri$is_args$args;~
+   - ~proxy_cache_lock_age 5s~
+     - 作用：Nginx 1.7.8 新增，在前一个请求在指定时间内缓存还没更新，那么后续请求则逐一按这规律发送到服务端。
+     - 上下文：http,server,location
    - ~proxy_cache_bypass~
      - 作用：绕过缓存，直接转发请求到后端服务。
      - 上下文：location
@@ -546,9 +784,16 @@ upstream backend {
    3. UPDATING - expired, stale response was used dued to proxy/fastcgi_cache_use_stale updating
    4. STALE - expired, stale response was used dued to proxy/fastcgi_cache_use_stale updating
    5. HIT
+   6. REVALIDATED - Nginx验证了陈旧的内容依然有效
+   7. BYPASS - 响应是从上游服务获取的
    #+begin_example bash
    add_header Nginx-Cache "$upstream_cache_status from $server_addr";
    #+end_example
+
+** 注意
+   1. 当确定要使用缓存时，若上游服务返回的是200或206(部分返回)且已缓存过该资源，则更新Nginx该资源缓存的etag和last_modified值。
+   2. 当确定要使用缓存时，通过proxy_bufferring生成的临时文件需要rename到缓存目录，若两个目录位于不同的磁盘上将非常耗时。
+      优化方案：将 ~proxy_temp_path~ 和 ~proxy_cache_path~ 设置为相同的目录提高IO速度。
 
 * 其它缓存
   1. 日志缓存 ~open_log_cache~
@@ -1233,7 +1478,7 @@ useradd -r -g nginx -M nginx
    - ~https~ 是否开启TLS/SSL，on开启，空禁用
    - ~$msec~ 1970/1/1到现在的毫秒数，用于日志写入时间，单位为秒，精度到毫秒
    - ~$bytes_sent~ 已发送了多少字节
-   - ~$request_body_file~ 临时粗放请求包体的文件
+   - ~$request_body_file~ 临时存放请求包体的文件
      - 若包体非常则不会存文件，那么该变量则为空。若使用 ~client_body_in_file_only on~ 指令，则会强制所有包体存入文件，则能保证该变量有值。
    - ~$request_body~ 请求中的包体，当且仅当使用反向代理，且设置用内存暂存包体时有效。
    - ~$time_local~ 以服务器本地时间标准输出的当前时间，例如 ~14/Nov/2018:15:55:37 +0800~
@@ -1249,6 +1494,17 @@ useradd -r -g nginx -M nginx
    3) sent_http_HEADER，服务端返回的响应的HEADER
 3) 自定义变量：用户通过 ~set variable_name value;~ 定义
 4) 使用变量： ~$variable_name~
+5) upstream模块提供的变量（不含cache）
+   - ~$upstream_addr~ 上游服务器的IP，格式为可读字符串，例如127.0.0.1:8012
+   - ~$upstream_connect_time~ 与上游服务建立连接消耗的时间，单位为秒，精确到毫秒
+   - ~$upstream_header_time~ 接收上游服务发回响应中http头部所消耗的时间，单位为秒，精确到毫秒
+   - ~$upstream_response_time~ 接收上游服务发回完整响应所消耗的时间，单位为秒，精确到毫秒
+   - ~$upstream_http_名称~ 从上游服务返回的响应头部的值
+   - ~$upstream_bytes_received~ 从上游服务接收到的响应长度，单位为字节
+   - ~$upstream_response_length~ 从上游服务接收到的响应主体长度，单位为字节
+   - ~$upstream_status~ 从上游服务接收的HTTP响应状态码，若连接失败则返回502
+   - ~$upstream_cookie_名称~ 从上游服务返回的响应头Set-Cookie中取出的cookie值
+   - ~$upstream_trailer_名称~ 从上游服务的响应尾部取到的值
 
 ** 全局配置
 对下面的http/mail/stream等都起作用，主要分为
@@ -1385,6 +1641,8 @@ http {
   # don't buffer data-sends(disable Nagle algorithm). Good for sending frequent small bursts of data in real time.
   tcp_nodelay on;
 
+  # IE6禁用KeepAlive特性
+  keepalive_disable msie6;
   # TCP连接保持时间，单位秒
   keepalive_timeout 30;
   # 单个客户端在单个keep-alive链接上可以发送的请求数上线。
@@ -2323,6 +2581,68 @@ shared memory
            }
          }
          #+end_src
+   18) geo
+       - 根据IP地址和子网掩码设置变量值
+       - 语法: ~geo [$address] $variable {......}~
+       - 上下文: http
+       - ~$address~ 默认为 ~$remote_addr~
+       - 示例
+         #+begin_src
+         geo $country {
+           # 优先最长匹配
+           # 通过IP和子网掩码的方式，定义IP范围，当IP地址在范围内时新变量使用对应的参数值
+           # default 指定默认值 
+           # proxy 指定下游可信地址及开启realip功能，此时$remote_addr的值为X-Forwarded-For头部值的最后一个IP地址
+           # proxy_recursive 允许循环地址搜索
+           # delete 删除指定网络
+           # include 提高可读性
+
+           default ZZ;
+           proxy 116.62.189.142;
+
+           127.0.0.0/24 US; # 127.0.0.2 能命中
+           127.0.0.1/32 RU; # 仅127.0.0.1能命中
+           192.168.2.0/24 UK;     
+         }
+         #+end_src
+   19) geoip
+       - 安装
+         1. 安装MaxMind里的geoip的C开发库(https://dev.maxmind.com/geoip/legacy/downloadable/)
+         2. 编译Nginx ~--with-http_geoip_module~
+         3. 下载MaxMind中的二进制地址库
+       - 示例
+         #+begin_src
+         http {
+           # 配置IP和国家映射的数据库文件
+           geoip_country /path/to/GeoIP.dat;
+           # 配置IP和城市映射的数据库文件
+           geoip_city /path/to/GeoLiteCity.dat;
+
+           # 配置对于哪些地址或地址段启用geoip功能
+           # geoip_proxy address | CIDR
+           geoip_proxy 119.168.41.0/24;
+
+
+           # geoip_country中可用参数
+           # $geoip_country_code 2个字母的国家代码，如CN
+           # $geoip_country_code3 3个字母的国家代码，如CHN
+           # $geoip_country_name 国家名称，如China
+
+           # geoip_city中可用参数
+           # $geoip_latitude 维度
+           # $geoip_longitude 经度
+           # $geoip_city_continent_code 洲，如EU或AS
+           # $geoip_country_code 2个字母的国家代码，如CN
+           # $geoip_country_code3 3个字母的国家代码，如CHN
+           # $geoip_country_name 国家名称，如China
+           # $geoip_region 洲或省的代码，如02
+           # $geoip_region_name 洲或省的代码，如Zhejiang
+           # $geoip_city 城市名称
+           # $geoip_postal_code 邮编
+           # $geoip_area_code 仅美国使用的电话区号，如408
+           # $geoip_dma_code 仅美国使用的DMA编码，如807
+         }
+         #+end_src
 
 ** 第三方模块
    1. ngx_http_concat_module
@@ -2388,12 +2708,117 @@ shared memory
       #+end_example
 * TODO 分层缓存机制
 ** 浏览器层
-1) 用户代理本地的校验是否过期
-   Expires(HTTP1.0版本中的定义), Cache-Control(max-age)(HTTP1.1版本中的定义)
-2) 协议中Etag头信息校验
-   Etag，基于文件内容和修改时间等信息生成的文件指纹。
-3) Last-Modified头信息校验
-   Last-Modified，最小粒度为秒，因此一秒内发生的变化是无法区分的。
+*** 浏览器本地缓存
+**** Service Worker
+     Service Worker作为运行在浏览器背后的独立线程，可以实现灵活的缓存策略(缓存的文件、缓存时效、缓存匹配规则等)。
+     前提：站点使用HTTPS协议。
+     步骤：
+     1. 注册Service Worker，监听install事件缓存资源。
+     2. 再次访问系统时，拦截请求并依据自定义的规则匹配缓存，若缓存击穿则调用fetch函数向上游获取资源。
+
+**** Memory Cache
+     1. 只要Tab页面没有被关闭，那么普通刷新或页面跳转时均可利用Memory Cache。
+     2. 通过preloader相关指令如 (~<link rel="prefetch">~)会在边解析JS边下载资源。
+
+     注意：内存缓存在缓存资源时并不关心返回资源的HTTP缓存头Cache-Control是什么值，同时资源的匹配也并非仅仅是对URL做匹配，还可能会对Content-Type，CORS等其他特征做校验。
+
+**** Disk Cache
+     即使是跨站点，相同地址的资源一旦被Disk Cache下来，就可以共享利用。
+     强缓存和协商缓存都是利用Disk Cache实现。
+
+**** Push Cache
+     Push Cache是HTTP/2的内容，当Service Cache、Memory Cache和Disk Cache都没有命中时，才会使用Push Cache。
+     Push Cache只存活在Session中，因此一旦Session结束则被释放，在Chrome中存活大概5分钟。
+     特点：
+     - 所有的资源都能被推送，并且能够被缓存,但是 Edge 和 Safari 浏览器支持相对比较差
+     - 可以推送 no-cache 和 no-store 的资源
+     - 一旦连接被关闭，Push Cache 就被释放
+     - 多个页面可以使用同一个HTTP/2的连接，也就可以使用同一个Push Cache。这主要还是依赖浏览器的实现而定，出于对性能的考虑，有的浏览器会对相同域名但不同的tab标签使用同一个HTTP连接。
+     - Push Cache 中的缓存只能被使用一次
+     - 浏览器可以拒绝接受已经存在的资源推送
+     - 可以给其他域名推送资源
+
+*** HTTP缓存机制
+    1. 浏览器发起请求
+    2. 查看本地缓存中所请求的资源的Cache-Control(若不存在或浏览器不支持，则查看Expires)响应头部，若有效则直接返回并结束流程。
+       强缓存：命中通过Expires和Cache-Control响应头部设置的缓存，在请求资源时不会向服务端发送请求，而是直接从本地磁盘读取或内存读取。在Chrome的DevTools/Network中被标识为from disk cache或from memory cache。
+       - Expires，HTTP1.0定义。指定资源到期的绝对时间，并且该绝对时间为 ~服务端接收请求的服务端时间+max-age~ ，并表示为 ~Expires: Wed, 22 Oct 2018 08:41:00 GMT~ 。
+         - 过期条件：当浏览器端本地时间超过Expires响应头部值。
+         - 问题：浏览器端和服务端存在时差，或者修改浏览器端的本地时间那么缓存有效性则不可靠。
+       - Cache-Control，HTTP1.1定义。指定资源到期的相对时间，并且该相对时间是以浏览器端接收响应的时间作为基准。因此相对Expires更可靠。
+         Cache-Control可以在请求头部或响应头部中设置，并且可以组合使用多种指令
+         - public，响应报文允许被链路中任何一个节点缓存。
+           如链路为Browser<-Varnish<-Nginx<-Server，那么Browser、Varnish和Nginx都可以缓存该响应报文，其他浏览器访问时直接从中间节点返回内容即可。
+           - 适用于：响应头部
+         - private，Cache-Control的默认值，响应报文仅允许Browser缓存，链路中其它节点不能缓存该响应报文(即使有缓存也转发请求到上游服务获取新的响应报文)。
+           - 适用于：响应头部
+         - no-cache，浏览器端缓存资源，但不使用强缓存，而是使用协商缓存。
+           - 适用于：请求头部、响应头部
+         - no-store，不使用强缓存和协商缓存，每次请求都从上游服务器获取全新的内容。
+           - 适用于：请求头部、响应头部
+         - max-age=xxx，单位秒，缓存多少秒后失效。当超出max-age时需要向服务端发送请求，若请求失败则返回缓存数据。
+           - 适用于：请求头部、响应头部
+         - s-maxage=xxx，单位秒，缓存CDN等代理服务器资源的多少秒后失效，优先级高于max-age。
+           - 适用于：响应头部
+         - max-stale[=xxx]，单位秒
+           - 适用于：请求头部
+           - 不指定时(默认值)，当超出max-age时需要向服务端发送请求，若请求失败则返回失败。
+           - 指定但没有值，当超出max-age时需要向服务端发送请求，若请求失败则返回缓存数据。
+           - 指定且有值，则表示当超出max-age时需要向服务端发送请求，若请求失败且没有超过 ~max-age+max-stale~ 则返回缓存数据。
+         - min-fresh=xxx，单位秒
+           - 适用于：请求头部
+           - 缓存服务器缓存的资源小于该值才会被作为响应，否则需要请求上游服务重新获取资源。
+         - no-transform
+           - 适用于：请求头部、响应头部
+           - 代理服务器不可以更改媒体类型。用于防止缓存或代理服务器压缩图片等操作。
+         - only-if-cached
+           - 适用于：请求头部
+           - 请求缓存服务器的资源，并且不再确认资源有效性。若缓存服务器无响应则返回504 Gateway Timeout。
+         - must-revalidate
+           - 适用于：响应头部
+           - 缓存服务器缓存资源，每次响应缓存资源前都必须再向源服务器进行确认，若无法连通上游服务则返回504 Gateway Timeout。
+           - 注意：使用must-revalidate会忽略max-stale
+         - proxy-revalidate
+           - 适用于：响应头部
+           - 要求代理服务器在该缓存之前必须再次验证缓存的有效性。
+    3. 协商缓存，协商缓存命中则返回304 Not Modified，失败则返回200
+       1. 获取本地缓存中所请求的找资源的Etag（基于文件内容和修改时间等信息生成的文件指纹。）响应头部，并作为If-None-Match请求头部发送给服务端，若命中则返回304 Not Modified。
+       2. 若没有Etag获取Last-Modified响应头部，并作为If-Modified-Since请求头部发送给服务端，并与服务端资源的最后修改时间对比，若服务端资源的修改时间早于If-Modified-Since则返回304 Not Modified。
+          其中 ~Last-Modified: Fri, 22 Jul 2016 01:47:00 GMT~ 
+          - 缺点：
+            1. 由于Last-Modified最小单位是秒，若服务端中在一秒内对资源进行多次修改，但还是会被认为命中缓存，则不会返回最新的内容。
+            2. 若在服务端打开资源文件，即使没有修改其中内容也会更新该资源的最后修改时间，造成缓存失效。
+            3. 若集群的时间不一致，那么产生的Last-Modified和验证都有差异。
+
+*** 用户行为对浏览器HTTP缓存的影响
+    1. 运行新Tab则从disk cache中匹配缓存。
+    2. 普通刷新(按F5)当前页面，由于Tab没有被关闭，因此从memory cache中匹配缓存，其次才是disk cache
+    3. 强制刷新(按Ctrl+F5)当前页面，不使用缓存且请求头部带上 ~Cache-Control: no-cache~ 和 兼容用的 ~Pragma: no-cache~ 。
+
+*** Nginx配置
+    - ~etag on | off~
+      - 上下文: http, server, location
+    - ~expires [modified] time~
+      - 作用：同时设置Expires和Cache-Control的值
+      - 默认值: ~expires off~
+      - max 就是10年缓存期
+        - ~Expires: Thu, 31 Dec 2037 23:55:55 GMT~
+        - ~Cache-Control: max-age=315360000~
+      - off 不添加或修改Expires和Cache-Control字段
+      - epoch 就是协商缓存
+        - ~Expires: Thu, 01 Jan 1970 00:00:01 GMT~
+        - ~Cache-Control: no-cache~
+      - time 设置具体时间，可以携带单位
+        - 一天内的具体时刻， ~@18h30m~ 最近一个下午6点30分
+        - 正数，即Cache-Control: max-age的值
+        - 负数，即Cache-Control: no-cache
+      - 若使用modified，则最终有效时间为 ~资源最后修改时间+time~
+      - 上下文: http, server, location, if in location
+    - ~if_modified_since exact |  before |  off~
+      - off 忽略请求中的If-Modified-Since请求头部
+      - exact 精确匹配If-Modified-Since请求头部和资源最后修改时间，完全相同才命中。
+      - before 只要If-Modified-Since请求头部晚于或等于资源最后修改时间就命中。
+      - 上下文: http, server, location, if in location
 
 ** DNS层
    1. DNS系统本地缓存， 客户端操作系统DNS缓存
@@ -2720,6 +3145,64 @@ shared memory
 17. nginx加密传输优化（SSL）
 18. web服务器磁盘挂载及网络文件系统的优化
 19. 使用nginx cache
+
+** HTTP Keep-Alive
+   通过启用HTTP Keep-Alive特性，让多个HTTP请求复用TCP链接，达成如下优化
+   1. 减少TCP 3次握手和4次挥手的次数。
+   2. 通过减少并发链接数，减少服务器的资源消耗。
+   3. 由于TCP提供拥塞控制的功能，即建立链接后传输数据包的速度是逐渐上升。而复用TCP链接即减少这个过程，让后续HTTP请求均以TCP链接最佳速度传输数据包。
+
+*** 相关的HTTP协议
+    - Connection头部
+      - 作用：发送方是否提供HTTP Keep-Alive特性。必须双方都提供才能生效。
+      - 位置：请求头、响应头
+      - 取值：close，keepalive。其中HTTP1.0默认为close，HTTP1.1默认为keepalive。
+    - Keep-Alive头部
+      - 作用：服务端告知客户端链接至少保留多少秒
+      - 位置：响应头
+      - 示例: ~Keep-Alive: timeout=10~
+
+*** Nginx下游HTTP Keep-Alive配置
+    上下文：http, server, location
+    - ~keepalive_disable none | browser ....~
+      - 默认值 msie6
+    - ~keepalive_requests number~
+      - 默认值 100
+      - 作用：一个TCP链接最多接受多少个HTTP请求
+    - ~keepalive_timeout timeout [header_timeout]~
+      - 默认值 75s
+      - 作用：若多少秒还没有新的HTTP请求，则关闭TCP链接。设置header_timeout会生成响应头 ~Keep-Alive: timeout=$header_timeout~
+
+*** Nginx上游HTTP Keep-Alive配置 
+    模块：ngx_http_upstream_keepalive_module，默认已编译进Nginx
+    作用：降低Nginx与上游服务器建立、关闭连接的消耗，提升吞吐量的同时降低延时。
+    使用：
+    #+begin_src
+    upstream app {
+      # keepalive connections
+      # Nginx对该组上游服务最多保持多少个Keep-Alive的TCP链接
+      keepalive 100;
+
+      # keepalive_requests number
+      # 每个TCP链接最多处理多少个HTTP请求，达到上限则关闭TCP链接
+      # 默认100
+      keepalive_requests 100;
+
+      # keepalive_timeout timeout
+      # 最长多少秒没有请求则关闭该TCP链接 
+      # 默认60s
+      keepalive_timeout 60s;
+
+      server 10.10.1.1;
+      server 10.10.1.2;
+    }
+
+    location / {
+        proxy_http_version 1.1; # 设置转发给上游服务的请求头Version为1.1，而HTTP1.1默认启动Keep-Alive
+        proxy_set_header Connection ""; # 采用HTTP协议默认的Keep-Alive模式
+        proxy_pass http://app/;
+   }
+    #+end_src
 
 ** TODO 内存分配器
 *** 使用google-perftools优化Nginx的高并发性能
