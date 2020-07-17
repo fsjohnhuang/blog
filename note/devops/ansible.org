@@ -594,12 +594,23 @@ class FilterModule(object):
         # 注册filter
         return {
             'a_filter': self.a_filter,
-            'another_filter': self.b_filter
+            'another_filter': self.required,
         }
 
-    def a_filter(self, a_variable):
-        a_new_variable = a_variable + ' CRAZY NEW FILTER'
+    def a_filter(self, value):
+        a_new_variable = value + ' CRAZY NEW FILTER'
         return a_new_variable
+
+    def required(self, value, name):
+        """
+        Usage:
+          operation1 | required("name")  
+        """
+        if value is None \
+           or len(value) == 0:
+           raise Exception("Variable `%s` is required." % name)
+
+        return value
 #+END_EXAMPLE
 
 * Playbook

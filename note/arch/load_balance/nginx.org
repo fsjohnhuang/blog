@@ -1873,7 +1873,13 @@ user nobody;
 # 当为IO密集型应用，如图片下载服务，则worker进程数为CPU核数的1.5或2倍
 worker_processes 8;
 
-# 为每个进程绑定到指定的CPU物理核上(一个核可以绑定多个进程)，那么在并发和进程切换时效率更高
+# CPU读取寄存器的速度是小于1ns，读取1L是1ns，2L为3ns，而3L为12ns。
+# 为每个进程绑定到指定的CPU物理核上(一个核可以绑定多个进程)，那么可以提高CPU缓存命中率。
+# L1的指令CPU独享缓存：cat /sys/devices/system/cpu/cpu1/cache/index0/size
+# L1的数据CPU独享缓存：cat /sys/devices/system/cpu/cpu1/cache/index1/size
+# L2的数据CPU独享缓存：cat /sys/devices/system/cpu/cpu1/cache/index2/size
+# L3的数据共享缓存：cat /sys/devices/system/cpu/cpu1/cache/index3/size
+# 查看共享L3数据缓存的CPU信息：cat /sys/devices/system/cpu/cpu0/cache/index3/shared_cpu_list
 worker_cpu_affinity 00000001 00000010 00000100 00001000 00010000 00100000 01000000 10000000;
 
 # 由于Nginx worker进程是采取单线程处理多连接的模式
@@ -3475,8 +3481,6 @@ shared memory
 
 * TODO 性能调优
 
-  惊群：新请求过来激活大量非活跃的进程，然后仅一个进程处理该请求。
-
 ** Nginx端优化项目
 1. gzip压缩优化
 2. expires缓存有还
@@ -3562,6 +3566,42 @@ shared memory
    - CPU
    - 内存
 
+** 多核间的负载均衡
+
+*** 惊群效应
+   惊群：新请求过来激活大量非活跃的进程，然后仅一个进程处理该请求。
+   解决方案：
+   1. ~accept_mutx on~
+      - 问题：早期的Linux内核实现存在问题，当某个新的TCP连接请求到来时会唤醒所有监听该端口的Worker进程，然后仅其中一个Worker进程获取SYN数据包，而其它Worker进程则重新进入S状态。
+      - 解决方法：早期的Nginx通过在其内部提供accept_mutx锁，保证同一时间仅有一个Worker进程会响应新的TCP连接请求。
+   2. Linux3.9(CentOS7)后的SO_REUSEPORT提供内核层面的多核负载均衡。
+
+*** 多队列网卡
+    - RSS：Receive Side Scaling，硬中断负载均衡
+      - 前提条件：需要网卡支持
+      - 启用前：所有网络报文的硬中断都由一个CPU核处理
+      - 启用后：在每个CPU核都分配独立的队列，网络报文的硬中断能分发给多个CPU核处理
+    - RPS：Receive Packet Steering，软中断负载均衡
+      - 处理一个网络报文需要硬中断(上半部)和软中断(下半部)
+    - RFS：Receive Flow Steering
+      - 基于RPS再做一层负载均衡策略
+
+    注意：需要根据实际场景决定是否启用上述特性。
+
+*** NUMA架构
+    - 普通架构：服务器主板可搭载两组CPU，而两组CPU的所有核心均通过统一的总线访问主存，那么核数越多越容易引发冲突从而降低运行效率。
+    - NUMA架构：将主存分为两组（如总量为16G，那么就分成两组8G），每组CPU分别通过两条总线访问两组主存，其中物理距离近的访问速度更快，并且优先访问物理距离近的主存。
+      #+begin_src bash
+      # 查看CPU组和内存组的总容量和可用容量
+      numactl --hardware
+
+      # 查看访问CPU组物理距离近的主存的命中率
+      # 若numa_miss高则可通过BIOS执行如下优化
+      # 1. 关闭NUMA架构
+      # 2. 禁止访问物理距离远的主存
+      numastat
+      #+end_src
+
 ** TODO 内存分配器
 *** 使用google-perftools优化Nginx的高并发性能
 *** jemalloc
@@ -3569,6 +3609,85 @@ shared memory
 ** TODO 降权启用Nginx
    
 ** TCP/IP栈优化配置
+   优化思路：
+   1. 并发建立更多的TCP连接
+   2. 更快地建立TCP连接
+   3. 应对安全攻击
+
+*** 应对安全攻击
+    半连接状态攻击：攻击者短时间伪造源地址和源端口不同的SYN报文，快速占满网卡的backlog队列和TCP的SYN backlog队列，使服务器不能为正常用户服务。此时TCP连接的状态为SYN_RCVD，即半连接状态。
+
+    - TCP连接建立的正常流程
+      1. 网卡接收SYN数据包，并缓冲到网卡的backlog队列中；
+      2. recv SYN：将从网卡的backlog队列中取出SYN数据包，缓冲到SYN Queue，并返回SYN-ACK数据包；
+      3. recv ACK：将从SYN Queue中取出SYN数据包，缓冲到Accept Queue，通知调用accept方法监听连接建立的Worker进程读取数据包。
+    - 应用程序处理缓慢
+      Accept Queue已满无法再执行recv ACK操作。
+    - 半连接状态攻击
+      SYN Queue已满无法再执行recv SYN操作。
+
+
+    解决方法：
+    - 常规配置应对（/etc/sysctl.conf）
+      #+begin_src
+      # 接收自网卡，但未被内核协议栈处理的报文队列长度。那么需要保证该队列长度足够大。
+      net.core.netdev_max_backlog = 262144
+
+      # SYN_RCVD状态连接的最大个数。那么需要保证该队列长度足够大。
+      net.ipv4.tcp_max_syn_backlog = 262144
+
+      # 超出处理能力(即超出队列长度)时，对新来的SYN直接回包RST，丢弃连接。
+      net.ipv4.tcp_abor_on_overflow
+      #+end_src
+    - tcp_syncookies应对
+      - 原理
+        1. 当SYN Queue满后，新的SYN不进入队列而是根据客户端的信息计算出cookie再作为SYN+ACK中的序号返回给客户端；
+        2. 正常客户端发送ACK报文时需要携带cookie，那么服务端根据cookie验证并建立TCP连接。
+      - 缺点
+        由于cookie占用序号空间(Sequence 32bit的字段)，因此会导致所有TCP可选功能(如扩充窗口、时间戳等)均失效，出现性能下降。
+      - 配置（/etc/sysctl.conf）
+        #+begin_src
+        net.ipv4.tcp_syncookies=1
+        #+end_src
+       
+*** 并发建立更多的TCP连接
+    1. 调整文件描述符总数上限
+       1. 操作系统全局
+          - ~fs.file-max~ 操作系统中所有进程可使用的最大文件描述符总数
+            如执行 ~sysctl -a | grep fs.file-max~ 结果为 ~fs.file-max = 382467~
+          - ~fs.file-nr~ 查看当前 已分配、正使用、上限 的文件描述符数量
+            如执行 ~sysctl -a | grep fs.file-nr~ 结果为 ~fs.file-nr = 21632 0 382467~
+       2. 针对某用户(/etc/security/limits.conf)
+           #+begin_src
+           # 设置root用户最大的软文件描述符上限
+           # 软文件描述符上限是以root身份运行的进程可以动态修改，但不能大于硬文件描述符上限。
+           # 因此软文件描述符上限必须小于等于硬文件描述符上限。
+           root soft nofile 65535
+           # 设置root用户最大的硬文件描述符上限
+           root hard nofile 65535
+           #+end_src
+       3. 针对进程
+           #+begin_src
+           # 设置每个worker进程可打开的文件描述符上限
+           worker_rlimit_nofile number;
+           #+end_src
+    2. 调整backlog队列长度
+       1. 可通过/etc/sysctl.conf配置
+          #+begin_src
+          # SYN_RCVD状态连接的最大个数。那么需要保证该队列长度足够大。
+          net.ipv4.tcp_max_syn_backlog = 262144
+ 
+          # ACCEPT队列存储的是已完成3次握手的连接
+          # 系统级别的最大长度
+          net.core.somaxconn = 262144
+          #+end_src
+       2. 可通过nginx.conf配置
+          #+begin_src
+          # 针对端口的ACCEPT队列最大长度，不能大于net.core.somaxconn的设置
+          listen address[:port] [backlog=number];
+          #+end_src
+
+
    提高网络带宽利用率——修改TCP初始拥塞窗口
    1. SYN_SENT状态(客户端配置)
       #+begin_src
@@ -3580,17 +3699,6 @@ shared memory
       #+end_src
    2. SYN_RCVD状态，也称为半连接状态(服务器端配置)
       #+begin_src
-      # 攻击者短时间伪造源地址和源端口不同的SYN报文，快速占满backlog队列，使服务器不能为正常用户服务
-
-      # 接收自网卡，但未被内核协议栈处理的报文队列长度。那么需要保证该队列长度足够大。
-      net.core.netdev_max_backlog
-
-      # SYN_RCVD状态连接的最大个数。那么需要保证该队列长度足够大。
-      net.ipv4.tcp_max_syn_backlog
-
-      # 超出处理能力(即超出队列长度)时，对新来的SYN直接回包RST，丢弃连接。
-      net.ipv4.tcp_abor_on_overflow
-  
       # 被动建立连接时，发送SYN/ACK的重试次数
       net.ipv4.tcp_synack_retries
       #+end_src
@@ -3599,6 +3707,40 @@ shared memory
    2. 返回SYN/ACK网络分组
    3. 接收到ACK网络分组将SYN队列的记录取出，移到内核的ACCEPT队列中等待Nginx的accept方法提取
      其中ACCEPT队列的长度可以通过Nginx配置的 ~listen~ 的backlog配置
+
+*** TCP Fast Open(TFO)
+    1. 标准的TCP连接建立的3次握手过程
+       1. 客户端 - SYN -> 服务端
+       2. 服务端 - SYN+ACK -> 客户端
+       3. 客户端 - ACK -> 服务端
+       4. 客户端 - HTTP GET/POST/...... -> 服务端
+       5. 服务端 - HTTP响应报文 -> 客户端
+    2. 实际运行HTTP协议的TCP连接建立的3次握手过程
+       1. 客户端 - SYN -> 服务端
+       2. 服务端 - SYN+ACK -> 客户端
+       3. 客户端 - ACK+HTTP GET/POST/...... -> 服务端
+       4. 服务端 - HTTP响应报文 -> 客户端
+    3. 启用Fast Open TCP的建立过程
+       - 首次建立连接
+         1. 客户端 - SYN -> 服务端      
+         2. 服务端 - SYN+ACK+Cookie -> 客户端  （Cookie有时效性）
+         3. 客户端 - ACK+HTTP GET/POST/...... -> 服务端
+         4. 服务端 - HTTP响应报文 -> 客户端
+       - 后续建立连接
+         1. 客户端 - SYN+Cookie+HTTP GET/POST/...... -> 服务端
+         2. 服务端 - SYN+ACK+HTTP响应报文 -> 客户端
+
+**** 配置
+     1. 系统全局(/etc/sysctl.conf)
+        #+begin_src
+        # 0 关闭，1 作为客户端时启用，2 作为服务端时启用，3 无论是客户端还是服务端都启用
+        net.ipv4.tcp_fastopen = 3
+        #+end_src
+     2. nginx.conf
+        #+begin_src
+        # 为防止带数据的SYN攻击，限制TFO连接队列的最大长度
+        listen address[:port] [fastopen=number];
+        #+end_src
 
 * TODO OpenResty
   https://moonbingbing.gitbooks.io/openresty-best-practices/content/openresty/helloworld.html
