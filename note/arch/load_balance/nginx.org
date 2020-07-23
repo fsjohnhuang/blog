@@ -430,7 +430,6 @@ NIO是ORACLE发明的
         proxy_bind $remote_addr transparent;
         #+end_src
 
-
 ** 启用TCP keepalive
    ~proxy_socket_keepalive off | on~
    - 作用：启动时会定时发送探测包检查TCP连接，并关闭已失效的TCP连接。
@@ -677,6 +676,10 @@ NIO是ORACLE发明的
    - ~proxy_upload_rate 0~
      - 作用：限制Nginx读取下游客户端请求的速度
      - 默认无限制
+     - 上下文：stream, server
+   - ~tcp_nodelay on | off~
+     - on 禁用Nagle算法，降低时延
+     - off 启用Nagle算法，提高吞吐量
      - 上下文：stream, server
    - ~proxy_pass~
    - ~proxy_bind~ 绑定转发的Nginx本机地址和端口
@@ -1422,42 +1425,45 @@ useradd -r -g nginx -M nginx
      - 不适用场景：及时发送小批量数据，或接收端不一定会及时回应
        1. 游戏服务器要及时跟踪用户的鼠标坐标。
        2. 没有使用keepalive的HTTP连接。在TCP四次挥手中向服务端向客户端发送FIN报文要等缓存区满才能发送，导致客户端处于FIN__WAIT2时间延长，即阻塞关闭socket的时间延长。
-   - 默认值： ~tcp_nopush off~
+   - 默认值： ~tcp_nopush off~ 表示采用CORK算法，完全禁止小报文的发送提升吞吐量。
    - 上下文：http,server,location
-   - 注意：仅在 ~sendfile on~ 时生效
+   - 注意：仅在 ~sendfile on~ 时 ~tcp_nopush off~ 才生效
 8) ~tcp_nodelay on | off;~
    - 作用：和 ~tcp_nopush~ 作用相反，启用时立即向网络发送消息。
    - 默认值： ~tcp_nodelay on~
    - 上下文：http,server,location
    - 注意：当连接为keepalive时才生效。
-9) ~gzip on | off;~
-   - 作用：启用gzip压缩
-   - 默认值： ~gzip off~
+9) ~postpone_output 1460~
+   - 作用：最小发送的字节数，若不满则缓冲到Nginx内存中不发送。若为报文的最后一批字节则直接发送，不受该配置限制。
    - 上下文：http,server,location
-10) ~gzip_comp_level level~
+10) ~gzip on | off;~
+    - 作用：启用gzip压缩
+    - 默认值： ~gzip off~
+    - 上下文：http,server,location
+11) ~gzip_comp_level level~
     - 作用：设置压缩率级别，越大表示压缩率越大。值从1到10。
     - 默认值： ~gzip_comp_level 1~
     - 上下文：http,server,location
-11) ~gzip_http_version 1.0|1.1~
+12) ~gzip_http_version 1.0|1.1~
     - 作用：设置压缩对应的HTTP协议版本，若HTTP版本与之不匹配则不启用GZip压缩。
     - 默认值： ~gzip_http_version 1.1~
     - 上下文：http,server,location
     - 注意：值为1.1则1.0不压缩，值为1.0则1.0和1.1均启用压缩。
-12) ~gzip_types <mine> <mine>*;~
+13) ~gzip_types <mine> <mine>*;~
     - 作用：设置被压缩的文件的MIME类型，如 ~text/plain~, ~application/x-javascript~
     - 上下文：http,server,location
     - 示例
       #+begin_example
       gzip_types text/plain application/x-javascript;
       #+end_example
-13) ~gzip_disable "regex"~
+14) ~gzip_disable "regex"~
     - 作用：匹配正则表达式的请求，返回非压缩版本
     - 示例
       #+begin_example
       # IE6及以下的返回非压缩版本
       gzip_disable "MSIE [1-6]\.";
       #+end_example
-14) ~gzip_vary on | off;~
+15) ~gzip_vary on | off;~
     - 作用：给CDN和反向代理服务器使用，针对相同的URL，根据请求头字段Accept-Encoding来决定返回压缩还是非压缩版本的资源。
     - 默认值： ~gzip_vary off~
     - HTTP响应头Vary
@@ -1470,10 +1476,10 @@ useradd -r -g nginx -M nginx
         1) 内容来自请求头，如Accept-Encoding,User-Agent等
         2) 用户代理会将Vary的值也作为缓存是否有效的依据之一，若缓存中Vary值与服务器返回Vary值不同，则表示缓存失效
         3) Vary值为*时，表示任何请求都是唯一并且非缓存的
-15) ~gzip_min_length size~
+16) ~gzip_min_length size~
     - 作用：设置启用压缩的资源最小字节数，建议设置为 ~gzip_min_length 2k~
     - 默认值： ~gzip_min_length 0~
-16) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
+17) ~gzip_proxied off | expired | no-cache | no-store | private | no_last_modified | no_etag | auth | any~
     - 作用：作为反向代理时,当后端服务响应头包含Via时，启用或关闭后端服务返回的结果。
     - 默认值： ~gzip_proxied off;~ 关闭所有代理结果数据的压缩
     - 值解释
@@ -1492,7 +1498,7 @@ useradd -r -g nginx -M nginx
         2) 请求经过代理服务B，那么代理服务A转发请求时会在请求头Via上追加服务B的信息，这是Via中包含A和B的信息；
         3) 请求p到达应用服务，那么应用服务即可通过请求头的Via得知经过的代理服务信息，然后在将信息原封不动地写入响应头Via返回；
         4) 响应返回到用户代理，那么用户代理也知道经过的代理服务信息。
-17) ~gzip_buffers number size~
+18) ~gzip_buffers number size~
     - 作用：设置系统获取多少个多少字节的存储单元用于存储gzip压缩结果
     - 默认值：申请和未压缩资源的大小申请
     - 示例
@@ -1500,7 +1506,7 @@ useradd -r -g nginx -M nginx
       # 申请以8KB为存储单元大小，申请16个存储单元
       gzip_buffers 16 8k;
       #+end_example
-18) ~http_gzip_static_module~ 内置模块
+19) ~http_gzip_static_module~ 内置模块
     - 作用：读取任何文件时均会先读取相同目录下的 ~.gz~ 文件，若没有才动态压缩或读取原文件。
     - 语法： ~gzip_static on | off;~
     - 默认值： ~gzip_static off;~
@@ -1510,9 +1516,9 @@ useradd -r -g nginx -M nginx
          #+begin_example bash
          gzip -c 9 /path/to/uncompressed /path/to/compressed
          #+end_example
-19) ~http_gunzip_module~
+20) ~http_gunzip_module~
     - 作用：对于不支持gzip的用户代理，提供另一种压缩方式。一般不用。
-20) ~expires~
+21) ~expires~
     - 作用：添加响应头Cache-Control和Expires
     - 语法：
       1) ~expires time;~
@@ -1538,7 +1544,7 @@ useradd -r -g nginx -M nginx
       # 缓存有效期为24小时
       expires 24h;
       #+end_example
-21) ~add_header name value [always];~
+22) ~add_header name value [always];~
     - 作用：添加响应头，如 ~Access-Control-Allow-Origin~ 做跨站资源请求
     - 坑：
       1. 发生 ~rewrite~ 时，第一个匹配的location中的add_header指令将失效
@@ -1612,7 +1618,7 @@ useradd -r -g nginx -M nginx
         break;
       }
       #+end_example
-22) ~valid_referers none | blocked | server_names | string | regex...;~
+23) ~valid_referers none | blocked | server_names | string | regex...;~
     - 值类型：
       - none 表示直接从浏览器输入地址访问，没有 ~Referer~ 请求头。
       - blocked 表示存在 ~Referer~ 请求头，但被防火墙或代理删除了值。即看到的是 ~Referer:~
@@ -1629,7 +1635,7 @@ useradd -r -g nginx -M nginx
           return 403;
       }
       #+end_example
-23) ~secure_link~
+24) ~secure_link~
     - 作用：由于伪造Referer请求头的成本非常低，因此通过 ~valid_referers~ 模块实现防盗链非常容易被破解。而secure_link则通过验证URI中哈希值的方式提供更好的防盗链功能。
     - 过程：
       1. 由某服务器或Nginx生成加密后的安全链接URL，返回给客户端
@@ -1658,7 +1664,7 @@ useradd -r -g nginx -M nginx
       #+begin_src
       
       #+end_src
-24) ~return code [text | url]~ 或 ~return url~
+25) ~return code [text | url]~ 或 ~return url~
     - text 可以为普通字符串、json或使用变量，它将作为响应体
     - url 必须以http或https开头
     - 作用：向客户端直接返回响应状态码
@@ -1686,12 +1692,12 @@ useradd -r -g nginx -M nginx
       return http://fsjohnhuang.io;
       #+end_example
     - 注意：return指令后的其他指令将不会被执行
-25) ~server_tokens on | off~
+26) ~server_tokens on | off~
     - on 作为默认值，在响应头Server中显示版本号，形如 ~Server: nginx/版本号~
     - off 隐藏版本号，形如 ~Server: nginx~
     - 作用：安全优化-隐藏版本号
     - 上下文：http,server,location
-26) ~ssi off |  on~
+27) ~ssi off |  on~
     - 作用：启用Server Side Include。建议禁用。
     - SSI
       - 定义：是一种基于服务端的网页制作技术。就是在将页面内容发送给客户端前，使用SSI指令将文本、图片和其它网页内容添加到当前响应中。
@@ -1699,20 +1705,20 @@ useradd -r -g nginx -M nginx
         - 引入资源 ~<!--#include file="layouts/menu.shtml"-->~
     - 上下文: location
     - 问题：若找不到相应的资源，那么整个响应会报404异常。而通过http_addition_module的add_before_body引入资源，找不到资源时仅引入内容为空，但不影响原来的响应结果。
-27) ~ssi_slient_errors off | on~
+28) ~ssi_slient_errors off | on~
     - 作用：开启后在处理SSI文件出错时不输出错误提示:”[an error occurred while processing the directive] ”
     - 上下文: location
-28) ~ssi_types text/shtml~
+29) ~ssi_types text/shtml~
     - 作用：默认是ssi_types text/html，所以如果需要htm和html支持，则不需要设置这句，如果需要shtml支持，则需要设置：ssi_types text/shtml
     - 上下文: location
-29) ~limit_rate <size>~
+30) ~limit_rate <size>~
     - 作用: 对客户端一个连接设置每秒传输的最大字节数，限速。由于网络带宽有限，因此应该限制某些数据大但相对没有那么重要的资源设置限速，让出带宽给那些重要的数据量小的资源，从而提供重要资源的响应速度。
     - 默认值: no
     - 上下文: http, server, location
     - 示例: ~limit_rate 512k~
     - 或者通过设置变量的方式设置 ~set $limit_size 512k~
     - 注意：由于limit_rate仅限制一个连接的每秒传输上限，所以要配置limit_conn限制并发连接数，才能限制总体的每秒传输数据量。
-30) ~limit_rate_after <size>~
+31) ~limit_rate_after <size>~
     - 作用: 设置客户端一个连接接收多少字节后将启用限速，如果不超过该值则不限速。
     - 默认值: no
     - 上下文: http, server, location
@@ -3560,6 +3566,32 @@ shared memory
    }
     #+end_src
 
+** TCP Keep-Alive
+   应用场景：
+   1. 检查实际已断开的TCP连接，及时断开并释放资源；
+   2. 用于维持与客户端间的防火墙有活跃的网络包。
+
+*** 配置
+    1. Linux配置(/etc/sysctl.conf)
+       #+begin_src
+       # 发送心跳周期，单位秒
+       # 若指定时间内TCP连接上接收任何数据包，则开启检测功能。
+       # 首先会发送一个探测包，若网络通畅且对方已关闭连接时则会返回一个RST数据包，表示连接关闭。
+       net.ipv4.tcp_keepalive_time = 7200
+       # 探测包发送间隔，单位秒
+       # 当第一个探测包发送后等待指定秒数还没有收到响应，则再次发送探测包
+       net.ipv4.tcp_keepalive_intvl = 75
+       # 探测包重试次数
+       # 超过重试次数后还没收到响应则表示连接已关闭
+       net.ipv4.tcp_keepalive_probes = 9
+       #+end_src
+    2. Nginx配置
+       #+begin_src
+       # so_keepalive的值分别是<keepidle>:<keepintvl>:<keepcnt>，和Linux配置是一一对应。
+       # Nginx通过调用set_sockopt配置
+       listen address[:port] [so_keepalive=30m::10]
+       #+end_src
+
 ** 硬件规格
    - 网卡：万兆网卡，例如10G, 25G, 40G等
    - 磁盘：固态硬盘，关注IOPS(随机IO)和BPS指标
@@ -3601,6 +3633,157 @@ shared memory
       # 2. 禁止访问物理距离远的主存
       numastat
       #+end_src
+
+** 滑动窗口/通告窗口
+   
+*** 滑动窗口的功能
+    1. 通过接收方的接收窗口，限制点对点连接的网速，解决报文乱序和可靠传输问题
+    2. Nginx中limit_rate等限速指令都依赖滑动窗口
+    3. 由操作系统内核实现
+    4. 连接的两端各有发送和接收窗口
+
+*** 滑动窗口通信过程
+    1. Client 初始发送窗口可用空间为360 bytes, Server 初始接收窗口可用空间为200 bytes
+    2. Client 发送 140 bytes的内容，那么Client 发送窗口将分配140 bytes的空间缓冲将要发送的内容，剩下220 bytes为可用空间。
+    3. Client发送的报文 Content-Length: 140, Seq=1
+    4. Server 接收 140 bytes 的内容并缓冲到接收窗口，这时接收窗口剩余 60 bytes 可用
+    5. Server响应的报文 ACK, Seq=141(响应的Seq值=请求的Seq+已接收数据的字节数), Window=60(接收窗口的可用空间)
+    6. Client 还有100 bytes的数据要发送，但得知服务端的接收窗口剩下60bytes的可用空间，因此仅向发送窗口缓冲60bytes的数据。此时发送窗口剩余160 bytes的可用空间。
+   
+*** 发送TCP消息流程
+    1. Nginx调用send系统调用发送在Content阶段构建的HTTP响应内容；
+    2. send系统调用内调用tcp_sendmsg系统调用，然后会分配将位于用户态的HTTP响应内容复制到内核态并分别构造为MSS分组；
+    3. 将指向MSS分组的指针压入TCP发送队列(长度由proc/,sys/,net/,core/,wmem/,default/等设置)；
+    4. 当TCP发送队列长度不足时则会导致send系统调用被阻塞；
+    5. 若TCP发送队列，因超时被丢弃或MSS分组发送出去后有空闲空间时，将HTTP响应内容全部复制到内核态；
+    6. 调用tcp_push系统调用，根据Nagle、慢启动等算法发送MSS分组。
+
+*** 接收TCP消息流程
+    1. 网卡传输一个报文(序号51-52)给内核，内核将其插入到receive队列
+    2. 网卡传输一个失序的报文(序号53-54)给内核，内核将其插入到out_of_order队列
+    3. 网卡传输一个报文(序号52-53)给内核，内核将其插入到receive队列
+    4. 遍历out_of_order队列取出报文(序号53-54)并插入到receive队列中正确的位置
+    5. Nginx调用recv系统调用阻塞socket
+       1. recv内部调用tcp_recvmsg系统调用，锁住socket并获取最低接收阈值的数据
+       2. 将receive队列的数据复制到用户态缓冲
+       3. 若已接收最低接收阈值的TCP消息长度，且backlog为空则返回。
+          1. 若没有达到最低接收阈值则阻塞等待
+
+*** TCP缓冲区(receive队列)配置
+    1. /etc/sysctl.conf
+       #+begin_src
+       # 读缓冲最小值、默认值、最大值。单位字节，覆盖net.core.rmem_max
+       net.ipv4.tcp_rmem = 4096  87380  6921456
+       # 写缓冲最小值、默认值、最大值。单位字节，覆盖net.core.wmem_max
+       net.ipv4.tcp_wmem = 4096  16384 4194304
+       # 系统无内存压力、启动压力模式阈值、最大值、单位为页的数量
+       net.ipv4.tcp_mem = 1541646 2055528 3083292
+       # 开启自动调整缓存模式
+       net.ipv4.tcp_moderate_rcvbuf=1
+       #+end_src
+    2. nginx.config
+       #+begin_src
+       listen address[:port] [rcvbuf=size] [sndbuf=size];
+       #+end_src
+
+*** BDP(带宽时延积)
+    - 带宽：每秒传输的字节数
+    - BDP(带宽时延积)：带宽*时延，表示当前正在传输的字节数，即最大接收窗口的字节数。服务器间由于网络带宽和时延都是固定或可预知的，因此可以根据此数据来设置接收窗口空间。
+    - 吞吐量：接收窗口/时延
+
+** 慢启动和拥塞窗口
+   拥塞窗口：发送方主动限制流量，先让处于飞行状态的报文为4个MSS报文，当接收到4个ACK后再让处于飞行状态的报文为8个MSS报文，然后逐渐提升。
+   因此实际发送的流量为滑动窗口和拥塞窗口中的最小值。
+  
+   MSS：每个TCP报文的最大值。
+
+*** 慢启动
+    1. 根据配置设置拥塞窗口(Congestion Window)大小(cwnd为拥塞窗口大小，早期为1，后来改成4，现在经Google建议都改为10了)
+    2. Slow Start, 指数扩展拥塞窗口
+       1. 每收到1个ACK，cwnd=cwnd+1
+       2. 每过一个RTT，cwnd=cwnd*2
+    3. 拥塞避免(Congestion Avoidance)，当拥塞窗口大于预设值threshold时则采用线性扩展拥塞窗口
+       1. 每收到1个ACK，cwnd=cwnd+1/cwnd
+       2. 每过一个RTT，cwnd=cwnd+1
+    4. 当拥塞发生时(即发现丢报文了)，采用TCP Reno算法急速降低拥塞窗口
+       1. RTO超时，则调整threshold=cwnd/2，cwnd=1
+       2. Fast Retrainsmission，收到3个duplicate ACK时，cwnd=cwnd/2，threshold=cwnd
+          1. 快速恢复(Fast recovery)
+             当Fast Retrainsmission出现时，cwnd调整为threshold+3*MSS
+
+*** RTT和RTO
+    - RTT(Round Trip Time)
+      - 一个MSS数据包一来一回的时刻变化的时长
+      - 组成
+        - 物理链路传输时间
+        - 末端处理时间
+        - 路由器排队处理时间
+      - 指导RTO
+    - RTO(Retransmission TimeOut)
+      - 正确应对丢包
+
+** 减少关闭TCP连接的TIME_WAIT端口数量
+
+*** 断连接四次挥手
+    1. Client 调用close方法
+       - 转入FIN_WAIT_1状态
+       - 向Server发送 FIN Seq=x+2 ACK=y+1
+       - Server接收到报文后状态转为CLOSE_WAIT
+    2. Server向Client发送 ACK x+3
+       - Client接收到报文后状态转为FIN_WAIT_2
+    3. Server 调用close方法
+       - Server状态转为LAST_ACK
+       - Server向Client发送 FIN Seq=y+1
+       - Client接收到报文后状态转为TIME_WAIT
+    4. Client向Server发送 ACK=y+2
+
+    1、2步骤完成时Client关闭写通道；3、4步骤完成时Server断开连接。
+    Client的TIME_WAIT状态结束后，Client断开连接。
+
+*** 被动关闭连接端的状态
+    - CLOSE_WAIT状态
+      若服务器上存在大量处于该CLOSE_WAIT状态的连接，那么应用程序很有可能存在bug。即read方法收到数据长度为0的数据后没有及时调用close方法，关闭连接。
+    - LAST_ACK状态
+      若服务器上存在大量处于该LAST_ACK状态的连接，即主动关闭连接端没有发送对应的ACK报文。
+
+*** 主动关闭连接端的状态及配置
+    - FIN_WAIT_1状态
+      #+begin_src
+      # 发送FIN报文的重试次数，0相当于8
+      net.ipv4.tcp_orphan_retries = 0
+      #+end_src
+    - FIN_WAIT_2状态
+      #+begin_src
+      # 保持在FIN_WAIT_2状态的时间，单位秒
+      net.ipv4.tcp_fin_timeout=60
+      #+end_src
+    - TIME_WAIT状态
+      - MSL(Maximum Segment Lifetime) 报文最大生存时间
+      - TIME_WAIT状态保持时长一般为2*MSL
+        - 原因：发送给Server的ACK传输的最大时间为1个MSL，若Server端没有收到继续向Client发送FIN报文，那么FIN报文的传输最大时间也是1个MSL。那么认为当在2*MSL中再没有收到FIN报文，则可关闭连接。否则再次发送对应的ACK报文。
+        - 若TIME_WAIT设置为小于1个MSL带来的问题
+          1. 连接A中的报文C因某些原因延迟到达Server端
+          2. 两端的TCP连接已经断开，且建立新的TCP连接B
+          3. 报文C此时姗姗来迟达到Server端
+          4. 结果Server端无法处理报文C
+          5. 若设置TIME_WAIT为1个MSL，那么报文C要么在关闭前到达Server，要么被丢弃了。
+      - 配置
+        #+begin_src
+        # 默认情况下处于TIME_WAIT状态的连接的资源(端口号)，仍然未释放。
+        # 启动后则表示，作为客户端建立新连接可以使用处于TIME_WAIT状态的连接的端口号。
+        net.ipv4.tcp_tw_reuse = 1
+        # 启动timestamp，操作系统可以拒绝迟到的报文
+        net.ipv4.tcp_timestamps = 1
+        #+end_src
+      - 客户端TIME_WAIT状态端口重用流程
+        - Client端不再接收到Server端发来的报文时（局域网内网络环境较好，较少出现报文延时问题）
+          1. Client端口8080处于TIME_WAIT状态
+          2. Client调用connect方法使用8080端口向Server发送 SYN Seq=1
+          3. 按照正常流程建立和使用TCP连接
+        - Client端接收到Server端发来的报文时
+          1. Client端口8080处于TIME_WAIT状态
+          2. Client调用connect方法使用8080端口向Server发送 SYN Seq=1
+          3. Client接收到Server端发来的FIN报文，表示
 
 ** TODO 内存分配器
 *** 使用google-perftools优化Nginx的高并发性能
@@ -3694,6 +3877,12 @@ shared memory
       # 主动建立连接时，发SYN的重试次数
       net.ipv4.tcp_syn_retries = 6
 
+       # 限制丢包重传次数，若达到上限则会更新路由缓存
+       net.ipv4.tcp_retries1 = 3
+       # 限制丢包重传次数，若达到上限则会关闭TCP连接
+       # 实际上以超时时间为准，可能整体时间会小于retries的次数
+       net.ipv4.tcp_retries2 = 15
+
       # 建立连接时的本地端口可用范围
       net.ipv4.ip_local_port_range = 32768 60999 
       #+end_src
@@ -3752,6 +3941,33 @@ shared memory
   3. 遍历时间复杂度O(n)
 
   因此频繁调用底层采用红黑树结构的方法，并不会产生严重的性能问题。
+
+* HTTP请求头部
+  - ~Via~
+    - 作用：用于追踪客户端和服务端之间的请求和响应报文的传输路径。
+      1. 报文经过代理或网关时，会在请求首部Via中附加服务器的信息，然后再转发。
+         1. Client 发送 ~GET / HTTP/1.1~
+         2. 代理服务器A 转发
+            #+begin_src
+            GET / HTTP/1.1
+            Via: 1.0 gw.hackr.jp(Squid/3.1)
+            #+end_src
+         3. 代理服务器B 转发
+            #+begin_src
+            GET / HTTP/1.1
+            Via: 1.0 gw.hackr.jp(Squid/3.1), 1.1 a1.example.com(Squid/2.7)
+            #+end_src
+         4. 应用服务器
+      2. 通过Via可避免请求回环的发生。
+    - ~Trailer~
+      - 作用：向服务器说明报文主体后面记录了哪些首部字段。用于HTTP/1.1版本分块传输编码。
+      - 示例：0表示分块长度为0。
+        #+begin_src
+        Trailer: Expires
+        报文主体
+        0
+        Expires: Tue, 28 Sep 2004 23:59:59 GMT
+        #+end_src
 
 * QA
   1) 访问目录时返回403

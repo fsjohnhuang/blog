@@ -339,7 +339,6 @@
 
                return mv;
            }
-
        }
        #+END_EXAMPLE
     8) 参数绑定注解
@@ -479,6 +478,7 @@
             |----------+---------+------------------------------------|
             | required | boolean | 是否必须要存在请求体，默认值为true |
     9) ~@ResponseBody~
+       - 表示返回的是文本而不是视图名称，并且会将文本转换为JSON格式。
     10) ~@ResponseStatus~
         - 示例
           #+BEGIN_EXAMPLE java
@@ -780,7 +780,6 @@
 *** TODO RESTful API
 
 *** TODO WebService
-
 *** 文件上传下载
 
 **** 文件上传
@@ -2442,6 +2441,8 @@ Spring2.0+引入AspectJ作为默认的AOP框架。
 
 ** TODO 事务处理
 
+   Java EE提供JTA事务API和JTS事务服务规范。
+
 *** 概要
 事务特点:
 1) 原子性, 事务内的一系列操作要么都成功,要么都失败.
@@ -2885,9 +2886,18 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
 #+end_example
 
 * Spring Boot
-  通过 [[https://start.spring.io/][Spring Initializr]] 初始化项目。
+  通过 [[https://start.spring.io/][Spring Initializr]] https://start.spring.io/ 初始化项目。
+
+** Spring Boot的Maven插件
+   #+begin_src
+   # 启动Spring Boot项目
+   mvn spring-boot:run
+   #+end_src
 
 ** Starter Template
+
+   spring-boot-starter和spring-boot-starter-parent的区别
+
    #+begin_example xml
    <!-- Parent pom is mandatory to control versions of child dependencies -->
    <parent>
@@ -2962,8 +2972,20 @@ Spring Boot打包时可以内置Tomcat或Jetty。
    #+end_example
 4) 项目编译后将war包复制到 ~Tomcat项目目录/webapps~ 下
 
-* TODO QA
+** 热部署
+   通过spring-boot-devtools可以在修改类或配置文件的时候自动重新加载Spring Boot应用。
+   在pom.xml中添加
+   #+begin_src xml
+   <dependency>
+     <groupId>org.springframework.boot</groupId>
+     <artifactId>spring-boot-devtools</artifactId>
+     <optional>true</optional>
+   </dependency>
+   #+end_src
+   原理：启动LiveReload Server监控Spring Boot应用文件变化，并且仅重新加载变化的类。因此热部署速度非常快。
 
+* TODO QA
+  
 ** Eclipse 中的 Dynamic Web Module Version 与 Application Server 搭配
       Dynamic Web Module Version 决定Java动态网站依赖的包版本，因此必须和Application Server对应才能成功运行。
       - 映射表
@@ -4257,36 +4279,6 @@ public class AccessFilter extends ZuulFilter {
       #+end_example
 
 **** 过滤器详解
-* TODO Servlet3.0
-属于JSR315规范，需要Tomcat7+支持。
-可通过注解注册servlet、filter和listener,而不用使用web.xml来注册。
-
-** 示例
-#+begin_example java
-@WebServlet("/hello")
-public clas HelloServlet extends HttpServlet {
-    @Override
-    public void doGet(HttpServletRequest req, HttpServletResponse resp) {
-        resp.getWriter().write("hello...");
-    }
-}
-#+end_example
-
-** 共享库和运行时插件机制(Shared libraries/ Runtimes pluggability)
-1) Servlet容器启动时会读取每个JAR包下 ~META-INF/services/javax.servlet.ServletContainerInitializer~ (源码中位于src/META-INF/services/javax.servlet.ServletContainerInitializer) 的内容；
-2) 其内容为javax.servlet.ServletContainerInitializer实现类的全限定类名；
-3) 然后就会运行实现类。
-
-#+begin_example java
-// Servlet容器启动时会将value属性指定的类的子类、子接口加载过来
-@HandlesTypes(value={})
-public class MyServletContainerInitializer implements ServletContainerInitializer {
-    /* @param arg0 @HandlesTyeps引入的类及子类、子接口
-     * @param arg1 代表当前Web应用的ServletContext
-     */
-    public void onStartup(Set<Class<?>> arg0, ServletContext arg1)
-}
-#+end_example
 * Thymeleaf
 https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#creating-and-configuring-the-template-engine
 
@@ -4501,7 +4493,6 @@ Spring Boot1.4+支持Thymeleaf3，支持非闭合标签。通过配置启用：
 #+end_example
 
 * 网关
-
 ** 网关和BFF是如何演化出来的
    BFF(Backend for Frontend)
    网关和BFF是密不可分的，有时甚至网关就是BFF。

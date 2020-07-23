@@ -1667,6 +1667,7 @@ class FilterModule(object):
   1) 工作组，将不同的电脑按功能分别列入不同的组中
   2) 域，用于一组计算机共享共用的安全数据库，是一组服务器和工作站的集合
 
+  官网：https://docs.ansible.com/ansible/latest/user_guide/windows_winrm.html
   认证传输框架(authentication transport scheme):
   1) NTLM
   2) Kerberos, 服务器已加入域

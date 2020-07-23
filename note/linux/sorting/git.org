@@ -497,7 +497,6 @@ CI：Jenkins、Travis CI
 
 
 
-
 * 其他
 
 没有测试、没有重构和没有CI的代码被称为legacy code，严重影响代码质量。
@@ -622,7 +621,6 @@ bug票要体现在缺陷管理系统，也要体现在CI测试结果记录中
 6) 执行单元测试、集成测试和用户验收测试等
 
 
-
 * 迁出模式
 锁模式：加锁->编辑->解锁
 版本管理系统：VSS(Visual Source Safe)、Peroforce、PVCS
@@ -640,7 +638,6 @@ bug票要体现在缺陷管理系统，也要体现在CI测试结果记录中
 版本管理系统：Subversion、Git和mercurial
 
 Subversion创建分支容易，但合并分支困难。
-
 
 * 代码规范
 
@@ -731,7 +728,6 @@ windows建立符号链接
 #+BEGIN_EXAMPLE
 mklink /D /J 符号路径 目录文件路径
 #+END_EXAMPLE
-
 
 
 
