@@ -1,0 +1,3120 @@
+* TODO 数据类型
+  | 类型    | 位数 | 描述 | 
+  |---------+------+------|
+  | char    |      |   字符 |
+  | short   |      |      |
+  | long    |      |      |
+  | int     |      |      |
+  | bool    |      |      |
+  | wchar_t  |      | 宽字符  |
+
+** 最大最小值
+   作为符号常量定义在头文件 ~<climits>~ 中。
+   | 符号常量       | 描述                                        |
+   |----------------+---------------------------------------------|
+   | CHAR_MIN       | char                                        |
+   | SCHAR_MIN      | signed char                                 |
+   | SCHAR_MAX      |                                             |
+   | UCHAR_MAX      | unsigned char                               |
+   | SHRT_MIN       | short                                       |
+   | SHRT_MAX       |                                             |
+   | USHRT_MAX      | unsigned short                              |
+   | INT_MIN        | int                                         |
+   | INT_MAX        |                                             |
+   | UINT_MAX       | unsigned int                                |
+   | LONG_MIN       | long                                        |
+   | LONG_MAX       |                                             |
+   | ULONG_MAX      | unsigned long                               |
+   | FLT_MANT_DIG   | float类型的尾数                             |
+   | FLT_DIG        | float类型的最少有效数字位数                 |
+   | FLT_MIN_10_EXP | 以10为底带全部有效数的float类型的指数最小值 |
+   | FLT_MAX_10_EXP | 以10为底带全部有效数的float类型的指数最大值 |
+   | FLT_MIN        |                                             |
+   | FLT_MAX        |                                             |
+
+** ~char*~, ~const char*~, ~string~, ~wstring~ 和 ~CString~ 间的类型转换
+   1. ~const char*~ 被称为 C style string
+      #+begin_src c
+      // 字符串字面量
+      "Hello world"
+      // 数组形式
+      char hi[3] = {'H', 'I', '\0'};
+      // 直接赋首地址
+      char hi[3] = "HI";
+      // 省略长度
+      char hi[] = "HI";
+      char hi[] = {"HI"};
+      #+end_src
+   2. ~string~ 和 ~wstring~ 是C++标准的字符串类型
+      - ~string~ 位于 ~<string.h>~ 文件中，采用MBCS(多字节字符集)，即英语字母和半角标点符号占用一个字节，而中文和全角标点符号占两个字节；
+      - ~wstring~ 采用UNICODE字符集，默认采用UTF-16的存储方式，所以所有字符都占两个字节；
+   3. ~CString~  采用UNICODE字符集，默认采用UTF-16的存储方式，所以所有字符都占两个字节。并且作为MFC专用字符串类型，和MFC的各个控件有密切的关系。
+
+   #+begin_src c++
+   // string -> const char*
+   string szText = "abc";
+   const char* czText = szText.c_str();
+
+   // string -> char*
+   string szText = "abc";
+   const int iLen = szText.length() + 1;
+   char* lpChar = new char[iLen];
+   strcpy_s(lpChar, iLen, szText.c_str());
+
+   // * -> string
+   const char *c = "abc";
+   string szText(c);
+
+   // const char * -> char *
+   const char *lpcz = "abc";
+   const int iLen = strlen(lpcz) + 1;
+   char* lpChar = new char[iLen];
+   strcpy_s(lpChar, iLen, lpcz);   
+
+   // string -> wstring 需要CString作为中间件
+   string st("hi");
+   CString cs(st.c_str());
+   wstring wst(cs);
+
+   // wstring -> string 需要CString作为中间件
+   wstring wst("hi");
+   CString cs(wst.c_str());
+   string st = CStringA(cs);
+   #+end_src
+
+   若不是MFC环境，那么就无法通过CString作为string和wstring之间转换的桥梁，此时需要使用C函数mbstowcs_s和wcstombs_s，并且在使用前需要通过 ~setlocale(LC_ALL, "")~ 设置本地字符集。
+   
+** 字符串操作
+   sprintf缓冲区大小上限为1024字节，若超过则需要采用_snwprintf。
+
+*** 字符串截取
+    C语言没有提供字符串的截取函数,必须通过指针的运算来实现.
+    #+begin_src c
+    char text[11] = "测试就是好";
+    char dest[11];
+    memset(dest, 0, sizeof(dest));
+
+    // 截取 "测试"
+    lstrcpynA(dest, text, sizeof(char)*5); // "测试" 占4byte,字符串结束符\0占1byte
+    
+    // 截取 "试就"
+    memset(dest, 0, sizeof(dest));
+    char *ptrText = text;
+    lstrcpynA(dest, ptrText+2, sizeof(char)*5); // 通过修改指针变量所存储的地址的位移, 实现修改截取操作的起始位置
+    #+end_src
+
+*** 解决库函数的安全性问题
+    ~strcpy, strncpy, strcat, strncat, sprintf,snprintf~ 存在如下问题
+    1. 不对传入地址做非空检查
+    2. 字符串在使用前需要自行初始化
+    3. strncpy不自动在字符串尾添加 ~\0~ ，因此maxCount入参需要加入 ~\0~ 所占的字节数
+    4. 内存过长会导致内存溢出。上限为1024字节。
+
+*** 删除字符串左右两边的字符
+    #+begin_src c
+    void trimL(char *str, const char chr){
+      if (str == 0) return; // 防止空指针
+      if (*str == '\0') return; // 防止空字符串
+
+      unsigned int size = sizeof(char)*(strlen(str) + 1); // 注意不能直接使用sizeof(str)来获取字符串的字节数，因此str为指针变量，这样仅会获取到指针变量的字节数而已。
+      char *tmp = new char[size];
+      strcpy_s(tmp, size, str);
+      unsigned int index = 0;
+      int found = 0;
+      while(index <size && (found = *(tmp+index) != chr)) index+=1; // 命中目标字符
+
+      if (found) {
+        memset(str, 0, size);
+        strcpy(str, tmp+index);
+      }
+      delete[] tmp;
+    }
+    void trimR(char *str, const char chr){}
+    void trim(char *str, const char chr){}
+    #+end_src
+
+*** 字符串大小写转换
+    #+begin_src c
+    void toUpper(char *str) {
+      if (str == 0) return;
+      if (*str == '\0') return;
+
+      unsigned int len = strlen(str);
+      for (int i = 0; i < len; i++){
+        char chr = *(str+i);
+        if ((chr >= 'a') && (chr <= 'z')) {
+          *(str+i) = chr - 32;
+        }
+      }
+    }
+    #+end_src
+
+*** 从字符串中提取数字
+    atoi,atof,atol
+
+*** ~strcat~ 和 ~strcat_s~
+    把指定字符串添加到目标字符串结尾处，覆盖目标字符串的 ~\0~ 并在操作完毕后添加 ~\0~ .
+    1. ~strcat~
+       #+begin_src c
+       #include <string.h>
+       // dest必须提供足够长度容纳src的内容，即dest的容量必须大于等于 strlen(dest) + strlen(src) + 1
+       // 返回值和更新后的dest一致，用于链式调用。
+       char *strcat(char *dest, const char *src);
+       #+end_src
+       - 问题：
+	 1. 当dest容量不足，编译通过但运行报错
+	 2. 当dest和src内存空间存在重叠时，编译通过但无输出
+	    #+begin_src c
+	    char dest[100] = "Hello,";
+	    char *src = dest + 2;
+	    strcat(dest, src);
+	    #+end_src
+    2. ~strcat_s~
+      #+begin_src c
+      // numberOfElements - src追加到dest后的总大小，单位为字节。即 strlen(dest) + strlen(src) + 1
+      // 返回值：0 成功，EINVAL src或dest没有初始化， ERANGE 越界。
+      errno_t strcat_s(char *dest, size_t numberOfElements, const char *src);
+      #+end_src
+       - 问题：当dest和src内存空间存在重叠时，编译通过但无输出.
+    3. ~std::string~
+       #+begin_src c++
+       #include <string>
+       char str1[] = "123";
+       char str2[] = "abc";
+       std:string rlt = str1 + std::string(str2);
+       rlt.c_str();
+       #+end_src
+
+*** ~strcpy~ 和 ~strcpy_s~    
+*** ~strcmp~ 和 ~strncmp~    
+    1. ~strcmp~ 用于比较两个字符串的大小
+       #+begin_src c
+       #include <string.h>
+       
+       // 返回值： 0 两者相等，>0 前者大于后者， <0 前者小于后者
+       int strcmp(const char *str1, const char *str2);
+       #+end_src
+       - 问题：
+	 1. str1和str2不能为nullptr，否则会报错
+	 2. strcmp是基于 ~\0~ 来终止字符串的比较，若某个字符串没有 ~\0~ 则行为不可预知
+    2. ~strncmp~ 可指定要比较字符的数量
+       #+begin_src c
+       int strncmp(const char *str1, const char *str2, size_t n);
+       #+end_src
+       - 问题：
+	 1. str1和str2不能为nullptr，否则会报错
+	 2. n不能为0，否则报错
+    3. ~string~ 重载操作符 ~==,>,<~ 
+       #+begin_src c
+       string str1 = "abc";
+       string str2 = "aab";
+       if (str1 == str2){
+         // do1
+       }
+       else if (str1 > str2) {
+         // do2
+       }
+       else if (str < str2) {
+         // do3
+       }
+       #+end_src
+
+*** ~strlen~ 和 ~strnlen_s~    
+    1. ~strlen~ 计算字符串长度，但不包含结束符 ~\0~
+       #+begin_src c
+       #include <string.h>
+       
+       size_t strlen(char const *str);
+       #+end_src
+       - 问题：
+	 1. 必须确保字符数组以 ~\0~ 结尾，否则会沿着内存空间往后寻找，直到遇到 ~\0~ 为止。
+	    #+begin_src c
+	    char txt[] = {'a', 'b'};
+	    strlen(txt); // 绝对不会返回正常值2。
+	    #+end_src
+	 2. 当字符串为nullptr时，strlen行为未定义。
+    2. ~strnlen~
+       #+begin_src c
+       #include <string.h>
+       // numberOfElements - 若遍历numberOfElements+1个字符还没找到结束符则返回numberOfElements，否则返回实际长度
+       // src为nullptr时返回0
+       size_t strnlen(const char *src, size_t numberOfElements);
+       #+end_src
+    3. ~string.size()~ 计算字符串长度，但不包含结束符 ~\0~
+       #+begin_src c++
+       std::string str1 = {'H', 'O'};
+       std::string str2 = "HO";
+       std::string str3 =  {'H', 'O', '\0'};
+       str1.size(); // 2
+       str2.size(); // 2
+       str3.size(); // 3, 显式设置的\0在string中作为普通字符
+
+       // char *转换为string时，char *中必须带上结束符，否则行为不可预知。
+       #+end_src
+
+*** C++标准库类型 ~string~
+    C语言中没有string类型，而C++中的string类型是标准库的类型，表示可变长的字符序列，位于std命名空间中。
+
+**** 初始化string对象
+     #+begin_src c++
+     string s1; //  默认构造函数，空字符串
+     string s2(s1); // 拷贝构造函数，s2为s1的副本
+     string s3("value"); // s3为字面量value的副本，不包含结束符 \0
+     string s4 = "value"; // s4为字面量value的副本，不包含结束符 \0。字面量和string是不同类型的。
+     string s5(n, 'C'); // s5初始化连续n个字符C
+     #+end_src
+     注意：
+     1. string类型的字符串并不以 ~\0~ 为结束符(因为string类型内部已经记录了长度，因此不需要通过 ~\0~ 来标识结束)。但C++11为兼容C，因此字符串可以以 ~\0~ 结尾；
+     2. 中间出现的 ~\0~ 显示的是空白字符。
+
+**** 基本操作
+     1. ~os << str~ 将str写入输出流，并返回os
+     2. ~is >> str~ 从输入流读取内容到str，返回is
+     3. ~getline(is, str)~ 从输入流读取一行到str，返回is
+     4. ~str.empty()~ str为空则返回true
+     5. ~str[n]~ 返回str中索引为n的字符
+     6. ~str.size()~ 返回字符串长度
+	注意：返回的是 ~string::size_type~ 即无符号整型，若无符号整型和有符号整型进行比较操作，结果将出乎意料。
+	#+begin_src c
+	unsigned int a = 1;
+	int b = -1;
+	a < b; // 必定为1
+	#+end_src
+     7. ~str1+str2~ 两个字符串拼接
+     8. ~str != str2~ 比较两字符串是否相同
+
+**** TODO cctype头文件的函数
+     数字判断、大小写转换等函数
+
+* TODO ~stdafx.h~ 的用法
+* 存储类
+  用于定义变量和函数的作用域和生命周期。
+
+** auto存储类
+   C++ 11引入，但C++ 17开始auto不再是C++存储类说明符。
+   作用：
+   1. 在定义变量时根据表达式推导变量的数据类型；
+      #+begin_src c++
+      auto f=3.14; // double
+      auto x1 = 5, x2 = 'r'; // 由于两个变量类型不一致，因此会报错
+      #+end_src
+   2. 在定义函数时作为返回值的占位符。
+     
+** register存储类
+   C++ 17开始废弃，且regsiter不再是关键字。
+   声明希望变量存储在寄存器而不是内存中，那么变量的最大大小等于寄存器容量，并且不能对其进行取地址运算 ~&~ (因为并没有内存地址)。
+   ~register int a;~ 仅表示希望a存储在寄存器，但实际是否存储在寄存器则取决于硬件和实现。
+
+** static存储类
+   1. 全局静态变量
+      - 生命周期：和进程一致。
+      - 作用域：当前文件
+   2. 局部静态变量
+      - 生命周期：和进程一致
+      - 作用域：当前函数
+   3. 类静态变量
+      - 生命周期：和进程一致
+
+** extern存储类
+   声明对所有文件可见的全局变量和函数，而定义写在其它位置。
+   #+begin_src c++
+   // math.h
+   extern int i; // 若不添加extern，则会被认为是变量定义
+   extern void write_extern(); // 对于函数声明可以省略extern
+   #+end_src
+
+** mutable存储类
+   仅用于类的对象，允许对象的成员替代常量，也就是mutable成员可通过const成员函数修改。
+
+** thread_local存储类
+   用于指定变量的生命周期与线程一致，每个线程均拥有相应的独立副本。
+
+* 入门示例——complex.h
+* 命名空间
+  由于通过 ~#include~ 引入header文件后，所有内容都位于全局范围中容易造成命名冲突，因此可通过将代码包裹在以组织、功能等难以重复的名称命名的命名空间中，避免代码的命名冲突。
+
+** define namespace
+   #+begin_src c++
+   namespace my_ns {
+     // 库代码
+   }
+   #+end_src
+
+** using directive
+   #+begin_src c++
+   #include <cstdio>
+   using namespace std;
+
+   int main() {
+     // 若没有using namespace std，则需要写为std::cout << "hi" <<std::endl
+     cout << "hi" << endl;
+   }
+   #+end_src
+
+** using declaration
+   #+begin_src c++
+   #include <cstdio>
+   using std::cout;
+
+   int main(){
+     cout << "hi" << std::endl;
+   }
+   #+end_src
+
+* TODO 引入header文件
+** ~#include <>~ 和 ~#include ""~ 的区别
+   两者均是用于引入header文件，但
+   1. ~#include <>~ 用于引入标准库的头文件(在安装开发环境时已经自动配置好，因此不用指定header文件的路径)，位于系统文件。
+   2. ~#include ""~ 用于引入当前项目自定义或第三方库的头文件(需要指定header文件的路径)，若找不到就到C++安装目录、系统文件中查找。
+
+** TODO ~<stdio.h> 和 ~<cstdio>~ 的区别
+
+* TODO 指针(pointer)和引用(reference)
+  引用底层就是指针。
+
+** 指针
+   
+*** 基础
+    内存变量简称为变量，每定义一个变量系统会为该变量分配一块内存，并且内存是有地址的。
+    #+begin_src c
+    int idx = 1; // 系统为变量idx分配一块大小为4个byte的内存空间。
+    &idx; // 通过取址符，获取变量idx的内存空间的第一个byte的地址。
+    #+end_src
+    指针变量简称为指针，用于存放其它变量的地址。
+    #+begin_src c
+    int *ptrIdx; // 一个存放int类型的变量的地址的指针变量
+    ptrIdx = &idx; // 将int类型的变量地址赋值给指针变量
+    #+end_src
+    通过*操作符来操作指针变量指向的内存变量的值。
+    #+begin_src c
+    *ptrIdx += 1; // idx内存变量值从1更新为2。
+    *&idx += 1; // idx内存变量值从2更新为3。
+    #+end_src
+
+*** 应用场景    
+    1. 函数参数
+       - 作用1：在函数内部修改指针变量所指向的内存变量的值
+	 #+begin_src c
+	 char message[10]; // 声明字符数组，但还没有分配数组的内存空间，即指针变量message的值为空
+	 memset(message, 0, sizeof(message)); // message实际为指针变量，分配内存空间并将数组第一元素的第一个byte地址赋值给message指针变量
+	 int idx; // 定义int类型的内存变量idx，但内存的值还没被初始化，因此该值是随机无意义的。
+	 scanf_s("%s %d", message, &idx); // 从标准输出获取字符串，并格式化后赋值给message和idx
+	 #+end_src
+       - 作用2：减少内存的开销
+	 #+begin_src c
+	 struct st_student {
+	   char name[10];
+	   int age;
+	 };
+
+             void printStudent(struct st_student stStudent) {
+	     printf_s("%s : %d", stStudent.name, stStudent.age);
+	 }
+             void printLPStudent(struct st_student *lpStudent) {        
+	     printf_s("%s : %d", lpStudent->name, lpStudent->age);     
+	 }
+
+	 struct st_student student; // 定义结构体，其中的元素name[10]和age等都已经分配内存空间
+             strcpy_s(student.name, sizeof("tom"), "tom");
+             student.age = 16;
+             printStudent(student); // 会将student整个内存结构复制一份给函数使用，相当于执行增加了如下代码
+	 // struct st_student dest;
+	 // memcpy(&dest, &student, sizeof(struct st_student))
+             printLPStudent(&student); // 函数使用同一个内存结构，不用复制
+	 #+end_src
+    2. 函数返回值
+       - 注意：指针变量指向的内存空间只能在调用方释放，若在函数内被释放则导致该指针变量失效(指针变量变为野指针)。
+
+*** 空指针
+    没有赋值的指针指针变量(即没有指向内存变量地址)，对空指针操作会造成程序的Core Dump(段错误)，引起程序的崩溃。
+    #+begin_src c
+    int *ptrIdx1; // 空指针
+    int *ptrIdx2 = 0; // 空指针
+
+    *ptrIdx1 = 10; // 赋值给空指针将造成Core Dump
+    *ptrIdx2 = 10; // 赋值给空指针将造成Core Dump
+    #+end_src
+    空指针判断： ~ptrIdx == 0~
+
+**** 示例——隐式空指针
+     #+begin_src c
+     char input[100];
+     memset(input, 0, sizeof(input));
+
+     void myPrint(char *lpInput) {
+        // 由于lpInput为指针变量，而&lpInput则返回指针变量的地址。那么从标准输入的值将作为lpInput指针变量的值，即非有效的内存地址。
+        // 必须等待其它地方使用时才会抛出问题。
+        scanf_s("%s", &lpInput);
+        printf("%p\n", lpInput);
+        printf("%s\n", lpInput);
+     }
+     #+end_src
+
+*** 野指针
+    指针变量所指向的内存已被释放，但指针的值不会被清零。对野指针操作的结果不可预知。
+    #+begin_src c
+    int *ptrIdx = (int)malloc(sizeof(int));
+    *ptrIdx = 1;
+    free(ptrIdx);
+    // 此时ptrIdx依然保存着原来所指向的内存变量的地址，但该内存变量的内存空间已经被释放，因此ptrIdx将变为野指针。
+    // 更安全的做法是释放内存后，将指针赋值为0
+    ptrIdx = 0;
+    #+end_src
+
+    #+begin_src c
+    // message标识的内存空间中，存放的是数组第一个元素所在的内存空间的地址
+    // *message则是根据message标识的内存空间中存储的另一个内存空间的地址，获取后者内存空间的数据
+    const char *message = "hello";
+    #+end_src
+
+*** 数组的地址
+    数组占用的内存空间是连续的，数组名是数组元素的首地址，也是数组的地址。
+    #+begin_src c
+    char message[] = "Hello World!";
+    // 一样
+    printf("%p\n", message);
+    printf("%p\n", &message);
+    printf("%p\n", &message[0]);
+    // 一样
+    printf("%s\n", message);
+    printf("%s\n", &message);
+    printf("%s\n", &message[0]);
+    #+end_src
+
+*** ~sizeof~
+    ~sizeof~ 不是函数而是C语言的关键字，用于获取数据类型、变量和常量所占用的内存字节数。
+    用法：
+    1. 用于数据类型
+       #+begin_src c
+       sizeof(数据类型);
+       #+end_src
+    2. 用于变量
+       #+begin_src c
+       sizeof(变量名);
+       sizeof 变量名;
+       #+end_src
+
+**** ~strlen~
+     为函数用于计算MBCS编码的字符串的字节数，因此不包括字符串结尾符 ~\0~ 。而sizeof则包含。
+     #+begin_src c
+     char text[] = "0123456789";
+     printf("sizeof: %d\n", sizeof(text)); // sizeof: 11
+     printf("strlen: %d\n", strlen(text)); // strlen: 10
+
+     char gbk[] = "测试";
+     printf("sizeof: %d\n", sizeof(gbk)); // sizeof: 5
+     printf("strlen: %d\n", strlen(gbk)); // strlen: 4
+     #+end_src
+
+**** 陷阱
+     #+begin_src c
+     int idx; 
+     sizeof(idx); // 返回4，4个字节即32位。
+    
+     char message[50];
+     sizeof(message[0]); // 返回1
+     sizeof(message); // 返回50
+
+     struct st_student {
+       char name[10];
+       int age;
+     };
+     sizeof(st_student); // 数据占10+4=14，然后还有其它内容，因此返回的数值大于14
+     #+end_src
+     陷阱：
+     #+begin_src c
+     char message[50];
+     sizeof(message); // 返回50
+
+     void printMessage(char * ptrMessage) {
+       // 由于ptrMessage为指针变量，而不是数组名称
+       // 因此sizeof(ptrMessage)返回的是指针变量所占的字节数，而不是数组所占的整块内存的字节数
+       // 那么当数组所占的字节数小于指针变量所占的字节数时，就很可能会误操作其它变量的内存空间，造成无法预计的异常。
+       memset(ptrMessage, 0, sizeof(ptrMessage));
+     }
+     printMessage(message);
+     #+end_src
+
+*** 字符串常量地址
+    字符串实际上就是以 ~\0~ 结束的char类型的一维数组，字符串常量和数组名称一样，被编译器当成地址来对待，它的值就是字符串的首地址。
+    #+begin_src c
+    char *p = "hello world";
+    #+end_src
+
+*** 多维数组的传递
+    #+begin_src c
+    int multiArray[][10] = {"HI", "World"}; // 二维字符数组
+    int *ptrMultiArray[] = {"HI", "World"}; // 一维指针数组
+    int *ptr00 = &multiArray[0][0];
+
+    // 由于直接传递多维数组指针给函数，在函数内访问多维数组时需要基于指针变量存储的地址来计算内部元素的地址。
+    // 因此实际使用中可用一个结构体包裹多维数组，然后传递结构体地址到函数中，那么在函数中即可以下标的方式访问多维数组。
+    struct st_ma {
+      int data[5][5];
+    };
+
+    void printMultiArray(struct st_ma *stMa) {
+      stMa->data[0][0];
+    }
+    #+end_src
+
+*** 函数指针
+    C程序的每个函数都有一个入口地址，函数指针变量存储的就是函数入口地址的指针变量。
+    通过函数指针，可以调用函数。
+    用途：
+    1. 调用函数
+    2. 将函数作为参数传递给其它函数
+
+**** 两种使用方式       
+	#+begin_src c
+	int max(int a, int b) {
+          if (a > b) { return a; }
+          return b;
+	}
+
+	// 声明函数签名为int(int,int)的函数指针变量
+	int (*ptr)(int, int);
+	ptr = max;
+	(*ptr)(1, 2); // 返回 2
+
+	// 声明函数签名为int(int,int)的函数指针类型
+	typedef int (*PTR)(int, int);
+	PTR ptrMax = max;
+	(*ptrMax)(1,2); // 返回 2
+	#+end_src
+
+*** 指针函数
+    指针函数是返回值为地址的函数。
+    如 ~char *strcpy(char *dest, const char *src)~ 函数返回值为地址。
+
+*** 多级指针
+    指针变量所指向的也是指针变量。
+    #+begin_src c
+    int i = 10;
+    int *pi = &i;
+    int **ppi = &pi;
+    int ***pppi = &ppi;
+    #+end_src
+
+** 引用
+   优点：
+   1. 调用者/传递者不必了解接收者是以pass by value还是pass by reference方式接收实参。
+       #+begin_src c++
+       
+       #+end_src
+
+* 结构体
+
+** 定义结构体
+   #+begin_src c
+   // 定义结构体 st_student
+   struct st_student {
+     int age;
+     char name[10];
+   };
+   // 定义结构体实例
+   struct st_student student;
+   // 定义结构体实例，并设置元素值
+   struct st_student john = {16, "John"};
+
+   // 定义匿名结构体的实例
+   struct {
+     int age;
+     char name[10];
+   } john;
+   john.age = 16;
+   john.name = "John";
+   #+end_src
+
+** 结构体的内存对齐
+   CPU以 *块* 划分内存空间，并以 *块* 为单位读写内存空间。
+   *块* 大小称为memory granularity(内存读取粒度)，可以设置为1、2、4、8、16字节. 通过宏 ~#pragma pack(4)~ 指定内存对齐的字节数,取值为1,2,4,8,16.
+   而结构体的元素是按顺序存储,但不是紧密排列的.而是每个元素必须分配 *块* 大小的倍数,以便提高CPU操作内存的速度.
+   64位系统默认的 *块* 大小为4字节.
+   
+* 时间操作
+  1970年1月1日作为UNIX的纪元时间，1970年1月1日0点作为计算机表示时间的中间点。
+  以1970年1月1日开始经过的秒数表示时间的方式，被称为 "Unix时间纪元"。
+
+** 计时器
+
+*** ~time_t time()~
+    获取当前系统时间，精确度为秒。
+    #+begin_src c
+    #include <time.h>
+    
+    time_t start, end;
+
+    start = time(NULL);
+    // do something.....
+    end = time(NULL);
+    double delta = difftime(end, start);
+    #+end_src
+
+*** ~clock_t clock()~
+    获取从程序启动至调用 ~clock()~ 函数时的CPU时钟计时单元数(Clock Tick)，MSDN中称为挂钟时间(Wal-Clock)。其中常量 ~CLOCKS_PER_SEC~ 表示一秒钟会有多少个时钟计时单元数，精确到毫秒。
+    #+begin_src c
+    #include <time.h>
+
+    clock_c start, end;
+    start = clock();
+    // do something.....
+    end = clock();
+    double delta_clock_tick = (double)(end - start);
+    double delta = delta_clock_tick/CLOCKS_PER_SEC;
+    #+end_src
+
+* header文件的防御式写法
+  用于防止被多次引入时产生重复编译的问题。
+** 写法1
+   #+begin_src c++
+   #ifndef  __NAME_H__
+   #define  __NAME_H__
+  
+   /* header文件主体部分 */
+
+   #endif
+   #+end_src
+
+   - 特点：作为c/c++语言标准支持的方式。
+   - 优点：
+     1. 能保证同一个文件不被多次包含；
+     2. 能保证同一段代码不被多次包含，即使代码位于不同的文件中；
+   - 缺点：
+     1. 若 ~#ifndef~ 后的标识重复，那么会导致找不到声明的问题；
+     2. 由于必须先打开头文件然后才判断是否将其内容加入编译，因此会造成大型项目编译时间较长。
+
+** 写法2
+   #+begin_src c++
+   #progma once
+
+   /* header文件主体部分 */
+   #+end_src
+
+   - 特点：非c/c++语言标准，由现代编译器提供的特性
+   - 优点：
+     1. 针对文件路径来保证同一个文件不被多次包含；
+   - 缺点：
+     1. 编译器兼容性相对较差。
+* 三大函数(拷贝构造，拷贝赋值，析构)
+   若没有定义，编译器会自动补充拷贝构造、拷贝复制和析构函数。
+   若类中包含指针，则必须自定义这3大函数，否则会造成浅拷贝，且在进行拷贝赋值时会造成内存泄漏(Memory Leak)
+
+** String正确定义三大函数的示例
+   #+begin_src c++
+#pragma once
+#include <iostream>
+#include <string>
+using namespace std;
+
+class String {
+public:
+	// 构造函数(ctor)
+	String(const char* cstr = 0) {
+		if (cstr == 0) {
+			m_data = new char[1];
+			*m_data = '\0';
+		}
+		else {
+			m_data = new char[strlen(cstr) + 1];
+			strcpy(m_data, cstr);
+		}
+	}
+	// 拷贝构造函数(copy ctor)
+	String(const String& o) {
+		m_data = new char[strlen(o.m_data) + 1];
+		strcpy(m_data, o.m_data);
+	}
+	// 拷贝赋值函数(copy assignment operator)
+	String& operator = (const String& o) {
+		// 检测自我赋值
+		if (this == &o) return *this;
+
+		delete[] m_data;
+		m_data = new char[strlen(o.m_data) + 1];
+		strcpy(m_data, o.m_data);
+		return *this;
+	}
+
+	// 析构函数(dtor)
+	~String() {
+		delete[] m_data;
+	}
+	char* get_c_str() const {
+		return m_data;
+	}
+private:
+	char* m_data;
+};
+
+ostream& operator << (ostream& os, const String& s) {
+	return os << s.get_c_str();
+}
+   #+end_src
+
+** 分析默认拷贝赋值导致内存泄漏
+   #+begin_src c++
+   DefaultString s1("abc"); // s1.m_data -> "abc"
+   DefaultString s2("123"); // s2.m_data -> "123"
+   s1 = s2; // s1.m_data = s2.m_data -> "abc"，但位于堆(System Heap)中的123没有被清理。
+   #+end_src
+   
+* new和delete详解
+  1. Stack(栈)
+     函数被调用时会创建一个栈帧存储函数实参、返回地址(当函数退出时程序返回该地址继续往下执行)和函数内的本地对象(即local/stack/auto object)。
+     #+begin_src c++
+     int globalObject = 3; // global  object，生命周期为当前进程
+
+     void test() {
+       int localObject = 1; // 本地对象，生命周期为当前函数
+       static int staticObject = 2; // static object，生命周期为当前进程
+     }
+     #+end_src
+  2. Heap(堆, System Heap)
+     由操作系统提供一块全局内存空间，供程序自主动态分配(dynamic allocated)来获取若干个区块(block)，并且必须由程序主动释放归还资源。
+     #+begin_src c++
+     void test(){
+       int* object = new int(1); // heap object，生命周期为定义到delete之间。
+       // .......
+       delete object;
+       // ......
+     }
+     #+end_src
+
+** array new 必须要和 array delete 一起使用
+   #+begin_src c++
+   String* p = new String[3];
+   delete[] p; // 触发3次dtor
+   // delete p; 仅触发1次dtor
+   #+end_src
+  
+** new的过程
+   1. 代码 ~Complex* pc = new Complex(1,2);~
+   2. VC++编译为如下代码
+      #+begin_src c++
+      Complex* pc;
+      void* mem = operator new(sizeof(Complex)); // 分配堆空间，内部调用malloc(n)
+      pc = static_cast<Complex*>(mem); // 类型转换
+      pc->Complex::Complex(1,2); // 调用构造函数
+      #+end_src
+   3. VC++的Debug模式下，一个Complex对象的内存布局
+      |       00000041 | Cookie，用于标识归属同一个对象的内存块的起始位置 |
+      |       00790c20 | debug信息                                        |
+      |       00790b80 | debug信息                                        |
+      |       0042ede8 | debug信息                                        |
+      |       0000006d | debug信息                                        |
+      |                | debug信息                                        |
+      |       00000002 | debug信息                                        |
+      |       00000004 | debug信息                                        |
+      |       fdfdfdfd | debug信息                                        |
+      | Complex object | 2个double占8bytes                                |
+      |       fdfdfdfd | debug信息                                        |
+      |       00000000 | 内存地址对齐用的pad                              |
+      |       00000000 | 内存地址对齐用的pad                              |
+      |       00000000 | 内存地址对齐用的pad                              |
+      |       00000041 | Cookie，用于标识归属同一个对象的内存块的起始位置 |
+      - Complex中实际用于存储数据的空间仅占8bytes
+      - 分配给同一个Complex对象的内存块起始标识位(Cookie)共占8bytes
+      - 存储Debug信息共占32+4=36bytes
+      - 那么上述共占16+36=52bytes，但VC++要求堆中分配的区块大小必须位16bytes的倍数，因此需要填充12个pad达到64bytes。
+      - 而Release模式下则省略debug信息的存储空间，并且根据16bytes的倍数的规则重新确定需要填充多少个pad。
+   4. VC++在Debug模式下，一个String对象的内存布局
+      结构和Complex的差不多，但由于m_data为指针因此不管实际字符串长度为多少，其也仅占4bytes。
+   5. VC++在Debug模式下，一个Complex数组 ~Complex* pc = new Complex[3];~ 的内存布局
+      | 00000041       | Cookie，用于标识归属同一个对象的内存块的起始位置 |
+      | xxxxxxx        | Debug信息，占32bytes                             |
+      | 3              | 数组长度，占4bytes                               |
+      | Complex object | 数组长度，占8bytes                               |
+      | Complex object | 数组长度，占8bytes                               |
+      | Complex object | 数组长度，占8bytes                               |
+      | fdfdfdfd       | Debug信息，占4bytes                              |
+      | 00000000       | 内存地址对齐用的pad                              |
+      | 00000041       | Cookie，用于标识归属同一个对象的内存块的起始位置 |
+
+** delete的过程
+   1. 代码 ~delete pc~
+   2. VC++编译为如下代码
+      #+begin_src c++
+      Complex::~Complex(pc); // 调用析构函数
+      operator delete(pc); // 释放堆空间，内部调用free(pc)
+      #+end_src
+
+*  继承(Inheritance)、复合(Composition)和委托(Delegation)
+
+** 复合(Composition)  
+   用于表示Container *has-a* Component的关系，且Container和Component的生命周期是一致的。
+   #+begin_src c++
+   class String {
+   private:
+     StringRep rep;
+   };
+   class StringRep {
+   };
+   #+end_src
+
+*** 构造函数和析构函数执行顺序
+    1. 构造函数调用默认顺序为，先调用Component默认的构造函数，后调用Container的构造函数。
+       #+begin_src c++
+       Container::Container(......) : Component() {
+       }
+       #+end_src
+    2. 析构函数调用默认顺序为，先执行Container的析构函数，后调用Component的析构函数。
+       #+begin_src c++
+       Container::~Container(......) {
+         // .......
+	~Component();
+       }
+       #+end_src
+
+** 委托(Delegation)
+   委托即为Composition by reference. Container和Component的生命周期没有关联。
+   #+begin_src c++
+   class String {
+   private:
+     StringRep* rep;
+   };
+   class StringRep {
+   };
+   #+end_src
+
+*** TODO Handle/Body模式(也称为pImpl模式)
+    Handle是提供给用户依赖和使用类，而Body才是Handle类中功能的具体的实现。
+
+** 继承(Inheritance)
+   用于表示 *is-a* 的关系。
+   
+   1. struct的继承
+      #+begin_src c++
+      struct _List_node_base {
+        _List_node_base* _M_next;
+        _List_node_base* _M_prev;
+      };
+      struct _List_node : public _List_node_base {
+        char* m_data;
+      };
+      #+end_src
+   2. class的继承
+
+
+*** 构造函数和析构函数执行顺序
+    基类的析构函数必须为virtual，否则会出现undefined behavior。
+    1. 构造函数调用默认顺序为，先调用Base默认的构造函数，后调用Derived的构造函数。
+       #+begin_src c++
+       Derived::Derived(...) : Base() {....};
+       #+end_src
+    2. 析构函数调用默认顺序为，先执行Derived的析构函数，后调用Base的析构函数。
+       #+begin_src c++
+       Derived::~Derived(...) {
+          ......
+          ~Base();
+       }
+       #+end_src
+
+*** Inheritance with virtual functions(虚函数)
+    仅能继承成员函数，而成员函数分为以下3种。
+    1. non-virtual函数
+       不允许derived class重写(override)的函数，并且base class有该函数的定义。
+    2. (impure) virtual函数
+       允许derived class重写(override)的函数，并且base class有该函数的默认定义。
+    3. pure virtual函数
+       规定derived class必须重写(override)的函数，base class不提供定义。
+
+    #+begin_src c++
+    class Shape {
+    public:
+      virtual void draw() const = 0; // pure virtual
+      virtual void error(const std::string& msg); // impure virtual
+      int objectID() const; // non-virtual
+    };
+    #+end_src
+
+* pointer-like classes
+  设计一个类型行为如一个指针。
+
+** 智能指针
+   即用法和指针一致，内含某指针但能附加数据和提供更多的功能。
+   #+begin_src c++
+   template<class T>
+  
+   class myshared_ptr {
+   public:
+     myshared_ptr (T* p) : px(p) {}
+     T& operator* () const { return *px;  }
+     T* operator-> () const { return px; }
+   private:
+     T* px;
+   };
+
+   struct Person {
+     char* name;
+   };
+
+   // 使用
+   struct Person* john = new struct Person;
+   myshared_ptr p_ptr(john);
+   p_ptr->name = new char[5]{'J', 'o', 'h', 'n', '\0'};
+
+   cout << p_ptr->name << endl; // ->会不断对其操作结果继续执行->，直到操作结果不为指针为止。
+   cout << (*p_ptr).name << endl;
+   #+end_src
+
+** 迭代器的智能指针
+   1. 链表节点
+       #+begin_src c++
+       template<class T>
+       struct __list_node {
+          void* prev;
+          void* next;
+          T data;
+       };
+       #+end_src
+   2. 迭代器智能指针
+      #+begin_src c++
+      template<class T, class Ref, class Ptr>
+      
+      struct __list_iterator {
+        typedef __list_iterator<T, Ref, Ptr> self;
+        typedef Ref reference;
+        typedef Ptr pointer;
+        typedef __list_node<T>* link_type;
+
+        link_type node;
+        reference operator* () const { return (*node).data; } // 获取节点的数据对象
+        pointer operator-> () const { return &(operator*()); } // 操作节点的数据对象的成员
+        bool operator== (const self& x) const { return node == x.node; }
+        bool operator!= (const self& x) const { return !operator==(); }
+        self& operator++ () { node = (link_type)(node->next); return *this; } // ++i
+        self operator++(int) { self tmp = *this; ++*this; return tmp;} // i++
+        self& operator-- () { node = (link_type)(node->prev); return *this; } // --i
+        self operator--(int) { self tmp = *this; --*this; return tmp;} // i--
+      };
+      #+end_src
+
+* function-like classes  
+  设计一个类型行为如一个函数。
+
+** 简单示例
+   #+begin_src c++
+   template<class T>
+  
+   struct identity {
+     const T& 
+     operator() (const T& x) const { return x; }
+   };
+
+   // 使用
+   int i = identity<int>()(1); // i为1
+   #+end_src
+
+** 复杂示例
+   #+begin_src c++
+   template<class T1, class T2>
+   struct Pair {
+     typedef T1 fst_type;
+     typedef T2 sec_type;
+
+     T1 fst;
+     T2 sec;
+     Pair() : fst(T1()), sec(T2()) {}
+     Pair(T1 f, T2 s) : fst(f), sec(s) {}
+   };
+
+   template<class T3>
+   struct select1st {
+     const typename T3::fst_type&
+       operator() (const T3& x) const { return x.fst; }
+   };
+
+   // 使用
+   Pair<int, double> p(1, 0.2);
+   select1st<Pair<int, double>>()(p); // 得到1
+   #+end_src
+
+* 模板(Template)
+   
+** 类模板(class template或template class)
+   #+begin_src c++
+   template<typename T>
+   class Complex{
+   public:
+     Complex(T r = 0, T i = 0): re(r), im(i) {}
+     T real const() {return re;}
+     T imag const() {return im;}
+   private:
+     T re, im;
+   }
+
+   // 使用，编译时会自动根据实际类型复制多份代码，从而导致代码膨胀。
+   Complex<int> intComplex;
+   Complex<double> intComplex;
+   #+end_src
+
+** 函数模板(function template)
+   #+begin_src c++
+   template<class T>
+   
+   const T& min (const T& a, const T& b) {
+     return a < b ? a : b;
+   }
+
+   // 使用，不用标识实际类型，因为编译器会做实参的类型推导(argument deduction)
+   min(1, 2);
+   min('a', 'b');
+   #+end_src
+
+** 成员模板(member template)
+   应用于内部的成员函数的模板。可以实现类似于协变的特性：
+   1. 示例1
+      #+begin_src c++
+      template<B1, B2>
+      struct Pair {
+        B1 fst;
+        B2 sec;
+        Pair() : fst(B1()), sec(B2()) {}
+        template<D1, D2>
+        Pair(const Pair<D1, D2>& x) : fst(x.fst), sec(x.sec) {}
+      };
+      
+      class B1 {}
+      class D1 : public B1 {}
+      class B2 {}
+      class D2 : public B2 {}
+     
+      Pair<D1, D2> pd;
+      Pair<B1, B2> pb(pd);
+      #+end_src
+   2. 示例2——智能指针
+       #+begin_src c++
+       // 模拟指针默认的 Base1* ptr = new Derived1;
+       template<typename B>
+       class myshared_ptr {
+       public:
+         myshared_ptr(const B* x) : px(x) {}
+         template<typename D>
+         myshared_ptr(const D* x) : px(x) {}
+       private:
+         B* px;
+       };
+
+       // 使用
+       myshared_ptr<B1> pb = myshared_ptr<B1>(new D1);
+       #+end_src
+   3. 示例3
+      #+begin_src c++
+      class PrintIt {
+      public:
+        template<class T>
+        void println(const T& t){
+	cout << t << endl;
+        }
+      }
+
+      // 使用
+      PrintIt p = PrintIt;
+      p.println(1);
+      p.println("test");
+      #+end_src
+
+** 模板特化(specialization)
+   模板(即泛化)的反向就是特化，用于大部分场景使用泛化代码，而针对特定场景为了性能或功能则使用特化。
+   优先级：存在特化优先使用特化版本，否则才使用泛化版本。
+   #+begin_src c++
+ #include <iostream>
+using namespace std;
+template<class T>
+
+struct Println {
+	T m_data;
+	Println() : m_data(T()) {}
+	void println() {
+		cout << m_data << endl;
+	}
+};
+
+
+template<>
+struct Println<double> {
+	double m_data;
+	Println() : m_data(double()) {}
+	void println() {
+		cout << "double:" << m_data << endl;
+	}
+};
+
+
+template<>
+struct Println<int> {
+	double m_data;
+	Println() : m_data(int()) {}
+	void println() {
+		cout << "int:" << m_data << endl;
+	}
+};
+
+   // 使用
+   Println<long>().println();
+   Println<int>().println();
+   Println<double>().println();
+   #+end_src
+   
+**  模板偏特化(partial specialization)
+   1. 个数偏特化
+      #+begin_src c++
+ #include <iostream>
+using namespace std;
+
+template<class T, class E>
+struct Println {
+	T m_first;
+	E m_second;
+
+	Println() : m_first(T()), m_second(E()) {}
+	void println() {
+		cout << m_first << ',' << m_second << endl;
+	}
+};
+
+
+template<class E>
+struct Println<double, E> {
+	double m_first;
+	E m_second;
+
+	Println() : m_first(double()), m_second(E()) {}
+	void println() {
+		cout << "double" << m_first << ',' << m_second << endl;
+	}
+};
+      #+end_src
+   2. 范围偏特化
+      #+begin_src c++
+      template<class E>
+      struct myshared_ptr {
+        myshared_ptr(E* p) : px(p) {}
+        E* px;
+      };
+
+      template<class U>
+      struct myshared_ptr<U*> {      
+        myshared_ptr(U** p) : px(p) {}
+        U** px;
+      };
+      #+end_src
+
+** 模板模板参数(template template parameter)
+   用于模板实参也是模板的场景。
+   1. 模板仅包含单个模板参数的场景
+      #+begin_src c++
+      template<class T, template<class T> class Container> // 类型参数Container的实参也是一个包含单个模板参数的类模板
+      struct ctx {
+        Container<T> el;
+        ctx(Container<T>  e) : el(e) {}
+      }
+      
+      // 类模板
+      template<class T>
+      struct my_ptr {
+        T* px;
+        my_ptr(T* p) : px(p){}
+      }
+
+      // 使用
+      ctx<int, my_ptr> c = ctx<int, my_ptr>(my_ptr<int>(new int(3)));
+      cout << *(c.el) << endl; // 输出3
+      #+end_src
+   2. 模板包含多个模板参数
+      #+begin_src c++
+      template<class T, template<class T> class Container> // 类型参数Container的实参也是一个包含单个模板参数的类模板
+      struct ctx {
+        Container<T> el;
+        ctx(Container<T>  e) : el(e) {}
+      }
+      
+      // 类模板
+      template<class T, class E>
+      struct my_ptr {
+        T* px;
+        E* pe;
+        my_ptr(T* p, E* e) : px(p), pe(e){}
+      }
+      
+      // 偏特化生成另一个模板，C++11的用法
+      template<class T>
+        using my_unary_ptr = my_ptr<T, int>;
+      
+
+      // 使用
+      ctx<int, my_unary_ptr> c = ctx<int, my_unary_ptr>(my_unary_ptr<int>(new int(3)));
+      cout << *(c.el) << endl; // 输出3
+      #+end_src
+
+** 模板参数及参数默认值   
+   1. 模板参数
+      - ~template<class T>~ 和 ~template<typename T>~ 中的class和typename仅在template中时均表示模板参数的意思，其它情况它们分别表示不同的意思。
+      - 多个模板参数间通过逗号分隔
+   2. 参数默认值
+      - 注意：仅能用于泛化中，不能应用到特化中。
+      - 格式和函数形参的默认值一致，如 ~template<typename T, typename E = int>~
+
+* 创建对象时 ~ClassName inst~ 和 ~ClassName inst()~ 的区别
+
+** 创建栈对象时
+   1. ~ClassName inst~
+      1. 当没有自定义构造函数时会使用编译器为struct或class创建的默认构造函数。
+      2. 当存在自定义构造函数时编译器将将不会为struct或class创建默认无参数的构造函数，若没有自定义无参数的构造函数则会报编译失败。
+   2. ~ClassName inst()~
+      无论是struct或class该语法均无效。因为这个和创建临时对象的语法有冲突，创建临时对象的语法为 ~ClassName()~ 。
+
+   即 ~ClassName inst~ 和 ~ClassName inst = ClassName()~ 是等价的。
+
+** 创建堆对象时
+   ~new ClassName~ 和 ~new ClassName()~ 都是调用无参数构造函数。
+   #+begin_src c++
+   char *str = new char[10]; // 申请一个长度为10的字符数组
+   char *c = new char(10); // 申请一个字符空间，并初始化为10
+   delete c;
+   delete[] str;
+   #+end_src
+
+* 头文件和源文件的作用
+  C++支持 *分别编译(separate compilation)*, 即a.cpp使用到b.cpp中定义的全局方法 ~void test()~ ，但可以分别对a.cpp和b.cpp编译为两个独立的目标文件a.o和b.o，然后运行前链接(link)两者即可。
+  原理：
+  1. 编译阶段，a.cpp中声明 ~void test();~ 那么编译后会生成一个符号表(symbol table)，其中就包含声明 ~void test()~ 的信息；
+  2. 链接阶段，链接器遍历符号表并从其它目标文件中搜索符号表的项目对应的定义，若链接成功则生成可执行文件。
+
+**  声明和定义
+   - 声明：仅仅用于表示某形式的符号存在，当具体定义的位置未知。一个符号可被多次声明。
+   - 定义：完整描述符号相关的信息，并根据其提供的信息分配内存空间。一个符号有且仅有一个定义。
+
+** 头文件
+   将所有相关的函数声明写在头文件中，然后通过 ~#include~ 将其引入到需要它的源文件中。
+   头文件本身不参与编译，因此在执行编译命令时只需包含源文件即可。而头文件则必须位于 ~#include~ 指定的路径上。
+
+   头文件的内容
+   1. 变量声明 ~extern int a;~
+      - 类成员数据的声明(不能赋值)
+      - 类静态数据的声明，可赋值
+      - 常量的定义
+   2. 函数声明 ~void f();~
+      - 类成员函数的声明
+      - 非类成员函数的声明
+      - 静态函数的定义
+      - 类内联函数的定义
+
+
+   可包含定义的3个情况说明：
+      1. 可包含const对象和static对象的定义
+	 全局的const对象和static对象默认没有extern的声明，所以引入它们后它们的作用域为当前源文件，并不会在源文件中相互影响。且可保证所有源文件的const和static对象相同。
+      2. 可包含内联函数的定义
+	 内联函数是编译时必须得到定义，然后在调用处展开。因此cpp规定内联函数可以被定义多次，那么写在头文件中就更合理了。
+      3. 可包含struct和class的定义
+	 1. 写法1：将class定义写在头文件，而成员函数的实现写在源文件。
+	 2. 写法2：成员函数定义在class内，那么会被识别为内联函数，那么就可以定义多次。
+	    - 注意点：若成员函数定义在class外，且位于相同的头文件中，那么会造成定义多次是错误的。
+
+   不能包含默认命名空间声明，如 ~using namespace std;~ 不能使用，必须使用 ~std::string~ 的形式。
+
+* 函数的调用约定
+  
+** 函数调用过程
+   1. 把调用者的地址压栈，当函数执行完成后返回该地址继续往下执行；
+   2. 把实参压栈或存储到寄存器；
+   3. 跳转到函数；
+   4. 把函数需要使用的寄存器压栈；
+   5. 执行函数；
+   6. 处理函数返回值；
+   7. 恢复寄存器的值；
+   8. 清理参数和处理返回值；
+   9. 返回到调用者的地址。
+
+** 函数调用约定
+   是对函数调用的一个约束和规定，用于描述函数参数传递方式和调用结束后堆栈的清理方式。主要为三个方面
+   1. 函数参数的传递方式（寄存器传递参数、采用哪些寄存器传递、参数压栈的顺序等）
+   2. 函数调用结束后栈帧清理和栈顶指针恢复方式（由调用者处理、由函数处理）
+   3. 函数修饰名的产生方式(C编译方式和C++编译方式将有所不同)
+
+   函数签名的组成实际为： *返回值+调用约定+函数名+形参列表* 。因此声明和定义中上述4部分必须相同，否则编译失败。
+   
+   常见的函数调用约定为：__cdecl(C/C++默认的调用约定)、__stdcall、__fastcall
+   其它不常用调用约定为：__pascal、__thiscall等
+
+** ~__cdecl~
+   是C Decalaretion的缩写，作为C/C++默认的函数调用约定。
+   规则：
+   1. 采用栈传递参数，参数 *从右向左依次入栈* ；
+   2. 由 *调用者* 恢复栈帧和栈顶指针
+   3. 以C编译方式编译时自动将函数名重命名为 ~_<函数名>~ 即 ~int add(int a, int b)~ 被重命名为 ~int _add(int a, int b)~
+
+   注意：若要使用可变参数的函数(如printf)，那么调用约定必须使用__cdecl。
+
+** ~__stdcall~
+   是Standard Call的缩写，作为C++的标准调用约定。WINAPI、CALLBACK实际上都是采用__stdcall，即Windows大部分API函数都是采用该调用约定。
+   规则：
+   1. 采用栈传递参数，参数 *从右向左依次入栈* ；
+   2. 由 *被调用者* 恢复栈帧和栈顶指针
+      即函数执行完后，压栈的参数将一同被弹栈。若函数为可变参数，那么函数无法预知压栈的参数个数，那么就无法有效恢复现场。因此该调用约定无法支持可变参数的函数地好用。
+   3. 以C编译方式编译时自动将函数名重命名为 ~_@<参数字节数><函数名>~ 即 ~int add(int a, int b)~ 被重命名为 ~int _@8add(int a, int b)~
+
+   相较 ~__cdecl~ 的好处：仅需编译一份和函数本身绑定的恢复栈顶指针的代码，而 ~__cdecl~ 则需要在每个调用处生成恢复栈顶指针的代码。
+
+** ~__fastcall~
+   规则：
+   1. 函数从左到右的第1、2个参数通过ecx和edx寄存器传递；其余参数则 *从右向左依次入栈* ；
+   2. 由 *被调用者* 恢复栈帧和栈顶指针
+   3. 以C编译方式编译时自动将函数名重命名为 ~@<函数名>@<参数字节数>~ 即 ~int add(int a, int b)~ 被重命名为 ~int @add@8(int a, int b)~
+ 
+   由于使用寄存器传递参数，因此速度较 ~__stdcall~ 更快。
+
+** ~__thiscall~
+   只能作为C++类成员函数的调用约定，同时也是C++类成员函数的默认调用约定。
+   规则：
+   1. 采用栈传递参数，参数 *从右向左依次入栈* ；
+   2. 若参数个数确定，则通过ecx寄存器将this指针传递给函数；若参数个数不确定，则等所有参数压栈后再将this指针压栈；
+   3. 若参数个数确定，则由被调用者恢复栈顶指针；若参数个数不确定，则由调用者恢复栈顶指针。
+
+** 函数修饰名
+   编译期间根据函数签名对函数名称进行重命名，用于在链接阶段通过函数修饰名定位函数。
+   一般场景下开发人员并不用知道和指定函数修饰名，但如下情况则需要指定：
+   1. C++中为重构函数、构造函数和析构函数等指定函数修饰名；
+   2. 在Java、Nodejs和汇编程序中调用C/C++函数，若函数组成的4个部分发生变化那么函数修饰名也随之变化。
+
+   C和C++的函数修饰名生成方式均不会修改函数名的大小写；而采用 ~__pascal~ 调用约定的函数修饰名和函数名一致，但全部转换为大写。
+
+*** C++的函数修饰名生成规则
+    ~__cdecl~, ~__stdcall~ 和 ~__fastcall~ 在C++编译方式下的非成员函数的函数修饰名规则整体相同，仅参数开始标识符有所不同。
+    - ~__stdcall~ 的参数开始标识符为 ~@@YG~
+    - ~__cdecl~ 的参数开始标识符为 ~@@YA~
+    - ~__fastall~ 的参数开始标识符为 ~@@YI~
+
+    函数修饰名生成规则： 
+    - 参数列表不为空 ~?<函数名><参数开始标识><参数表>@Z~
+      - 参数表包含 *返回值类型代号* 和 *形参类型代号*
+      - 示例: ~int __cdecl function1(char*, unsgined long)~ 的函数修饰名为 ~?function1@YAHPADK@Z~
+    - 参数列表为空 ~?<函数名><参数开始标识><返回值类型代号>XZ~
+      - 示例: ~int __cdecl function2()~ 的函数修饰名为 ~?function2@YAHXZ~
+
+**** 类成员函数的函数修饰名
+     由于存在函数重载、构造函数和析构函数和public、protected和private等访问控制符，因此类成员的函数修饰名生成规则更为复杂。
+
+**** 类型代号表
+     | 代号 | 类型                 | 示例 |
+     |------+----------------------+------|
+     | X    | void                 |      |
+     | D    | char                 |      |
+     | E    | unsigned char        |      |
+     | F    | short                |      |
+     | H    | int                  |      |
+     | I    | unsigned int         |      |
+     | J    | long                 |      |
+     | K    | unsigned long(DWORD) |      |
+     | M    | float                |      |
+     | N    | double               |      |
+     | _N   | bool                 |      |
+     | U    | struct(后紧跟结构名，并以@@结束) | struct Person为UPerson@@ |
+     | PA   | 指针(后紧跟指针类型)，若后续依然为该类型则以0代替 | int* 为 PAH；int*,int*,int*为PAH00 |
+     | PB   | const类型的指针      |      |
+
+*** ~extern "C"~ 的作用
+    是C++编译器提供的，用于告知编译器以C方式编译和链接。
+    - 导出时用于告知编译器依照C方式编译封装接口，但函数内部依然按照C++方式编译；
+    - 导入时告知编译器和链接器按照C方式查找和链接所要调用的函数。
+    
+    若调用者采用C++方式编译，而被调用者采用C方式编译，那么它们两者关联的函数修饰名将不同，从而导致链接时报 ~error LINK2019: 无法解析的外部符号~ 的异常。
+
+**** 使用方式
+     1. inline——逐个函数设置 ~extern "C" int add(int, int);~ 
+     2. 块——多个函数一起设置
+	#+begin_src c++
+	extern "C" {
+	  // 函数1声明
+	  // 函数2声明
+	  // .........
+	}
+	#+end_src
+    
+* 异常处理
+  
+** 抛出异常
+   #+begin_src c++
+   throw "hi"; // 抛出类型为 const char* 的异常
+   throw 1; // 抛出类型为 int 的异常
+   #+end_src
+
+** 捕获异常
+   1. 语法
+      #+begin_src c++
+      try {
+      }
+      catch (ExceptionName1 e) {
+      }
+      catch (ExceptionName2 e) {
+      }
+      #+end_src
+   2. 捕获所有类型
+      #+begin_src c++
+      try {
+      }
+      catch (...) {
+       // ... 表示捕获所有异常
+      }
+      #+end_src
+   3. 示例
+      #+begin_src c++
+      try {
+        throw "Hi";
+      }
+      catch (const char* message) {
+        cerr << message << endl;
+      }
+      #+end_src
+
+** C++的标准异常
+   定义在 ~<exception>~ 中，位于 ~std~ 命名空间中。
+   | 异常                  | 描述                                 |
+   |-----------------------+--------------------------------------|
+   | std::exception        | 所有C++标准异常的父类                |
+   | std::bad_alloc        | new操作异常                          |
+   | std::bad_cast         | dynamic_cast操作异常                 |
+   | std::bad_typeid       | typeid操作异常                       |
+   | std::bad_exception    | 在处理C++程序中无法预期的异常时有用  |
+   | std::logic_error      | 理论上可以通过读取代码来检测到的异常 |
+   | std::runtime_error    | 理论上不可通过读取代码来检测到的异常 |
+   | std::domain_error     | logic_error子类，当使用一个无效的数学域时报错         |
+   | std::invalid_argument | logic_error子类，当使用无效参数时报错             |
+   | std::length_error     | logic_error子类，当创建太长的std::string时报错   |
+   | std::out_of_length    | logic_error子类，超出长度时报错                |
+   | std::overflow_error   |     runtime_error子类，数学上溢报错           |
+   | std::range_error      |   runtime_error子类，存储超出范围的值时报错        |
+   | std::underflow_error  | runtime_error子类，数学下溢报错               |
+
+** 自定义异常
+   通过继承 ~exception~ 类自定义异常
+   #+begin_src c++
+   #include <exception>
+   using namespace std;
+
+   struct MyException : public expection {
+     // 异常类提供的共有方法，用于返回异常产生的原因。
+     const char* what() const throw() {
+       return "My Exception";
+     }
+   };
+
+   throw MyException();
+   #+end_src
+
+* TODO 枚举类型前向声明
+  C++11前的C++标准中不支持枚举类型向前声明。
+
+** TODO 什么是枚举类型向前声明？
+
+* 静态链接库的开发和使用
+  1. 开发时将编译的Configuration Type设置为static library，然后按普通项目开发编译即可得到 *.LIB文件* 和 *.H头文件*
+  2. 将 *.LIB文件* 和 *.H头文件* 复制到应用程序目录下
+  3. 引入静态库
+     #+begin_src c++
+     #pragma comment(lib, "my.lib")
+     
+     int main(){
+       int result = add(1, 2); // 直接使用静态库的函数
+     }
+     #+end_src
+
+* 动态链接库(DLL)的开发和使用
+  从16位Windows起引入动态链接库(DLL)，其中包含函数和数据。是Windows平台下实现共享函数概念的一种实现方式。扩展名为 ~.dll~ 或 ~.ocx(包含ActiveX控件的库)~ 。
+  动态链接库包含两个文件：引入库(.LIB)文件和DLL文件。
+  - 引入库(.LIB)文件，包含被DLL导出的函数和名称和地址位置。若编译出来的文件没有 .LIB文件，那么要么缺少 .DEF文件 要么缺少 ~extern "C" __declspec(dllexport)~ 声明导出的函数。
+  - DLL文件，包含函数和数据。
+    
+  应用程序编译时只需依赖引入库文件，即编译出来的可执行文件仅包含DLL函数的地址而不是函数代码；在链接阶段才会使用DLL文件。因此
+  - 编译时只需依赖引入库文件
+  - 发行时引入库文件和DLL文件要一起发行
+
+** VC++支持3种DLL
+   1. Non-MFC DLL(非MFC动态库)
+      不依赖MFC类结构，直接用C语言写的DLL，导出的函数是标准的C接口，能被非MFC和MFC应用所调用。
+   2. Regular DLL(常规DLL)
+      依赖MFC类结构(即继承CWinApp类，但该类没有消息循环)，被导出的函数可以是C函数、C++类或C++成员函数。只要能调用类C函数的应用即可调用，如VC++,Dephi,VB,Borland C等。
+   3. Extension DLL(扩展DLL)
+      依赖MFC类结构(即继承CWinApp类，但该类没有消息循环)，被导出的函数可以是C函数、C++类或C++成员函数。只能由MFC应用调用。
+
+*** VS下创建Non-MFC DLL
+    1. DLL入口函数——dllmain.cpp文件详解
+       1. DLL入口函数和EXE入口函数的差别
+	  - EXE入口函数只会被调用1次
+	  - DLL入口函数可能会被调用多次
+       2. 代码
+	  #+begin_src c++
+	  #include "stdafx.h"
+
+	  BOOL APIENTRY DllMain(HMODULE hModule, // 由于不同的应用程序引入DLL时分配的地址均不同，因此该入参用于保存当前应用程序指向该DLL模块的句柄(实际上，是指向_DGROUP段的一个选择符)
+						  DWORD ul_reason_for_call, // 动态库被调用的原因，当在进程/线程装入或卸载动态库时，操作系统会调用入口函数(APIENTRY标识的函数)
+					  LPVOID lpReserved)
+	  {
+              switch (ul_reason_for_call) {
+	      case DLL_PROCESS_ATTACH: // 主线程执行LoadLibrary加载DLL时执行
+	      case DLL_THREAD_ATTACH: // 工作线程执行LoadLibrary加载DLL时执行
+	      case DLL_THREAD_DETACH: // 工作线程执行FreeLibrary卸载DLL，或工作线程退出时执行
+	      case DLL_PROCESS_DETACH: // 主线程执行FreeLibrary卸载DLL，或主线程退出时执行
+		break;
+              }
+              return TRUE;
+	  }
+	  #+end_src
+    2. 通过 ~extern "C" __declspec(dllexport)~ 导出Non-MFC DLL
+       1. Header文件——头文件为可选项
+	  #+begin_src c++
+	  // my.h
+	  // 若当前为C++项目，则导出函数需要用 extern "C" __declspec(dllexport) 标识
+	  // 若当前为C项目，则导出函数需要用 __declspec(dllexport) 标识即可
+	  #ifdef __cplusplus
+	  #define DLLEXPORT extern "C" __declspec(dllexport)
+	  #else
+	  #define DLLEXPORT __declspec(dllexport)
+	  #endif
+	  
+	  DLLEXPORT  int add(int, int);
+	  #+end_src
+       2. CPP文件
+       #+begin_src c++
+       #include "my.h"
+       // 在项目对应的.cpp文件中写导出函数，如项目名为my则对应的文件为my.cpp
+       DLLEXPORT  int add(int a, int b) {
+         return (a + b);
+       }
+       #+end_src
+    3. 通过 .DEF文件 导出Non-MFC DLL
+       1. CPP文件(头文件可选)
+	  #+begin_src c++
+	  int add(int a, int b){
+	    return (a+b);
+	  }
+	  #+end_src
+       2. .Def文件
+	  #+begin_src 
+	  LIBRARY
+	  EXPORTS
+	  add @1
+	  sub @2 NONAME
+	  #+end_src
+	  1. EXPORTS下罗列导出表的函数信息
+	  2. ~add @1~ 表示导出add函数，编号为0x1且函数导出名为add。那么映射函数地址时可以通过函数名或编号寻找函数地址
+	     - ~GetProcAddress(hInstance, "add")~
+	     - ~GetProcAddress(hInstance, (char*)0x1)~
+	  3. ~sub @2 NONAME~ 表示导出sub函数，编号为0x2且函数导出名为匿名。那么映射函数地址时只能通过编号寻找函数地址
+	     - ~GetProcAddress(hInstance, (char*)0x2)~
+
+** 调用DLL——隐式链接
+   前提：必须要有 *.LIB文件* 和 *DLL文件* 
+   优点：只需引入DLL的引入库，那么只需列出函数声明即可使用，不用手写寻址代码。
+
+*** 仅有  *.LIB文件* 和 *DLL文件* 
+    1. 将DLL库的 *.LIB文件* 和 *DLL文件* 复制到应用系统所在目录
+    2. 隐式链接代码
+	#+begin_src c++
+	// 隐式链接相关代码
+
+	// 告知编译器使用的DLL的函数声明
+	// 另一个种方式是在VS/项目属性/链接器/输入/附加依赖项，将my.lib添加进去
+	#pragma comment(lib, "my.lib")
+	extern "C" __declspec(dllimport) int add (int, int); // DLL函数声明
+
+	int main(){
+              int result = add(1, 2);
+	}
+	#+end_src
+
+*** 仅有  *.LIB文件*, *DLL文件* 和 *.H头文件*
+    1. 将DLL库的 *.LIB文件*, *DLL文件* 和 *.H头文件* 复制到应用系统所在目录
+    2. 隐式链接代码
+	#+begin_src c++
+	// 隐式链接相关代码
+	#include "my.h"
+	#pragma comment(lib, "my.lib") // 告知编译器使用的DLL的函数声明
+
+	int main(){
+              int result = add(1, 2);
+	}
+	#+end_src
+
+*** 导入表
+    编译器会根据 ~__declspec(dllimport)~ 将相关动态链接库和所调用的函数生成导入表（记录DLL和DLL的函数）。
+    那么当启动程序时，操作系统会根据导入表加载对应的动态链接库。
+
+*** 通过Hook修改DLL在物理内存的函数
+    由于存在CopyOnWrite技术，因此通过Hook修改DLL在物理内存的函数时，不会影响也依赖该DLL的其它应用程序。
+
+** 调用DLL——显式链接
+   前提：仅有 *DLL文件* ，而没有 *.LIB文件*
+      #+begin_src c++
+      #include <Windows.h>
+      // 定义函数指针
+      typedef int (*ptrAdd) (int, int);
+
+      void main(){
+         ptrAdd add; // 声明函数指针变量
+
+          HINSTNANCE hDLL = LoadLibraryA("my.dll"); // 加载动态链接库DLL到程序的虚拟内存中，路径为相对于编译后的可执行文件路径
+          add = (ptrAdd)GetProcAddress(hDLL, "add"); // 获取DLL指定函数的地址给函数指针
+          int result = add(1, 2);
+
+          FreeLibrary(hDLL); // 释放动态链接库
+      }
+      #+end_src
+
+** TODO 访问DLL中的资源
+   
+*** API
+    1. LoadLibrary
+       #+begin_src c++
+       HINSTANCE LoadLibrary(
+         LPCTSTR lpLibFileName // address of filename of executable module
+       );
+       #+end_src
+    2. LoadResource
+       #+begin_src c++
+       HGLOBAL LoadResource(
+         HMODULE hModule, // resource-module handle
+         HRSRC hResInfo // resource handle
+       );
+       #+end_src
+    3. FindResource
+       #+begin_src c++
+       HRSRC FindResource(
+         HMODULE hModule, // resource-module handle
+         LPCTSTR lpName, // pointer to resource name
+         LPCTSTR lpType // pointer to resource type
+       );
+       #+end_src
+       
+* TODO STL
+* TODO 字符串操作
+** VisualStudio中启用C函数库的方法
+   原因：VisualStudio中默认禁用scanf,fopen和strcpy等C函数库的方法，必须使用更安全的scanf_s等方法。
+   解决方法：
+   1. 通过入口文件中添加标识，在使用这些方法的文件中添加 ~#define _CRT_SECURE_NO_WARNINGS~;
+   2. 通过编译参数设置，右键工程/属性/配置属性/c/c++/命令行，添加/D_CRT_SECURE_NO_WARNINGS;
+   3. 在 ~#include "stdafx.h"~ 下加预处理命令 ~#pragma warning(disable:4996)~
+
+** strcpy 和 strcpy_s
+   strcpy_s是strcpy的更安全的版本。
+   VC++中可通过
+   
+
+vptr(虚指针)
+vtbl(虚表)
+virtual mechanism
+* TODO Win32编程
+  Win32 API主要为存放在C:\WINDOWS\system32下面的所有dll。
+  几个重要的dll为：
+  1. Kernel32.dll：最核心的功能模块，如管理内存、进程和线程相关的函数等
+  2. User32.dll：Windows用户界面相关的应用接口，如创建桌面、窗口、发送消息等
+  3. GDI32.dll：Graphical Device Interface，用于自定义GUI组件。
+
+  API函数中带EX的是Windows 32位系统新增的，没有的则是原16位已提供的API。
+
+** 常用类型
+   Win32 API通过typedef重命名汇编、C/C++的类型，从而提高程序的扩展性和实现跨平台。
+
+   | 类型所属语言 | 类型           | Win32 类型1 | Win32 类型2 |
+   |--------------+----------------+-------------+-------------|
+   | 汇编         | byte           | BYTE        | PBYTE       |
+   |              | word           | WORD        | PWORD       |
+   |              | dword          | DWORD       | PDWORD      |
+   | C            | char           | CHAR        | PCHAR       |
+   |              | unsigned char  | UCHAR       | PUCHAR      |
+   |              | short          | SHORT       | PSHORT      |
+   |              | unsigned short | USHORT      | PUSHORT     |
+   |              | int            | INT         | PINT        |
+   |              | unsigned int   | UINT        | PUINT       |
+   | C++          | bool           | BOOL        |             |
+   |              | wchar_t        | WCHAR       |             |
+
+*** TODO C/C++的字符串
+
+**** ANSI ASCII 编码
+     采用1byte存储字符编码，因此最多能表示255个字符。
+     分为原始ASCII表和扩展ASCII表
+     - 原始ASCII表仅使用0x0-0x7F的编码，存放英文字母、数字和常用符号。
+     - 扩展ASCII表使用0x80-0xFF，存放使用频率很低的字符。
+
+**** MBCS编码(GB2312/GB2312-80/BIG5)
+     基于ASCII的扩展表(0x80-0xFF)，采用2byte存储中文字符的编码，并且每个byte的编码都使用ASCII扩展表的编码方式。如字符 "中" GB2312的MBCS编码为0xD6D0，其中0xD6和0xD0在ASCII扩展表中都分别对应一个不常用的字符，而一起则被识别为字符 "中"。
+     缺点：每个国家或地区所使用的MBCS编码均不相同，如台湾则采用BIG5。因此若发送方采用GB2312对字符进行编码，接收方采用BIG5进行解码，那么看到的有可能就是乱码。
+
+**** UNICODE编码
+     UNICODE是一套包含全世界字符的编码表，占3byte且编码范围为0x0~0x10FFFF，可容纳100多万个符号。
+     注意：UNICODE仅规定了字符的二进制编码，但没有规定具体的这些二进制编码的存储方式。
+     具体的存储方式如下：
+     - UTF-32，长度固定的存储方式，每个字符均采用32bit无符号整数存储。那么对于字母A这种UNICODE编码只是0x000040的字符，则有3byte的空间是浪费的。
+       - 由于UTF-32中单个字符由多个字节组成，并且字节序列的差异将导致解码时得到不同的字符，因此需要区分字节序列为大端还是小端。
+     - UTF-16，长度固定的存储方式，UNICODE默认存储方式。每个字符以16bit无符号整数的整数倍来存储，即字母A和其它UNICODE编码小于等于16bit的字符可采用16bit完成存储，而大于则需要采用32bit存储一个字符。
+       - 由于UTF-16中单个字符由多个字节组成，并且字节序列的差异将导致解码时得到不同的字符，因此需要区分字节序列为大端还是小端。
+       - BOM(Byte Order Mark)
+	 - LE —— ~0xFF FE~
+	 - BE —— ~0xFE FF~
+       - 适用场景：传输和存储的字符中，大部分字符的UNICODE编码占多字节，那么采用UTF-16既不会浪费空间，解码算法简单和高效。
+     - UTF-8，变长的存储方式
+       - UNICODE编码和UTF-8存储映射表
+	 | Unicode编码(16进制) | UTF-8字节流(二进制)        |
+	 |---------------------+----------------------------|
+	 | 000000 - 00007F     | 0xxxxxxx                   |
+	 | 000080-0007FF       | 110xxxxx 10xxxxxx          |
+	 | 000800-00FFFF       | 1110xxxx 10xxxxxx 10xxxxxx |
+	 | 010000-10FFFF       | 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx |
+       - 虽然UTF-8中单个字符可能由多个字节组成，但由于其编码方式的原因，大端还是小端的字节序列并不会导致解码得到不同的字符。
+       - 在存储某些中文字符时，UTF-8可能会占用3byte，比UTF-16的还要多1byte。
+       - BOM(Byte Order Mark) —— ~0xEF BB BF~
+       - 适用场景：传输和存储的字符中，大部分字符的UNICODE编码占单字节，那么采用UTF-8不会浪费空间，当然解码算法相对UTF-16而言复杂和低效。
+ 
+**** 多字节字符 ~char~ 和 宽字符 ~wchar_t~ 的使用
+     C语言提供的，C++继承过来。
+
+     | char   | wchar_t | 作用                                             |
+     |--------+---------+--------------------------------------------------|
+     | print  | wprintf | 打印到控制台                                     |
+     | strlen | wcslen  | 获取长度(通过字节数，不包含末尾结束符\0的字节数) |
+     | strcpy | wcscpy  | 字符串复制                                       |
+     | strcat | wcscat  | 字符串拼接                                       |
+     | strcmp | wcscmp  | 字符串比较                                       |
+     | strstr | wcsstr  | 子字符串查找                                     |
+
+     注意：char[]末尾结束符 ~\0~ 的二进制为 ~00~ ，而wchar_t[]的则为 ~00 00~ 。
+
+     示例：
+     #+begin_src c++
+     #include <locale.h>
+     setlocale(LC_ALL, ""); // 使用控制台默认的编码， 否则默认C地域只能输出英文。
+     
+     wchar_t wcsStr[] = L"中国";
+     wprintf(L"%s\n", wcsStr);
+     #+end_src
+
+**** MBCS和UNICODE间的转换
+     1. MBCS -> UNICODE
+         #+begin_src c++
+         #include <locale.h>
+         #include <Windows.h>
+
+         setlocale(LC_ALL, "");
+
+          // MBCS
+         char czText[] = "中国";
+         // 获取转换宽字符时需要的多少个16位空间
+         DWORD dwSize;
+         dwSize = MultiByteToWideChar(
+           CP_ACP,  // 源字符串采用的字符编码，CP_ACP表示ASCII
+           NULL, // dwFlags
+           czText, // 源字符串指针
+           -1, // 从0开始获取到哪个索引，-1为除\0外
+            NULL, // 目标字符串指针
+            0); // 从0开始复制到目标指针哪个索引
+          
+         // 转换
+         wchar_t *wcText = new wchar_t[dwSize];
+         if (!wcText) {
+           // new申请空间失败则回收并退出
+           delete[] wcText;
+           return 1;
+         }
+         MultiByteToWideChar(CP_ACP, NULL, czText, -1, wcText, dwSize)
+         #+end_src
+     2. UNICODE -> MBCS
+         #+begin_src c++
+         #include <locale.h>         
+         #include <Windows.h>
+
+         setlocale(LC_ALL, "");
+
+         wchar_t wcText[] = L"中国";
+
+         // 获取转换多字节字符时需要的多少个8位空间
+         DWORD dwSize;
+         dwSize = WideCharToMultiByte(
+           CP_OEMCP,  // 源字符串采用的字符编码（称为codepage），CP_OEMCP表示当前操作系统采用的多字节码字符编码，可能是BIG5或GB2312等
+           NULL, // dwFlags
+           wcText, // 源字符串指针
+           -1, // 从0开始获取到哪个索引，-1为除\0外
+            NULL, // 目标字符串指针
+            0, // 从0开始复制到目标指针哪个索引
+	NULL, // LPSTR lpDefaultChar 默认值
+            NULL); // LPBOOL lpUseDefaultChar 是否采用默认值
+
+         char * czText = new char[dwSize];
+         WideCharToMultiByte(CP_OEMP, NULL, wcText, -1, czText, dwSize, NULL, NULL);         
+         #+end_src
+
+*** Win32中字符串类型的使用
+    #+begin_src c++
+    CHAR sStr[] = "中国"; // ASCII码
+    WCHAR wsStr[] = L"中国"; // UNICODE码，默认采用UTF-16
+    TCHAR tsStr[] = TEXT("中国"); // 根据编译环境自动采用ASCII码或UNICODE码
+
+    // 指针
+    PSTR psStr = "中国"; // ASCII码
+    PWSTR pwsStr = L"中国"; // UNICODE码，默认采用UTF-16
+    PTSTR ptsStr = TEXT("中国"); // 根据编译环境自动采用ASCII码或UNICODE码
+    #+end_src
+    Win32很多函数都提供ASCII版本(名称以A结尾)和UNICODE版本(名称以W结尾)，并定义宏版本(宏名称不以A和W结尾)自动根据编译环境采用不同的版本。
+    由于Windows内部都是采用UNICODE编码，因此调用UNICODE版本的Win32API效率上会好些。
+
+** 进程
+*** CreateProcess
+    #+begin_src c++
+    BOOL CreateProcess(
+      LPCTSTR lpApplicationName,  // name of executable module, 即程序的绝对路径。如 c://program files//internet explorer//iexplore.exe
+      LPTSTR lpCommandLine, // command line string，一般将lpApplicationName设置为NULL，将程序路径+入参设置到lpCommandLine
+      LPSECURITY_ATTRIBUTES lpProcessAttributes, // 进程安全属性，NULL表示不允许被继承
+      LPSECURITY_ATTRIBUTES lpThreadAttributes,  // 线程安全属性，NULL表示不允许被继承
+      BOOL bInheritHandles,  // handle inheritance option，是否继承句柄，FALSE表示不继承
+      DWORD dwCreationFlags, // creation flags，创建标识，NULL或0表示没有标识。默认父子进程共用stdout，若设置为CREATE_NEW_CONSOLE则不共用控制台。
+      LPVOID lpEnvironment, // new environment block，设置环境变量，NULL表示使用父进程的环境变量
+      LPCTSTR lpCurrentDirectory, // current directory name，设置工作目录，NULL表示使用父进程的工作目录
+      LPSTARTUPINFO lpStartupInfo, // startup information
+      LPPROCESS_INFORMATION lpProcessInformation // process information
+    )
+
+    // Example
+    STARTUPINFO si; // 在栈中创建结构体
+    PROCESS_INFORMATION pi;
+    
+    ZeroMemory(&si, sizeof(si)); // 在栈中创建的结构体，必须通过ZeroMemory将结构体(指定长度的空间)设置为0.
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+    // 上述语句可以写成如下两种等效写法
+    // 1. PROCESS_INFORMATION pi = { 0 };
+    // 2. memset(&pi, 0, sizeof(pi));
+
+    if (!CreateProcess(NULL, "cmd.exe", NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)){
+      _tprintf(TEXT("CreateProcess failed (%d)\n"), GetLastError());
+      return;
+    }
+    // Wait until child process exits.
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    #+end_src
+    注意：若通过CreateProcess创建的子进程还处于启动状态，而创建它进程就关闭，那么到导致子进程创建失败。
+
+**** TODO 以挂起的形式启动子进程
+     - 默认情况下进程的启动过程如下：
+       1. 映射EXE文件（EXE和DLL文件都是PE格式文件）到用户态空间；
+       2. 在内核态空间创建进程内核对象(EPROCESS);
+       3. 映射系统DLL(ntdll.dll)到用户态空间
+       4. 在内核态空间创建线程内核对象(ETHREAD);
+       5. 系统启动线程
+	  1. 映射DLL依赖树(ntdll.LdrInitialize Thunk)
+	  2. 线程开始执行
+     - 以挂起的形式启动进程时
+       - 第5步则变为挂起，等待手动恢复后再执行后续步骤。
+
+     #+begin_src c++
+     
+     if (!CreateProcess(
+       szChildProcessName,
+       szCommandLine,
+       NULL,
+       NULL,
+       FALSE,
+       CREATE_SUSPENDED,
+       NULL,
+       NULL,
+       &si,
+       &pi
+     )){
+       return FALSE;
+     }
+
+     // 做各种修改，可以换掉实际要执行的程序
+
+     // 恢复线程继续执行。
+     ResumeThread(pi.hThread);
+     #+end_src
+
+**** ~LPSTARTUPINFO lpStartupInfo~
+     Pointer to ~LPSTARTUPINFO~ structure that specifies how the main window for the new process should appear.
+     该结构体用于在父进程中设置子进程呈现相关的属性，但由于子进程程序内部可能都会有相关的设置，而且子进程程序的设置优先级高于该结构体的设置。因此通过该结构体的设置不一定生效。
+     #+begin_src c++
+     typedef struct _STARTUPINFO {
+       DWORD cb;  // 指定结构体的大小，单位是字节。用于后期拓展，因为不同的windows版本可能结构体的大小会不同。
+       LPTSTR lpReserved; 
+       LPTSTR lpDesktop;
+       LPTSTR lpTitle; // 窗口标题
+       DWORD dwX; // x坐标
+       DWORD dwY; // y坐标
+       DWORD dwXSize; // 宽度
+       DWORD dwYSize; // 高度
+       DWORD dwXCountChars;
+       DWORD dwYCountChars;
+       DWORD dwFillAttribute;
+       DWORD dwFlags;
+       WORD wShowWindow;
+       WORD cbReserved2;
+       LPBYTE lpReserved2;
+       HANDLE hStdInput;
+       HANDLE hStdOutput;
+       HANDLE hStdError;
+     } STARTUPINFO, *LPSTARTUPINFO;
+     #+end_src
+
+***** AntiDebug
+      由于每个被创建的进程，父进程必定会提供一个 ~LPSTARTUPINFO~ 的结构体，一般为将不使用的值清0。如通过鼠标点击启动程序时，实际上是explorer.exe使用shell32的ShellExecute来运行程序，而ShellExecute会将StartupInfo中不使用的值清0。
+      而ollydbg会将dwFlags设置为STARTF_FORCEOFFFEEDBACK，而ShellExecute不会。因此可通过StartupInfo的信息判断是否通过ollydbg启动程序。
+      #+begin_src c++
+      #include <Windows.h>
+
+      BOOL isDebug(LPSTARTUPINFO lpStartupInfo) {
+        STARTUPINFO si;
+        GetStartupInfo(&si); // 获取当前进程启动时的StartupInfo
+	
+         if ((si.dwFillAttribute != 0) || (si.dwFlags & STARTF_FORCEOFFFEEDBACK) {
+	 return TRUE;
+         }
+         return FALSE;
+      }
+      #+end_src
+      注意：若用explorer启动后再以附加的方式debug，上述方法将无法检测出来。
+
+**** ~LPPROCESS_INFORMATION lpProcessInformation~
+     作为出参用于获取创建的子进程的进程、线程信息。
+     #+begin_src c++
+     typedef struct _PROCESS_INFOMATION {
+       HANDLE hProcess; // 进程句柄, 16进制
+       HANDLE hThread; // 线程句柄, 16进制
+       DWORD dwProcessId; // 进程ID, 16进制
+       DWORD dwThreadId; // 线程ID, 16进制
+     } PROCESS_INFOMATION;
+     #+end_src
+
+*** TerminateProcess
+    用于终止指定句柄的进程，注意由于句柄是进程私有句柄表内有效的值。因此若指定的是其它进程私有句柄表的句柄，那么调用该函数将失败(返回FALSE)。
+
+    #+begin_src c++
+    BOOL TerminateProcess(
+      HANDLE hProcess, // handle to the process
+      UINT uExitCode // exit code for the process, 0表示正常退出
+    )
+
+    // Example
+    HANDLE hProcess;
+    hProcess = (HANDLE)0x7D0;  // 进程句柄
+    
+    BOOL bSuccess = TerminateProcess(hProcess, 1);
+    #+end_src
+
+*** OpenProcess
+    用于打开一个已经存在的进程。
+    #+begin_src c++
+    HANDLE OpenProcess(
+      DWORD dwDesiredAccess, // access flag，PROCESS_ALL_ACCESS表示拥有创建子进程、线程等能力
+      BOOL hInheritanceHandle, //handle inheritance option，是否共享源进程的内核对象到调用该函数的进程
+      DWORD dwProcessId // process identifier
+    )
+
+    // Example
+    DWORD dwProcessId = 0x7E0; // 已存在的进程ID
+
+    // 在将打开的进程纳入当前进程的句柄表中，句柄值为hProcess
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+    // 那么就可以通过句柄关闭已有的进程
+    TeminateProcess(hProcess, 1);
+    #+end_src
+
+** 获取错误码—— ~INT GetLastError()~
+   Win32中大部分函数的返回值并不返回执行异常的具体错误码，只是返回 ~BOOL~ 值。那么当返回为 ~FALSE~ 时则需要通过调用GetLastError函数获取错误码。然后根据错误码到API文档查询错误信息。
+   #+begin_src c++
+   if (!调用返回BOOL的Win32函数) {
+     INT errorCode = GetLastError();
+   }
+   #+end_src
+** 线程
+   代码必须附加到线程上才能被执行。
+
+   #+begin_src c++
+   SuspendThread(pi.hThread); // 挂起线程
+   ResumeThread(pi.hThread); // 恢复线程
+
+   // 线程执行的函数定义，函数签名为 4字节返回值+4字节入参。也就是WINAPI不用理会。
+   DWORD WINAPI ThreadProc(LPVOID lpParameter) {
+     printf("hi");
+     return 0;
+   }
+
+   // 创建工作线程
+   HANDLE CreateThread(
+     LPSECURITY_ATTRIBUTES lpThreadAttributes, // 安全属性
+     SIZE_T dwStackSize, // 线程栈空间大小
+     LPTHREAD_START_ROUTINE lpStartAddress, // 由该线程执行的函数地址
+     LPVOID lpParameter, // 函数实参地址
+     DWORD dwCreationFlags, // 0表示线程创建后立即进入执行状态，CREATE_SUSPENDED表示线程创建后挂起直到显式唤醒才会进入执行状态
+     LPDWORD lpThreadId // OUT 线程ID
+   );
+   #+end_src
+
+*** 远程线程
+    在别的目标进程中创建线程，运行目标进程的代码。
+    
+    #+begin_src c++
+    HANDLE CreateRemoteThread(
+      HANDLE hProcess, // 目标进程的句柄
+      LPSECURITY_ATTRIBUTES lpThreadAttributes,
+      SIZE_T dwStackSize,
+      LPTHREAD_START_ROUTINE lpStartAddress,// 目标进程的代码地址
+      LPVOID lpParameter,
+      DWORD dwCreationFlags,
+      LPDWORD lpThreadId
+    );
+
+    // 1. 获取进程句柄
+    LPTHREAD_START_ROUTINE lpStartAddress = (LPTHREAD_START_ROUTINE)0x23ef;
+    DWORD dwProcessId = 0x2E33;
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+    if (hProcess != NULL) {
+      // 2. 创建远程线程
+      DWORD dwThreadID = { 0 };
+      HANDLE hThread = CreateRemoteThread(hProcess,  NULL, 0, lpStartAddress, NULL, 0, &dwThreadID);
+      if (hThread == NULL) {
+        CloseHandle(hProcess);
+      }
+      CloseHandle(hThread);
+      CloseHandle(hProcess);
+    }
+    #+end_src
+
+**** 远程线程注入
+     目标：在目标进程中运行自定义的代码。
+     操作流程：
+     1. 在目标进程创建线程加载自定义DLL
+     2. 在目标进程中运行自定义代码
+
+     #+begin_src c++
+     // dwProcessID为目标进程ID
+     // czDllPathName为自定义DLL路径
+     BOOL LoadDll(DWORD dwProcessID, char *czDllPathName) {
+       // 1. 获取目标进程句柄
+       HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessID);
+       if (hProcess == NULL) {
+         return FALSE;
+       }
+       // 2. 计算自定义的DLL路径长度
+       DWORD dwLength = strlen(czDllPathName) + 1;
+       // 3. 在目标进程分配私有内存空间，返回的是虚拟内存地址
+       LPVOID lpAllocAddr = VirtualAllocEx(hProcess, NULL, dwLength, MEM_COMMIT, PAGE_READWRITE); 
+       if (lpAllocAddr == NULL) {
+         CloseHandle(hProcess);
+         return FALSE;
+       }
+       // 4. 拷贝自定义的DLL路径到目标进程的内存空间
+       BOOL bRet = WriteProcessMemory(hProcess, lpAllocAddr, czDllPathName, dwLength, NULL);
+       if (!bRet) {
+         CloseHandle(hProcess);
+         return FALSE;	 
+       }
+       // 5. 获取kernel32.dll模块的句柄，在相同的操作系统下所有进程获取的kernel32.dll的句柄都是一样的。即从全局句柄表获取。
+       HMODULE hModule = GetModuleHandle("Kernel32.dll");
+       if (hModule == NULL){
+         CloseHandle(hProcess);
+         return FALSE;	 
+       }
+       // 6. 获取LoadLibraryA方法的地址，在相同的操作系统下所有进程获取的kernel32.dll的所有函数的地址都是一样的。因此目标进程中通过该地址也能定位相同的方法。
+       DWORD dwLoadAddr = (DWORD)GetProcAddress(hModule, "LoadLibraryA");
+       if (dwLoadAddr == NULL) {
+         CloseHandle(hModule);
+         CloseHandle(hProcess);
+         return FALSE;	 
+       }
+       // 7. 创建远程线程，并执行LoadLibraryA方法加载自定义DLL
+       // 由于线程执行的函数签名，只需符合返回值和入参均占4个字节即可被执行，而HMOUDLE LoadLibraryA(LPSTR lpPath)完全符合该函数签名。
+       HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)dwLoadAddr, lpAllocAddr, 0, NULL);
+       if (hThread == NULL) {
+         CloseHandle(hModule);         
+         CloseHandle(hProcess);
+         return FALSE;	 
+       }
+       return TRUE;
+       // 然后自定义的DLL中的DllMain函数将被执行，那么只需将恶意代码写在DllMain函数中即可被自动执行。
+     }
+     #+end_src
+
+***** 什么是注入？
+      在第三方进程不知情或不允许的情况下将 *模块* 或 *代码* 写入对方进程空间，并设法执行的技术。
+      已知的注入方式：远程线程注入、APC注入、消息钩子注入、注册表注入、导入表注入、输入法注入等。
+
+** 进程的句柄表
+*** 内核对象
+    进程(EPROCESS)、线程(ETHREAD)、文件(FILE_OBJECT)、互斥体(Mutex)、事件(Event)等在内核(ring0，也称为0环)都有一个对应的结构体，那么称这些由内核管理这些结构体为内核对象。
+    Win32函数 ~CloseHandle~ 可以关闭的入参就是内核对象。（进程(EPROCESS)、线程(ETHREAD)、文件(FILE_OBJECT)、互斥体(Mutex)、事件(Event)、File mapping、Job、Named pipe、Semaphore、Socket、Access Token、Communications device、Console input、Console screen buffer）
+    另外可以通过查看Win32函数CreateXXX的入参，若包含安全属性 ~LPSECURITY_ATTRIBUTES~ 即该函数用于创建内核对象。
+
+*** 为何需要句柄表？
+    内核对象的地址位于内核空间中，若直接将内核对象地址交给程序使用，虽然可以直接操作内核对象，但若程序修改地址继续访问内核其它空间，那么将因内存无法访问导致系统蓝屏(如果是用户态的内存无法访问只会导致当前程序宕机——C005错误)。
+    因此通过句柄表暴露内核对象给程序，而不是直接暴露内核对象的地址。
+
+*** 句柄表结构
+    1. 每个进程都有一个句柄表，用于记录当前进程相关的内核对象地址和句柄映射；
+    2. 句柄表结构
+       | 句柄 | 内核对象地址| 是否允许被子进程继承|
+    3. 不同的进程可以共享内核对象(通过OpenProcess创建的进程可以共享其它进程的内核对象，进程间非父子关系)
+       - 非父子关系的进程间内核对象共享，句柄表中的句柄值不一定相同，且句柄值仅在所属的进程中有意义。
+       - 父子关系的进程间继承内核对象，句柄表的可继承的内核对象的句柄值一致，不可继承的内核对象的句柄值和内核对象地址均设置为0。
+	 - 从而实现父子进程间共享内核对象和句柄。
+    4. 内核对象中存在一个计数器，用于记录被多少个进程共享。
+       - CloseHandle就是将指定的内核对象的计数器减1。
+       - 当内核对象的计数器值变为0时，此时该内核对象就会被销毁。
+	 - 线程例外
+	   1. 先要将线程终止
+	   2. 然后线程内核对象的计数器值为0
+	   3. 这样才能回收线程内核对象
+	 - 进程例外，进程下的线程未被回收，那么即使进程内核对象的计数器为0也不会被回收
+
+*** 进程共享句柄
+**** 从父进程继承句柄
+     1. 在父进程中创建可被继承的内核对象——安全属性 ~SECURITY_ATTRIBUTES~
+        一般设置为NULL，采用父进程的安全属性且该内核对象不允许被子进程继承即可。
+        #+begin_src c++
+        typedef struct _SECURITY_ATTRIBUTES {
+          DWORD nLength;
+          LPVOID lpSecurityDescriptor; //  安全描述符结构体，用于指明当前内核对象哪些用户可以访问、关闭等。设置为NULL即采用父进程的安全配置。
+          BOOL bInheritanceHandle; // 当前内核对象是否允许被子进程继承，默认为FALSE
+        } SECURITY_ATTRIBUTES, *PSECURITY_ATTRIBUTES;
+
+        // Example
+        SECURITY_ATTRIBUTES sa;
+        ZeroMemory(&sa, sizeof(sa));
+        sa.nLength = sizeof(sa);
+        sa.bInheritanceHandle = TRUE;
+        #+end_src
+     2. 创建子进程时，设置子进程允许继承父进程的内核对象——将CreateProcess的 ~BOOL bInheritHandles~ 设置为 ~TRUE~
+     3. 那么子进程就可以继承父进程中设置为允许被继承的内核对象
+	- 继承操作为：
+	  1. 复制父进程的句柄表作为子进程句柄表的基础
+	  2. 不允许被继承的内核对象在句柄表的记录，句柄值和地址均设置为0
+
+**** 非父子进程共享句柄——OpenProcess
+     参考进程/OpenProcess函数说明
+
+** 全局句柄表
+   记录整个操作系统的所有进程和线程的句柄信息。
+   而进程ID则是全局句柄表的句柄值，因此进程ID是全局有效，而进程私有句柄表的句柄则是某进程中有效。
+
+** TODO Windows窗口
+   
+*** 消息
+
+**** 启动和关闭过程中NC消息顺序
+     1. 当调用 ~CreateWindowEx~ 创建窗口时,会按顺序发出 ~WM_NCCREATE~ 和 ~WM_CREATE~ 消息
+	- 其中NC为non-client区域,即包括标题栏,窗口边框,最大最小按钮和滚动条等
+     2. 当窗口准备关闭时,会按顺序发出 ~WM_DESTROY~ 和 ~WMNCDESTROY~ 消息
+	- 若存在子窗口,那么会先发出子窗口的上述两个消息,再发出父窗口的消息
+
+**** 关闭窗口的方式
+     完整的退出流程:
+     1. 点击窗口右上角的关闭按钮, 发出WM_CLOSE消息
+     2. 消息处理函数中调用DestroyWindow函数, 发出WM_DESTROY消息
+     3. 消息处理函数中调用PostQuitMessage函数, 发出WM_QUIT消息
+     4. GetMessage捕获到WM_QUIT,返回0那么程序则真正退出
+	
+     注意: 由于WM_DESTROY消息必须被窗口所属线程捕获后执行消除处理函数才能继续后续消息发送和捕获处理,因此 *线程A调用DestroyWindow无法关闭线程B的窗口*
+     线程A关闭线程B的窗口的方式:
+     #+begin_src c++
+     HWND hwnd; // 被关闭的窗口句柄
+     PostMessage(hwnd, WM_CLOSE, NULL, NULL);
+     #+end_src
+
+**** TODO 消息投递函数
+     1. SendMessage
+	将消息发送到指定窗口所属的线程的消息队列,并且等待消息处理后才返回.
+     2. PostMessage
+	将消息发送到指定窗口所属的线程的消息队列,无需等待消息被处理即返回. 无法发送WM_QUIT消息,因此该消息只能由PostQuitMessage函数发送.
+     3. PostThreadMessage
+	将消息发送到指定线程的消息队列,无需等待消息被处理即返回. 其发送的消息与窗口无关,但必须保证发送时线程存在否则会失败.
+     4. GetMessage
+	从调用函数的线程的消息队列中获取消息, 若没有匹配的消息则阻塞当前线程.
+	- 当第二参数为NULL时, 它会检索以下两种消息
+	  1. 该线程下的任何窗口消息
+	  2. WM_QUIT消息(此时程序已经退出,且无法逆转.只能用于执行清理善后工作)
+     5. PeekMessage
+	GetMessage的非阻塞版本.
+     6. DispatchMessage
+	转发消息给相应的窗口
+     7. TranslateMessage
+	转换虚拟键信息到字符消息
+
+** 获取时间信息
+   1. 系统时间
+      #+begin_src c++
+      // 获取当前的年月日时分秒
+      SYSTEMTIME st;
+      GetLocalTime(&st);
+
+      // 设置当前时间
+      st.wHour = 12;
+      SetLocalTime(&st);
+      #+end_src
+   2. 开机至今的持续时间
+      #+begin_src c++
+      DWORD c1 = GetTickCount() // 单位毫秒
+      ULONGLONG c2 = GetTickCount64() // 单位毫秒
+
+      DWORD start = GetTickCount();
+      // do something
+      DWORD end = GetTickCount();
+      dobule delta = (double)(end - start);
+      #+end_src
+
+** 注册表
+
+*** x64和x86注册表
+    Windows x64默认采用64bit的注册表编辑器(regedit)，但可在cmd.exe中通过 ~%systemroot%\syswow64\regedit -m~ 启动32bit的注册表编辑器。(wow为Windows32 on Windows64的缩写)
+    x64和x86的注册表的key/subkey/value结构一致，但value的值将有所不同。
+    注意：当采用x86编译的程序通过Win32 API访问注册表时，访问的将是x86注册表；若程序采用x64编译，那么访问的将是x64注册表。
+   
+*** 注册表结构
+    key->subkey->value(名称，类型，数据)
+    key为Windows内置固定的以下5个：
+    - HKEY_CLASSES_ROOT
+    - HKEY_CURRENT_USER
+    - HKEY_LOCAL_MACHINE
+    - HKEY_USERS
+    - HKEY_CURRENT_CONFIG
+ 
+*** 相关API
+    #+begin_src c++
+    RegCreateKey
+    RegOpenKey
+    RegQueryValue
+    RegDeleteKey
+    RegCloseKey
+
+    // 读取value，必须先找到key或subkey
+    long lRet;
+    HKEY hKey;
+    char czData[256];
+    DWORD dwSize;
+    lRet = RegOpenKeyEx(HKEY_LOCAL_MACHINE, // key的常量
+      "Hardware\\Description\\System\\CentralProcessor\\0", // subkey的路径结构
+      0,
+      KEY_QUERY_VALUE,
+      &hKey);
+    if (IRet == ERROR_SUCCESS) {
+      // 成功继续读指定的value
+      lRet = RegQueryValueEx(hKey,
+        "ProcessorNameString", // value的名称
+        NULL,
+        NULL,
+        (LPBYTE)czData,
+         sizeof(czData));
+      if (lRet == ERROR_SUCCESS) {
+        // 成功则获取数据
+        printf("%s", czData);
+      }
+    }
+    RegCloseKey(hKey);
+
+    // 读取value默认的值
+    long lValue;
+    RegQueryValue(HKEY_LOCAL_MACHINE, "Software\\MyAppTest", NULL, &lValue); // 获取默认值的长度
+    char* pBuf = new char[lValue];
+    RegQueryValue(HKEY_LOCAL_MACHINE, "Software\\MyAppTest", pBuf, &lValue); // 获取默认值
+    delete pBuf;
+
+    // 创建subkey和value
+    HKEY hKey;
+    RegCreateKey(HKEY_LOCAL_MACHINE, "Software\\MyAppTest", &hKey);
+    RegSetValue(hKey, 
+      NULL, // 名称，NULL表示设置为默认
+      REG_SZ,  // 类型，这里设置为普通字符串类型。还有其它类型如 REG_DWORD
+      "test",  // 值
+      strlen("test")); // 值长度
+    RegKeyClose(hKey);
+    #+end_src
+
+** 其它API
+   1. GetModuleFileName - 获取当前模块路径(即exe文件的路径，程序启动后固定不变）
+      #+begin_src c++
+      char strModule[256];
+      GetModuleFileName(NULL, strModule, 256);
+      #+end_src
+   2. GetCurrentDirectory - 获取当前工作目录(由父进程设置的，并且程序启动后可修改)
+      #+begin_src c++
+      char strPwd[1000];
+      GetCurrentDirectory(1000, strPwd);
+      #+end_src
+   3. GetCommandLine - 获取命令行
+   4. GetStartupInfo - 获取启动信息
+   5. EnumProcesses - 遍历进程ID
+   6. CreateToolhelp32Snapshot - 快照(用于后期分析某瞬间进程、线程和进程内模块的信息)
+** 6种main函数
+   除DLL的DllMain函数外，对于控制台和GUI程序还分别有3种Main函数
+   - 控制台
+     - _tMain
+     - main 对应ASNI
+     - wmain 对应UNICODE
+   - GUI
+     - _tWinMain
+     - WinMain 对应ASNI
+     - wWinMain 对应UNICODE
+
+** 文件系统
+   文件系统是操作系统用于管理磁盘上文件的方法和数据结构
+   |                  | NTFS | FAT32  |
+   |------------------+------+--------|
+   | 磁盘分区最大容量 | 2T   | 32G    |
+   | 单个文件最大容量 | 4G+  | 4G     |
+   | EFS加密          | 支持 | 不支持 |
+   | 磁盘配额         | 支持 | 不支持 |
+
+   EFS加密：其它用户无法访问被EFS加密的文件的内容。
+   磁盘配额：限制其它用户使用该分区的最大容量，超过该上限则拒绝再分配空间给该用户。
+
+   文件系统结构：卷/目录/文件
+
+*** 卷相关的API
+    卷即为逻辑硬盘/逻辑驱动器/磁盘分区。
+
+    1. 获取卷 ~GetLogicalDrivers~
+       #+begin_src c++
+       // 返回值为十进制的13即1101，那么就是有A、C和D盘
+       DWORD dwLogicalDrivers = GetLogicalDrivers();
+       #+end_src
+    2. 获取卷的标识 ~GetLogicalDriverStrings~
+       #+begin_src c++
+       DWORD dwMaxLength = 100;
+       char szBuffer[100]; // 会存储所有卷的标识，标识之间用 \0 分隔
+       GetLogicalDriverStrings(dwMaxLength, szBuffer);
+       #+end_src
+    3. 获取卷的类型 ~GetDriverType~
+       #+begin_src c++
+       // 获取指定标识的卷的类型
+       // 0 DRIVE_UNKNOWN
+       // 1 DRIVE_NO_ROOT_DIR - The root path is invalid. For example, no volume is mounted at the path.
+       // 2 DRIVE_REMOVABLE - The disk can be removed from the drive.
+       // 3 DRIVE_FIXED - The disk can not be removed from the drive.
+       // 4 DRIVE_REMOTE - The drive is a remote(network) drive.
+       // 5 DRIVE_CDROM
+       // 6 DRIVE_RAMDISK - The drive is a RAM disk.
+       UINT uType = GetDriverType("A:\\");
+       #+end_src
+    4. 获取卷信息 ~GetVolumeInformation~
+       #+begin_src c++
+       TCHAR szVolumeName[260] = { 0 };
+       DWORD dwVolumeSerial = 0;
+       DWORD dwMaxLength = 0;
+       DWORD dwFileSystem = 0;
+       THCAR szFileSystem[260] = { 0 }; 
+
+       GetVolumeInformation(
+         "A:\\", // IN 卷标识
+         szVolumeName, // OUT 卷标识的别名
+         260, // IN 卷标识别名缓冲区的长度
+         &dwVolumeSerial, // OUT 卷序列号(不是硬盘序列号)，重新分区时会发生变化
+         &dwMaxLength, // OUT 系统允许的最大文件名长度
+         &dwFileSystem, // OUT 文件系统标识，如只读等
+         szFileSystem, // OUT 文件系统名称，如NTFS、FAT32等
+         260 // IN 文件系统名称长度
+       );
+       #+end_src
+
+** 内存管理
+   
+*** 虚拟内存和物理内存
+    
+**** 32位操作系统
+     每个进程启动时都会被分配4GB的虚拟内存，其中2GB为用户空间(0~7FFFFFFF，也称为线性地址)，另外2GB为内核空间(8FFFFFFF~FFFFFFFF)。
+     当进程真正要使用内存时，操作系统才会真实分配物理内存空间并映射到该进程的虚拟内存上。
+
+     Intel x86架构将物理内存分为一个个4kB的物理页。
+     - 物理内存和内存条之间还有一层映射，而不是直接对应的。
+     - 可供使用的物理内存 = MmNumberOfPhysicalPages * 4(KB) + 使用磁盘部分容量作为SWAP内存
+     - 能够识别的物理内存
+       - 32位系统最多可以识别物理内存位64GB(为什么呢？)，但由于操作系统的限制， 如XP只能识别4GB，而Windows2003服务器版本可识别4GB以上。
+     
+***** 虚拟内存中的用户空间(0~7FFFFFFF)
+      1. 0~0x0000FFFF(共64KB)为空指针赋值区，不可被进程所用。
+      2. 0x00010000~0x7FFEFFFF为用户模式区，进程可使用的虚拟内存，但需要申请使用才能有对应的物理页。
+	 - 平时所说的申请内存空间，就是申请用户模式区的内存空间。
+      3. 0x7FFF0000~0x7FFFFFFF(公64KB)为禁入区，不可被进程所用。
+
+***** 访问已分配的虚拟内存的过程
+      由于物理内存容量必定小于所有进程的虚拟内存总和，因此操作系统会将休眠的进程的物理页资源释放（物理页的内容将被转移到硬盘上），那么进程再次访问其虚拟内存时将发生如下流程：
+      1. 已分配的虚拟内存
+      2. 缺失页异常
+      3. 操作系统处理异常
+      4. 为虚拟内存挂物理页
+      5. 恢复原数据到物理页上
+
+***** 私有内存(Private Memory)的申请和释放
+      私有内存：被单个进程独占的物理页。
+      进程中绝对部分都是共享/映射内存，只有栈/堆内存和自行通过 ~VirtualAlloc/VirtualAllocEx~ 申请的采用私有内存。
+
+      1. 申请 ~VirtualAlloc/VirtualAllocEx~
+	 - ~VirtualAlloc~ 在当前进程的虚拟内存上申请
+	   #+begin_src c++
+	   LPVOID VirtualAlloc(
+	     LPVOID lpAddress, // 要分配的内存区域的地址，若为NULL则表示由操作系统分配并作为返回值。若指定的地址已被占用，那么必定会申请失败。
+	     SIZE_T dwSize, // 分配的大小（单位Byte），值为页的整数倍。如0x1000*2。
+	     DWORD flAllocationType, // 分配的类型，MEM_RESERVE为只占虚拟内存而不占用物理页，MEM_COMMIT为虚拟内存和物理页都占用。
+	     DWORD flProtect // 该虚拟内存的初始保护属性，PAGE_READONLY该块内存只读，PAGE_READWRITE, PAGE_EXECUTE该块内存可执行代码， PAGE_EXECUTE_READWRITE
+	   );
+	   #+end_src
+	 - ~VirtualAllocEx~ 在指定的进程的虚拟内存上申请
+      2. 释放 ~VirtualFree~
+	 #+begin_src c++
+	 BOOL VirtualFree(
+	   LPVOID lpAddress, // 指定需要释放的内存区域地址
+	   SIZE_T dwSize, // 内存区域的大小(单位为Byte)，值为页的整数倍。如0x1000*2。
+	   DWORD dwFreeType // 操作类型， MEM_DECOMMIT——虚拟内存空间保留但物理页将被释放, MEM_RELEASE——虚拟内存和物理页均被释放(设置该值时，dwSize必须设置为0)
+	 );
+	 #+end_src
+
+****** C语言中的malloc
+       malloc用于“申请”堆内存，实质上进程启动时操作系统已经通过 ~VirtualAlloc/VirtualAllocEx~ 为进程申请一定容量的内存空间。而malloc底层调用HeapAlloc并没有调用ring0，就是从这些已经分配好的内存空间中拿出一部分来使用。
+       而C++的new=malloc+调用构造函数。
+
+***** 共享内存(Mapped Memory)的申请和释放
+      共享内存：被多个进程共享的物理页
+      1. 申请 ~CreateFileMapping~
+	 #+begin_src c++
+	 // 用于申请物理页，当函数执行成功时仅表示物理页申请成功，但还没和当前进程的虚拟内存关联。
+	 // 若该物理页已存在，则会通过lpName获取该物理页内核对象的句柄，并且GetLastError()会返回ERROR_ALREADY_EXISTS。或者使用HANDLE OpenFileMapping(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCTSTR lpName)获取物理页内核对象句柄。
+	 HANDLE CreateFileMapping (
+	   HANDLE hFile, // 申请物理页并映射到指定的文件上，若设置为INVALID_HANDLE_VALUE则不映射到指定的文件上
+	   LPSECURETE_ATTRIBUTES lpAttributes, // 安全属性
+	   DWORD flProtect, // 物理页的访问属性，PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY
+	   DWORD dwMaximumSizeHigh, // 内存大小，高32位
+	   DWORD dwMaximumSizeLow, // 内存大小，低32位	   
+	   LPCTSTR lpName // 内核对象的名称，若多个进程使用该内核对象则必须通过该名字获取
+	 );
+
+	 // 将物理页和当前进程的虚拟内存关联，然后当前函数就可以通过虚拟内存操作物理页
+	 // 返回的是虚拟内存地址，一般写成 LPTSTR lpBuff = (LPTSTR)MapViewOfFile(......);
+	 LPVOID MapViewOfFile(
+	   HANDLE hFileMappingObject, // 通过CreateFileMapping创建的物理页内核对象句柄
+	   DWORD dwDesiredAccess, // 虚拟内存的访问模式，FILE_MAP_WRITE——可读写, FILE_MAP_READ——只读, FILE_MAP_COPY，只能比物理页的flProtect属性更严格
+	   DWORD dwFileOffsetHigh,  // 映射起始偏移量，高32位。一般设置为0	   
+	   DWORD dwFileOffsetLow, // 映射起始偏移量，低32位。一般设置为0	   
+	   SIZE_T dwNumberOfBytesToMap // 内存大小
+	 );
+	 #+end_src
+      2. 释放
+	 #+begin_src c++
+	 // 切断虚拟内存和物理页的映射关系
+	 UnmapViewOfFile(MapViewOfFile的返回值)
+	 // 物理页内核对象的内部计数器减一
+	 CloseHandle(CreateFileMapping的返回值)
+	 #+end_src
+
+***** 内存映射文件
+       内存映射文件：把硬盘中的文件映射到物理内存上，然后物理内存映射到进程的虚拟内存上。
+       1. 那么就可以以操作虚拟内存的方式操作文件内容。
+       2. 当文件比较大时，性能由于直接通过IO操作文件。
+       3. 可在多个进程共享一个文件
+
+       #+begin_src c++
+       // 1. 获取文件内核对象的句柄
+       HANDLE hFile = CreateFile("/path/to/file", GENERIC_READ|GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+       
+       if (hFile != INVALID_HANDLE_VALUE) {
+         // 2. 获取物理内存核对象的句柄，并且将文件映射到该物理内存上，而申请的内存大小设置为0
+         HANDLE hMapFile = CreateFileMapping(hFile, NULL, PAGE_READWRITE, 0, 0, "mappedfile");
+         if (hMapFile != INVALID_HANDLE_VALUE) {
+	 // 3. 映射虚拟内存到物理内存，映射的内存大小设置为0
+	 LPTSTR lpBuffer = (LPTSTR)MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0 , 0 ,0);
+	 if (lpBuffer == NULL) {
+	   CloseHandle(hMapFile);
+               CloseHandle(hFile);
+	 }
+	 // lpBuffer的地址就是指向文件起始位置。
+	 // 读取
+	 DWORD dwTest1 = *(PDWORD)lpBuffer;
+	 DWORD dwTest2 = *((PDWORD)lpBuffer+0x1B8FC);
+	 // 写入
+	 *(PDWORD)lpBuffer = 0x41424344; // 非实时写入文件，而是先写到缓存，当释放资源时就会自动更新到磁盘中
+	 FlushViewOfFile(((PDWORD)lpBuffer), sizeof(DWORD)); // 强制更新缓存
+
+             // 清理工作
+	 UnmapViewOfFile(lpBuffer);    
+	 CloseHandle(hMapFile);
+	 CloseHandle(hFile);
+         }	 
+       }
+       #+end_src
+
+****** FILE_MAP_COPY详解
+       1. 断点的原理
+	  1. 在代码行开头添加 ~0xCC~ (即汇编指令 ~int 3~)
+	  2. 当CPU执行到该指令时会挂起
+       2. kernel32.dll、user32.dll等只会加载一份到物理内存供多个进程共享使用，那么某个进程修改共享内存的内容时，会发生如下结果
+	  - 若采用FILE_MAP_ALL_ACCESS，那么修改的结果会写到对应的文件中，且其它进程可读取到修改结果。
+	  - 若采用FILE_MAP_COPY，那么修改时会先复制一份对应的物理页副本，修改时仅修改物理页副本，因此修改结果不会写入对应的文件中，且其它进程不会读到修改结果。
+	  
+** TODO 调用其它程序的方式
+*** ~WinExec~ (Win32 API)
+    ~WinExec~ is for compatibility with 16-bits Windows only and should not be used any longer.
+    
+*** ~ShellExecute/ShellExecuteEx~ (Win32 API)
+    - 特点:
+      1. 除了可以执行其它程序外,还可以浏览目录, 打开邮件, 打印和以管理员身份运行其它程序.
+      2. 可设置被调用程序的外观的信息
+      3. 非阻塞调用
+      4. 无法获取被调用程序的stdout和stdin
+    - Sample
+      #+begin_src c++
+      // 若fileName以http://开头则以注册表的HTTP协议处理程序(Protocols Handler)来打开网站
+      // 若fileName以mailto::开头则会打开邮件客户端
+      HINSTANCE hInst = ShellExecute(0, "open", "cscript", "test.vbs", NULL, SW_SHOW);
+      #+end_src
+    
+*** ~CreateProcess/CreateProcessAsUser/CreateProcessWithLogonW~ (Win32 API)
+    - 特点:
+      1. 非阻塞调用
+      2. 需要通过 ~WaitForSingleObject(pi.hProcess, INFINITE)~ 阻塞当前线程,直到被调用的程序退出
+      3. 若被调用的程序启动过程分阶段,那么无法得知其启动阶段状况
+
+*** ~_popen/_wpopen~ (C run-time library for ANSI or Win NT)
+    - 参考资料：
+      - https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/popen-wpopen?redirectedfrom=MSDN&view=vs-2019
+    - 特点：
+      1. 函数返回值，若mode入参值为 ~r~ 则为标准输出流(stdout)，mode入参值为 ~w~ 则为标准输入流(stdin)；
+      2. 非阻塞调用，除非对返回值的stdout或stdin进行阻塞读、阻塞写操作。
+    - 函数签名
+      #+begin_src c++
+      /*
+      @param command - 被执行文件的绝对路径
+      @param mode - 访问模式
+                                 r - The calling process can read the spawned command's standard output using the returned stream.
+                                 w - The calling process can read the spawned command's standard input using the returned stream.			
+                                 b - open in binary mode
+                                 t - open in text mode
+      */
+      /* MBCS Defined */ FILE * _popen(const char *command, const char* mode);
+      /* UNICODE Defined */ FILE * _wpopen(const wchar_t *command, const wchar_t* mode);
+      #+end_src
+    - Generic-Text Routine
+      #+begin_src c++
+      #include <tchar.h>
+      
+      FILE * _tpopen(LPCTSTR command, LPCTSTR mode);
+      #+end_src
+    - Sample
+      #+begin_src c++
+      FILE *pOut;
+      if ((pOut = _tpopen(TEXT("dir *.c /on /p"), TEXT("rt"))) == NULL) {
+        exit(1);
+      }
+
+      TCHAR psBuff[128];
+      while (_fgetts(psBuff, 128, pOut)) {
+        _putts(psBuff);
+      }
+   
+      if (feof(pOut)) {
+        _pclose(pOut);
+      }
+      else {
+        _tprintf("Error: Failed to read the pipe to the end.\n");
+      }
+      #+end_src
+
+*** ~system/_wsystem~ (C run-time library for ANSI or Win NT)
+    - 特点:
+      1. 阻塞调用
+      2. 无法获取被调用程序的stdout和stdin
+    - Generic-Text Routine
+      #+begin_src c++
+      #include <tchar.h>
+      
+      _tsystem(LPCTSTR command);
+      #+end_src
+
+*** TODO ~_spawm~ (C run-time library for Win 95 or Win NT)
+
+*** TODO ~_exec~ (C run-time library for Win 95 or Win NT)
+
+* COM编程
+  《COM in plain C》 https://www.codeproject.com/Articles/13601/COM-in-plain-C
+  
+** VBScript通过CreateObject的过程详解
+   参考：http://demon.tw/reverse/vbscript-internal-createobject.html
+
+   1. CreateObject的入参为ProgID，作为COM组件的名称标识
+   2. 调用Win32 API ~CLSIDFromProgIDEX~ 根据ProgID获取对应的CLSID
+      1. 读取 ~HKEY_CLASSES_ROOT/<ProgID>/CLSID~ 的默认value值，若存在则直接返回，否则继续第2步。
+      2. 读取 ~HKEY_CLASSES_ROOT/<ProgID>/CurVer~ 的默认value值
+      3. 读取 ~HKEY_CLASSES_ROOT/<HKEY_CLASSES_ROOT/<ProgID>/CurVer的默认value值>/CLSID~ 的默认value值
+   3. 通过 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/InProcServer32~ 或 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/LocalServer32~ 获取服务程序启动路径和命令
+      - InProServer32 表示为进程内COM组件
+      - LocalServer32 表示为进程外COM组件
+      - 若存在 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/Control~ 则说明该组件为ActiveX控件
+      - 若存在 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/Insertable~ 则说明该组件可以被嵌入到一个OLE文档容器中
+      - 若存在 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/Programmable~ 则说明该组件支持自动化，即支持IDispatch接口，所以可以被脚本语言使用。
+	新版本可能会存在 ~HKEY_CLASSES_ROOT/CLSID/<clsid>/Implemented Categories~ ，获取其默认值，然后查看 ~HKEY_CLASSES_ROOT/Component Categories/<默认值>~ 的value 409的值是否为Automation Objects。存在即表示该COM组件支持自动化。
+   4. 通过 ~HKEY_CLASSES_ROOT/TypeLib/<HKEY_CLASSES_ROOT/CLSID/<clsid>/TypeLib的默认value值>/1.0/0/win32~ 获得COM对象的类型库路径（获取COM组件提供的接口方法）
+      PE文件的TYPELIB资源是*.idl源码文件编译后的类型库的二进制数据(可以反编译回去)，其中包含每个接口函数的参数和返回值定义。
+   5. 通过CoGetClassObject获取IClassFactory接口的指针
+      失败则返回“ActiveX部件不能创建对象”或“类不支持Automation操作”等错误信息。
+   6. 调用IClassFactory接口的CreateInstance方法获取IUnknown接口指针
+      IUnknown接口包含QueryInterface, AddRef 和 Release。
+   7. 调用IUnknown接口QueryInterface方法查询该COM是否支持IDispatch接口，只有支持IDispatch接口的COM类才能用CreateObject创建对象。
+
+* TODO 文件流
+** FILE结构体
+   位于stdio.h中
+   #+begin_src c
+   struct _iobuf {
+     char *_ptr;
+     int _cnt;
+     char *_base;
+     int _flag;
+     int _file;
+     int _charbuf;
+     int _bufsiz;
+     char *_tmpfname;
+   };
+   typedef struct _iobuf FILE;
+   #+end_src
+   微软自定实现了一套FILE结构体，而不是遵循C标准。
+
+** 读取文件内容
+*** C Standard Library提供的API
+    #+begin_src c++
+    /*
+    @param path - 文件路径
+    @param mode - 访问模式，r为读、w为写、a为追加、b为二进制模式、t为文本模式
+    */
+    FILE * pFile = fopen("/path/to/file", "r");
+   
+    // 每次读取指定字节数的数据，当读取到文件末尾时在读取则会返回NULL
+    string result;
+    char buf[256];
+    while((fgets(buf, 256, pFile)) != NULL) {
+      result += buf;
+    }
+    if (feof(pFile)) {
+      fclose(pFile);
+    }
+    else {
+      printf("无法读取到输入流的末尾");
+    }
+    #+end_src
+
+*** C++ Standard Library提供的API
+    #+begin_src c++
+    #include <fstream>
+
+    std::ifstream ifs("/path/to/file"); // 输入文件流
+
+    string result;
+    char buf[256];
+    while(ifs.getline(buf, 256)) {
+      result += buf;
+    }
+    ifs.close();
+    #+end_src
+
+*** Win32 API
+    #+begin_src c++
+    HANDLE hFile;
+    hFile = CreateFile(TEXT("/path/to/file"), 
+      GENERIC_READ, // 可读可写，则为GENERIC_READ | GENERIC_WRITE
+      FILE_SHARE_READ, // 共享读。独占则为0。共享删FILE_SHARE_DELETE，就是当前程序还没操作完该文件，其它进程可以删除该文件。
+      NULL, // 安全属性
+      OPEN_EXISTING, // 打开存在的文件. CREATE_NEW, CREATE_ALWAYS, OPEN_EXISTING, OPEN_ALWAYS, TRUNCATE_EXISTING
+      FILE_ATTRIBUTE_NORMAL, // 设置文件属性，如隐藏、只读等
+      NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+      return 1;
+    }
+
+    LPSTR pszBuffer = (LPSTR)malloc(10);
+    ZeroMemory(pszBuffer, 10);
+    // 设置读取的起始位置
+    SetFilePointer(hFile, 
+      1, // 低32位的值，当采用FILE_BEGIN时，则表示从第1个字节(包含)开始读；若采用FILE_END则需要写为-2，即从倒数第2个字节(包含)开始读。
+      NULL, // 高32位的值
+      FILE_BEGIN); // FILE_BEGIN, FILE_CURRENT, FILE_END
+    DWORD dwReadLength = 0;
+    ReadFile(hFile, pszBuffer, 10, &dwReadLength, NULL); // 最后一个参数用于网络异步编程用。写则用WriteFile
+    free(pszBuffer)
+
+    // 获取文件大小，单位字节
+    DWORD dwHigh = 0;
+    DWORD dwLow = GetFileSize(hFile, &dwHigh);
+    ULONGLONG fileSize = (dHigh << 32) + dwLow;
+
+    CloseHandle(hFile);
+    #+end_src
+
+** 文件操作
+*** C Standard Library
+    1. 使用fread和fwrite实现复制功能
+       #+begin_src c++
+       #include <stdio.h>
+       #include <errno.h>
+
+       #define BUF_SIZE 256
+
+       FILE *inFile, *outFile;
+       char rec[BUF_SIZE]; // 缓冲区
+       size_t bytesIn, bytesOut; // 实际读/写的字节数
+       
+       inFile = fopen("/path/to/src", "rb");
+       if (NULL == inFile) {
+         perror("Error Message");
+         return 1;
+       }
+       outFile = fopen("/path/to/dst", "wb");
+       if (NULL == inFile) {
+         perror("Error Message");
+         return 1;
+       }
+
+       while((bytesIn = fread(rec, sizeof(char), BUF_SIZE, inFile)) > 0) { // 0表示读取到文件末尾
+          // 实际读取的长度=fread(缓冲区指针, 缓存区每个元素的大小, 缓存区长度, 输入流)
+          // 实际写入的长度=fwrite(缓冲区指针, 缓存区每个元素的大小, 缓存区长度, 输出流)
+          bytesOut = fwrite(rec, sizeof(char), BUF_SIZE, outFile);
+          if (bytesIn != bytesOut) {
+	  // 若读取和写入的长度不同则存在问题
+	  perror("Error");
+	  return 1;
+          }
+       }
+
+       fclose(inFile);
+       fclose(outFile);
+       #+end_src
+    2. fgets 一次读取一行字符
+       #+begin_src c
+       char * fgets(char *buf, int bufsize, FILE *stream)
+
+       FILE *fp;
+       char buf[20];
+       fp = fopen("path/to/file", "r");
+       fgets(buf, sizeof(buf), fp);
+       printf("%s\n", buf);
+       fclose(fp);
+       #+end_src
+    3. fputs 一次写入一行
+       #+begin_src c
+       int fputs(char *str, FILE *file);
+
+       FILE *fp;
+       char buf[] = "hi";
+       fp = fopen("path/to/file", "w");
+       fputs(buf, fp);
+       fclose(fp);
+       #+end_src
+    4. fseek 设置文件游标位置，ftell获取游标当前位置
+       #+begin_src c
+       // offset为偏移量
+       // fromwhere为偏移相对的位置，SEEK_SET文件开头、SEEK_CUR游标当前位置、SEEK_END文件末尾
+       int fseek(FILE *stream, long offset, int fromwhere);
+
+       int ftell(FILE *stream);
+       #+end_src
+
+*** Win32 API
+    #+begin_src c++
+    // 删除文件
+    BOOL bSuccess = DeleteFile("/path/to/file");
+
+    // 复制文件
+    // 第三个参数为FALSE则表示覆盖已有文件；为TRUE则若文件已存在则函数执行失败，则GetLastError() == 0x50。
+    BOOL bSuccess = CopyFile("/path/to/src", "/path/to/dst", TRUE);
+
+    // 移动或重命名文件
+    BOOL bSuccess = MoveFile("/path/to/src", "/path/to/dst");
+    #+end_Src
+
+** 目录操作
+   #+begin_src c++
+   // 1
+   BOOL CreateDirectory(LPCWSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+
+   // 2
+   DWORD GetCurrentDirectory(DWORD nBufferLength, LPWSTR lpBuffer);
+   #define BUF_SIZE 256
+   wchar_t buf[BUF_SIZE];
+   DWORD dwLen = GetCurrentDirectory(BUF_SIZE, buf); // 若返回值为0则表示函数调用失败
+   for (UINT i = 0; i < dwLen; i++) {
+     puts(buf[i]);
+    }
+
+   // 3
+   BOOL SetCurrentDirectory(LPWSTR lpPathName);
+
+   // 获取模块文件绝对路径
+   // hModule为NULL表示主模块
+   DWORD GetModuleFileName(HMODULE hModule, LPWSTR lpFilename, DWORD nSize);
+
+   wchar_t fileName[BUF_SIZE];
+   DWORD dwLen = GetModuleFileName(NULL, fileName, BUF_SIZE);  // 返回0则调用失败
+   
+   // 获取其它模块的文件绝对路径
+   HMODULE hKernel32;
+   hKernel32 = LoadLibrary("kernel32.dll"); // 显式加载DLL
+
+   dwLen = GetModuleFileName(hKernel, fileName, BUF_SIZE); 
+
+   FreeLibrary(hKernel32); // 释放DLL
+   #+end_src
+
+*** 递归目录
+    #+begin_src c++
+    void listDirectory(LPCHAR lpPathName) {
+      // 要递归目录 /path/to/directory，则要将路径改为 /path/to/directory/*
+      char czFilePath[256];
+      strcpy(czFilePath, lpPathName);
+      strcpy(czFilePath, "\\*");
+
+      HANDLE hFile; // 指向找到的文件句柄
+      WIN32_FIND_DATA findFileData; // 存放查找到的文件信息
+      // findFileData.cFileName 文件名称
+
+      hFile = FindFirstFile(czFilePath, &findFileData);
+      if (hFile != INVALID_HANDLE_VALUE) {
+        do {
+	// 排除 . 和 .. 两个特殊文件
+	if (strcmp(findFileData.cFileName, ".") || strcmp(findFileData.cFileName, "..")) {
+	  continue;
+	}
+
+	if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY){
+	  // 若为目录则递归
+	  char czFullPath[256];
+	  sprintf(czFullPath, "%s\\%s", lpPathName, findFileData.cFileName); // 组装目录的绝对路径
+	  listDirectory(czFullPath);
+	}
+        } while(FindNextFile(hFile, &findFileData));
+      }
+    }
+    #+end_src
+
+** 文件属性操作
+   #+begin_src c++
+   DWORD GetFileAttributes(LPCHAR lpFilePath) // 仅能返回文件的属性，没有文件大小和创建时间等信息
+   BOOL GetFileAttributessEx(LPCHAR lpFilePath, LPWIN32_FILE_ATTRIBUTE_DATA lpData) // 返回文件的属性和文件大小和创建时间等信息
+   BOOL SetFileAttributes(LPCHAR lpFilePath, DWORD dwFileAttributes);
+   FileTimeToLocalFileTIme
+   FileTimeToSystemTime
+   WIN32_FILE_ATTRIBUTE_DATA
+   FILETIME
+   SYSTEMTIME
+
+   // 1. 通过GetFileAttributesEx获取创建时间和属性等
+   void showFileTime(PFILETIME lptime) {
+     FILETIME ftLocal;
+     SYSTEMTIME st;
+     FileTimeToLocalFileTime(lptime, &ftLocal); // 转换为本地时间
+     FileTimeToSystemTime(&ftLocal, &st); // 转换为系统时间
+     printf("%4d年%#2d月%#2d日，%#2d:%#2d:%#2d\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+   }
+
+   void showFileSize(DWORD dwFileSizeHigh, DWORD dwFileSizeLow) {
+     ULONGLONG fileSize = dwFileSizeHigh; // 64位无符号整数
+     fileSize <<= 32; //左移32位
+     fileSize += dwFileSizeLow;
+     printf("%I64u 字节\n", fileSize);
+   }
+
+
+   WIN32_FILE_ATTRIBUTE_DATA wfad;
+   if(GetFileAttributesEx("/path/to/file", 
+     GetFileExInfoStandard, // 枚举常量，获取一般属性
+     &wfad)) {
+     // 创建时间，转换为本地时间，然后再转换为系统时间才能显示
+     showFileTime(&(wfad.ftCreationTime));
+     // 最后访问时间
+     showFileTime(&(wfad.ftAccessTime));
+     // 修改时间
+     showFileTime(&(wfad.ftWriteTime));
+     // 文件大小
+     showFileSize(wfad.nFileSizeHigh, wfad.nFileSizeLow)
+     // 其它属性，如只读、隐藏等
+     if (wfad.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) {
+       // 是否归档
+     }
+     if (wfad.dwFileAttributes & FILE_ATTRIBUTE_COMPRESS) {
+       // 是否压缩     
+     }
+   }
+
+   // 2. 修改文件属性
+   DWORD fileAttributes = GetFileAttributes("/path/to/file");
+   fileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+   fileAttributes |= FILE_ATTRIBUTE_READONLY;
+   SetFileAttributes("/path/to/file", fileAttributes);
+   #+end_src
+
+** 临时文件
+*** C Standard Library
+    #+begin_src c
+    #include <stdlib.h>
+    #include <io.h> // VC++下mktemp位于该头文件中
+    
+    // 获取一个唯一的临时文件名，注意：XXXXXX会被替换为随机字符
+    char czTmpFileName[] = "john-XXXXXX";
+    mktemp(czTmpFileName); // 执行完czTmpFileName会为唯一的临时文件名
+
+    // 创建唯一的临时文件
+    czTmpFileName = "john-XXXXXX";
+    int fd = mkstemp(czTmpFileName); // 以读写模式和0600权限打开文件，并返回文件描述符。若返回NULL则错误码位于errno中。
+    close(fd);
+    #+end_src
+
+** 标准输入输出
+
+*** 重定向标准输出到文件   
+    #+begin_src c++
+    #include <fstream>
+
+    fstream out("target.txt", ios::out);
+    out << "Dim appRef\n\
+Set appRef = CreateObject(\"Photoshop.Application\")\n";
+
+    out.close();
+    #+end_src
+
+* C/C++ Standard Library
+
+** C Standard Library
+   ANSI C，详细规定C语言各要求的具体含义和编译器实现的要求，并且订立了Standard Library的标准(也被称为C Run-Time Library)。
+   其中包含C程序运行最基本、最常用的函数和错误处理代码(如divide by zero处理)，若没有Standard Library那么C程序的main和exit等方法将不会被响应。  
+  
+** C++ 98 Standard Library
+   由C Run-Time Library和STL两部分组成
+
+** VC Standard Library
+   基于C++ 98 Standard Library加入动态运行时库和静态运行时库
+   1. 动态运行时库，主要的文件如下
+      - Import Library 为 MSVCRT.lib(对应的调试版本为MSVCRTD.lib)
+      - DLL为msvcrt.dll(对应的调试版本为msvcrtd.dll)
+	- 包含printf等低级函数
+   2. 静态运行时库，主要的文件如下
+      - LIBC.lib, 单线程静态运行时库
+      - LIBCMT.lib, 多线程静态运行时库
+
+   注意：VC编译器会根据编译选项(单线程、多线程或DLL)，自动将相应的运行时库文件链接进来。
+   后来Microsoft又提供UCRT(Univeral C Runtime), 对应的文件为libucrt.lib和ucrtbase.dll.
+   - https://docs.microsoft.com/en-us/cpp/c-runtime-library/c-run-time-library-reference?view=vs-2019
+      
+* 随机数
+
+** C Standard Library
+   1. 使用
+      #+begin_src c++
+      // 初始化随机数生成器，使用当前时间戳(秒)作为随机数生成器的seed
+      // 当seed一样时，生成的随机数将一样
+      srand((unsigned) time(&t));
+      // 输出0到49之间的随机数
+      rand() % 50;
+      #+end_src
+   2. 源码
+      #+begin_src c++
+      static unsigned long int next = 1;
+      void srand(unsigned int seed) {
+        next = seed;
+      }
+      int rand(void) {
+        next = next * 1103515245 + 12345;
+        return (unsigned int)(next / 65536);
+      }
+      #+end_src
+
+** JavaScript中的 ~Math.random~
+   - 特点：
+     1. 由于预先生成128个随机数供后续使用，因此在使用调用该函数前已经知道后续随机数和顺序；
+     2. 通过借助操作系统的能力，获取随机数生成器的seed
+	- Linux下读取/dev/urandom这一由操作系统不断产生伪随机数的特殊文件的8个字节来作为seed
+	- Windows下则调用rands函数，该函数由提供且随机性足够强的随机数发生器
+	- 其它则以当前系统高精度的时间戳作为seed
+     3. 但由于随机数生成器的seed仅为2^64个组合，因此无法提供像密码一样安全的随机数，不能直接用于安全等场景。
+	- 随机数生成器的seed范围小或算法不够优质，那么在多次取值后可能会出现周期性表现。
+	- 可视化周期性表现的方法：通过连续生成大量随机数，并转换为RGB等颜色值，然后打点得到图像即可看到图像出现规律的花纹。
+     4. 若要用于安全性高的场景则需要使用 ~window.crypto.getRandomValue~ 函数
+	内部使用1024位种子的ARC4流密码。
+   - 源码
+     #+begin_src c++
+     // 取出当前随机数的状态
+     State state = native_context.math_random_state();
+     // 如果cache还没初始化，那么进行初始化，其中包含128个预先生成的随机数
+     if (state.s0 == 0 & & state.s1 == 0) {
+       uint64_t seed;
+       // 获取一个随机数生成器seed
+       random_number_generator()->NextBytes(&seed, sizeof(seed));
+       // 把seed进行哈希散射生成另外两个数s0和s1
+       state.s0 = base::RandomNumberGenerator::MurmurHash3(seed);
+       state.s1 = base::RandomNumberGenerator::MurmurHash3(~seed);
+     }
+     // 取出cache
+     FixedDoubleArray cache = native_context.math_random_cache();
+     for (int i = 0; i < kCacheSize; i++) { // kCacheSize为128
+       // 使用s0和s1进行位移异或等操作得到一个随机数，并放入cache中。
+       base::RandomNumberGenerator::XorShift128(&state.s0, &state.s1);
+       cache.set(i, base::RandomNumberGenerator::ToDouble(state.s0));
+     }
+     #+end_src
+** 伪随机数(Pseudo Random Number)
+   相同的 *随机数生成器seed* 和 *随机数生成算法* 即可 生成相同的 *随机数* 。
+   1. 随机数生成分布均匀性——由 *随机数生成算法* 决定
+   2. 随机数的可预测性
+      - 破解思路：破解者不知道当前使用的seed，通过所生成的随机数暴力破解出seed。
+	由于 *随机数生成算法* 对外提供服务，因此破解者根本不用获得源码即可实现不断调用算法实现暴力破解。
+      - 提供破解门槛的因素
+	- seed的位数，越多越好（1024+）。
+	- 问题：若采用时间戳作为seed，即使采用ms。若破解者将破解用的服务器时间和应用系统服务器时间实现秒级同步，那么seed的组合则大幅降低到1000个。
+	  因此需要对时间戳进行服务端私有处理再作为seed。
+
+** 真随机数(True Random Number)
+   真随机数需要从现实世界进行采集，其中Linux中的/dev/random就是通过设备驱动程序采集背景噪音的方式生成真随机数。
+   
+* 加壳
+  
+** 概述
+   壳分为4类
+   1. 压缩壳
+   2. 加密壳
+   3. 介于压缩壳和加密壳之间的混合壳
+   4. 虚拟化
+
+   普通二进制代码的逆向工程流程：
+   1. 通过 *反汇编* 工具将 二进制代码反汇编为汇编程序；
+   2. 然后可以人工分析汇编程序，或将汇编程序反编译为高级语言。
+    
+   *加壳的目的* 就是让反汇编、反编译变得尽量复杂，反出来的结果尽可能无意义。
+
+** 加壳流程
+   1. 逆向工程时会对二进制程序(Windows为PE，Unix/Linux为ELF，MacOS为Mach-O格式)进行反汇编，得到一个个处理单元(Block)。这些Block可能是一个函数或函数的一部分，里面包含指令和数据。
+      - 破解思路：block配合编译信息和文件格式信息，就可以看到每个Block对应的函数签名。
+      - 加壳方式思路：
+            1. 针对Block的重要程度进行选择混淆、加密和虚拟化等安全系统不同的加壳操作，那么一个Block可能会被打碎为多个Block，并且散落到不同的位置；
+	2. 编译保护：加入假分支、立即数加密、指令混淆等
+      - 加壳工具：有的加壳工具会智能提示哪些Block采用哪些加壳方式。
+   2. 安全壳代码
+      - 将原始程序装到壳代码中，而壳代码有如下功能
+	1. 启动程序时实际是运行壳代码，然后由壳代码运行原始程序；
+	2. 由于原始程序已经被处理成操作系统无法识别并运行的代码，因此必须通过壳代码解析、分配Block、修复Block的重定位，最后生成一个合法的可执行程序。
+
+** 压缩壳
+   UPX加壳为压缩壳，在运行过程中会被还原，所以通过ollydbg挂载它即可看到原貌。
+
+** 加壳工具
+
+*** VxPack(开源)
+    提供如代码虚拟化、代码乱序等常用的保护技术。
+
+*** UPX
+    压缩库为Aplib
+* C++控制台开发
+** 入参
+   #+begin_src c++
+   /*
+    @description argv[0] 为程序路径，因此argc至少为1。
+    @remark 若程序中抛出异常没有被捕获处理，那么会被系统默认的强制捕获器terminate捕获，terminate会调用abort函数终止程序。
+    @param argc - 包含程序路径的入参个数
+    @param argv - 包含程序路径的入参
+    */
+   int main(int argc, char **argv) {
+   }
+   #+end_src

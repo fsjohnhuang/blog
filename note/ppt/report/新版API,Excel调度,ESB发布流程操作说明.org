@@ -1,0 +1,23 @@
+目的：角色-操作-结果
+
+* 历史-API-UAT和VER环境发布流程 
+
+1. 开发人员上传代码至SVN(svn://svn.midea.com/QMS_DEV/GQMS/Branches/GQMS_QMS_V02R02_20170601/QMSV2/dev/Midea)
+2. 开发人员在Jenkins(http://10.16.86.133:1300/job/qmsv2)上运行"API-编译发布"
+
+* 历史-API-生产环境发布流程 
+1. 发布人员在Jenkins(http://10.16.86.133:1300/job/qmsv2)的"子任务-API-发布-VER"任务的最新执行记录上，执行推送操作(Approve)。
+
+* 新版-API-UAT环境发布流程
+1. 开发人员迁出SVN的UAT分支到本地(svn://svn.midea.com/QMS_DEV/GQMS/Branches/GQMS_QMS_UAT)
+2. 开发人员上传代码至SVN(svn://svn.midea.com/QMS_DEV/GQMS/Branches/GQMS_QMS_V02R02_20170601/QMSV2/dev/Midea)
+3. 开发人员右键点击本地UAT分支目录，依次选择 TortoiseSVN/Merge，在对话框选择Merge a range of revisions选项，点击右下方的Next按钮。
+4. 确保URL to merge from输入框的路径为开发分支的URL(svn://svn.midea.com/QMS_DEV/GQMS/Branches/GQMS_QMS_V02R02_20170601/QMSV2/dev/Midea)，然后选择specific range并点击 Show log按钮
+5. 在提交日志对话框中选择将被合并到UAT分支的提交记录，并点击 OK按钮
+6. 点击next按钮进入下一步
+7. Merge depth选择Full recursive，并点击 Test merge 检查合并是否存在冲突
+8. 若无冲突点击 Merge 即执行合并操作
+9. 开发人员右键点击本地UAT分支目录，依次选择 SVN Commit
+10. 在提交对话框中点击 Recent messages 选择对应的合并日志，然后提交即可
+11. 然后在Jenkins(http://10.16.86.133:1300/job/qmsv2)上运行"API-编译发布-UAT2"
+

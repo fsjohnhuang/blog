@@ -1,0 +1,454 @@
+* 前端路由
+** vue-router(https://router.vuejs.org/)
+API Doc https://router.vuejs.org/api/
+
+*** 核心对象
+   1. route
+      - route定义 ~routes = [{path: "/foo", component: MyComponent}]~
+	- Path Variable ~path: "/user/:id/info/:type"~
+	- Wildcard
+	  - Match everything ~path: "*"~
+	    注意：必须作为routes数组的最后一个元素，否则会导致其后续route无法被命中。一般用于404 Not Found路由。
+	  - Match anything starting with ~path: "/user-*"~
+	  - ~$route.params.pathMatch~ 获取 ~*~ 所匹配到的内容(如 ~/user-hi~ 命中 ~/user-*~ ，那么pathMatch值为hi)
+	- Priority
+	  从上至下尝试匹配，一旦命中则结束匹配流程。
+	- Naming Route
+	  #+begin_src javascript
+	  const routes = [{name: "user-profile", path: "/user/:id/profile", component: UserProfile}]
+	  Vue.component("User", {
+	    template: `<router-link :to="{name: 'user-profile', params: {id: 1}}">Profile</router-link>`
+	  })
+	  #+end_src
+	- Redirect(浏览器URL会发生变化)
+	  #+begin_src javascript
+	  // 注意：redirect目的路由不会触发Navigation Guard(如beforeEnter)。
+	  const routes = [{
+	    path: "/user",
+	    redirect: "/users"
+	  }, {
+	    path: "/group",
+	    redirect: {name: "groups"} // Naming Route
+	  }, {
+	    path: "/staff",
+	    redirect(to) {
+	      // parameter `to` is the target route
+	      return "/staffs"
+	    }
+	  }]
+	  #+end_src
+	- Alias(浏览器URL不会发生变化) ~{path: "/staff", alias: "/staffs", component: Staff}~
+      - 触发路由跳转的链接标签 ~<router-link/>~
+	- 当该路由激活时, ~.router-active-link~ 会被添加到该 ~<router-link/>~ 标签上。
+	- 属性
+	  - to
+	  - replace
+      - Vue组件中读取当前route, ~this.$route~ 
+	- 注意：只读属性，可被watch。
+	  #+begin_src javascript
+	  export default {
+	    watch: {
+	      $route(to, from) {
+	        // 若从/user/1/detail跳转到/user/2/detail，由于路由命中相同的组件，因此不会销毁当前组件后重构组件实例，即不会触发组件创建时的生命周期钩子函数。
+		// 那么就必须通过watch监视路由变化并手工响应。
+	      }
+	    }
+	  }
+	  #+end_src
+   2. router
+      - 集成Vue ~Vue.use(VueRouter)~
+      - 配置router ~router = new VueRouter({routes})~
+      - 注入Vue实例 ~new Vue({router}).$mount("#app")~
+      - Vue组件中使用router ~this.$router~
+   3. component
+   4. whehre to render component according to route
+      - ~<router-view/>~
+	- Naming View 用于命中一个路由显示多个组件，且支持嵌套路由的Naming View。
+	  #+begin_src javascript
+	  Vue.componet('User', {
+	    template: `
+	    <!-- 匿名View的name值为default -->
+	    <router-view/>
+	    <router-view name="a"/>
+	    <router-view name="b"/>
+	    `
+	  })
+	  const routes = [{
+	    path: "/user",
+	    components: {
+	      default: UserHome,
+	      a: UserProfile,
+	      b: UserAvatar
+	    }
+	  }]
+	  #+end_src
+
+*** 简单示例   
+   #+begin_src javascript
+   import Vue from 'vue'
+   import VueRouter from 'vue-router'
+
+   Vue.use(VueRouter)
+   const routes = [
+     {path: "/", component: Index},
+     {path: "/user/:id/detail", component: UserDetail}
+   ]
+   const router = new VueRouter({routes})
+   const app = new Vue({router}).$mount("#app")
+
+   // UserDetail.vue
+   <template>
+     <div>id 1: {{$router.params.id}}</div>
+     <div>id 2: {{userid}}</div>
+   </template>
+
+   export default {
+     computed: {
+       userid() {
+         return this.$router.params.id
+       }
+     },
+     methods: {
+       goBack() {
+         if (window.history.length > 1)){
+	   this.$router.go(-1)
+	 }
+	 else {
+	   this.$router.push("/")
+	 }
+       }
+     }
+   }
+   #+end_src
+   
+   #+begin_src html
+   <div id="app">
+     <p>
+       <router-link to="/foo">Go to Foo</router-link>
+       <router-link to="/bar">Go to Bar</router-link>
+     </p>
+     <router-view></router-view>
+   </div>
+   #+end_src
+
+*** 嵌套路由
+    通过route中的children属性定义子路由信息
+    #+begin_src javascript
+    const routes = [
+      {path: "/user/:id", component: User,
+       children: [
+         {path: "", component: UserHome}, // 命中 /user/1
+         {path: "profile", component: UserProfile}, // 命中 /user/1/profile
+	 {path: "/profile", component: DefaultProfile} // 命令 /profile
+       ]}
+    ]
+
+    Vue.component('Layout', {
+      template: `<div>
+      <p><router-link to="/user/1">User Home</router-link><router-link to="/user/1/profile">User Profile</router-link></p>
+      <router-view/>
+      </div>`
+    })
+    Vue.component('User', {
+      template: `<div>User:<router-view/></div>`
+    })
+    Vue.component('UserHome', {
+      template: `<div>Home</div>`
+    })
+    Vue.component('UserProfile', {
+      template: `<div>Profile of User {{$router.params.id}}</div>`
+    })
+    #+end_src
+
+*** 通过props传递$route
+    1. $route紧耦合组件
+       #+begin_src javascript
+       Vue.component('User', {
+         template: `<div>{{$route.params.id}}</div>`
+       })
+       #+end_src
+    2. $route通过props注入组件
+       #+begin_src javascript
+       const routes = [
+         {path: "/user/:id", component: User, props: true}, // true 表示将route.params作为props
+         {path: "/user/:id", component: User, props: {myAge: 1}}, // 将Object实例作为props
+         {path: "/user/:id", component: User, props: route => ({myId: route.params.id})} // 将函数返回值作为props
+       ]
+       #+end_src
+
+*** HTML5 History Mode and Hash Mode
+    默认采用Hash Mode，可通过如下配置切换到HTML5 History Mode
+    #+begin_src javascript
+    // 服务端需要将请求转发到index.html页面
+    // Nginx 为 location / { try_files $uri $uri/ index.html; }
+    const router = new VueRoute({
+      mode: "history",
+      routes：routes.concat([{path: "*", component: NotFoundComponent}])
+    })
+    #+end_src
+
+*** Navigation Guard
+    - 作用：根据规则决定是放行、重定向还是取消当前路由切换的请求。
+    - 级别：globally, per-route and in-component
+    - 注意：route的params,query,hash变化并不会触发Navigation Guard的enter和leave事件，需要通过watch $route或 Navigation Guard的in-component级别的beforeRouteUpdate事件手动更新
+
+**** The Full Navigation Resolution Flow
+     1. Navigation triggered
+     2. Call ~beforeRouteLeave(to, from, next)~ guards in deactivated components
+	Access the deactivated component by ~this~.
+     3. Call global ~beforeEach~ guards
+	#+begin_src javascript
+	const router = new VueRouter({routes})
+	router.beforeEach((to, from ,next) => {
+	  // {Route} to - the target Route object being navigated to.
+	  // {Route} from - the current Route object being navigated away from.
+	  // {Function} next() - guards would be pipelined in the creation order, and the guards may be resolved asynchronously. 
+	  //                              So execute `next` function to resolve the next hook. If no hooks are left, the navigation is confirm.
+              //                  next(false) - abort the current navigation and reset the browser URL to that of the `from` route.
+              //                  next('/') or next({path: '/'}) - redirect to a different location. The current navigation will be aborted and a new one will be started.
+	  //                  next(error) - pass instance of Error to `next` function leads to the current navigation aborted and call the callbacks registered via `router.onError` with the error
+              // Notice: Make sure the `next` function is called exactly once in a hook.
+	})
+	#+end_src
+     4. Call ~beforeRouteUpdate~ guards in reused components
+	Access the reused component by ~this~.
+     5. Call ~beforeEnter~ guards in per-route
+	#+begin_src javascript
+	const routes = [{
+	  path: '/foo',
+	  component: Foo,
+	  beforeEnter(to, from, next) {
+	  }
+	}]
+	#+end_src
+     6. Resolve async route components
+     7. Call ~beforeRouteEnter~ guards in activated components
+	Can not access the activated component by ~this~, beacause of the component does not be created yet when this guard is called.
+	#+begin_src javascript
+	beforeRouteEnter(to, from, next) {
+	  next(vm => {
+	    // vm refers to the component instance
+	  })
+	}
+	#+end_src
+     8. Call global ~beforeResolve~ guards
+	The ~beforeResolve~ guards will be called right before the navigation is confirmed, after all in-component guards and async route components are resolved.
+     9. Navigation confirmed
+     10. Call global ~afterEach~ guards
+	 #+begin_src javascript
+	const router = new VueRouter({routes})	 
+	// The guards are resolved synchronously, so no `next` function passed to the hooks, so those guards can not affect the navigation.
+	router.afterEach((to, from)=> {})
+	 #+end_src
+     11. DOM updates triggered
+     12. Call callbacks passed to ~next~ in ~beforeRouteEnter~ guards with instantiated instances
+
+*** Route Meta Fields
+    作用：附加额外信息到route record。
+    route record：routes中的元素就是route record，而route record是可嵌套的。
+    #+begin_src javascript
+    // 请求/foo/bar时命中2个route record，而且可以通过$route.matched获取命令的route record。
+    const routes = [{path: "/foo", component: Foo, meta: {requiresAuth: false}, children: [{path: "/bar", meta: {requiresAuth: true}}]}]
+    router.beforeEach((to, from, next) => {
+      if (to.matched.some(record => record.meta.requiresAuth)) {
+        next({path: '/login', query: { redirect: to.fullPath }})
+      }
+      else {
+        next()
+      }
+    })
+    #+end_src
+
+*** Transitions
+    #+begin_src html
+    <transition name="slide">
+      <router-view/>
+    </transition>
+    #+end_src
+
+*** Data Fetching
+    1. Fetching After Navigation
+       Perform the data fetching in the incoming component's ~created~ hook, and to display a loading state while the data is being fetched over the network.
+    2. Fetching Before Navigation
+       Perform the data fetching in the ~beforeRouteEnter~ guard in the incoming component, and only call ~next~ when the fetch is complete. 
+       #+begin_src javascript
+       beforeRouteEnter(to, from, next) {
+         getPost((err, post) => {
+	 next(vm => vm.setData(err, post))
+         })
+       }
+       #+end_src
+
+*** Scroll Behavior
+    作用：
+    1. scroll to indicated position when navigating to a new route.
+    2. preserve the scrolling position of history entries just like real page reload does.
+    
+    限制：需要浏览器支持 ~history.pushState~
+    #+begin_src javascript
+    const router = new VueRouter({
+      routes,
+      scrollBehavior(to, from, savePosition) {
+        // savePosition is only available if this is a `popstate` navigation(triggered by the browser's back/forward buttons)
+        // return a scroll position object like
+        // 1. {x: number, y: number}
+        // 2. {selector: string, offset?: {x: number, y: number}}
+        // 3. Promise Object
+      }
+    })
+    #+end_src
+
+*** Lazy Loading Routes
+    1. Vue's Async Component + Webpack's Code Splitting Feature
+       #+begin_src javascript
+       // Define async component
+       const Foo = () => Promise.resolve({/* component definition */})
+       // Use dynamic import in Webpack2 to indicate a code-split point
+       import("./Foo.vue")
+
+       // Combine the two above to define an async component that will be automatically code-split by webpack.
+       const Foo = () => import("./Foo.vue")
+
+       // Grouping components in a same chunk
+       const Foo = () => import(/* webpackChunkName: "group-foo" */ './Foo.vue')
+       const Bar = () => import(/* webpackChunkName: "group-foo" */ './Bar.vue')
+       const Baz = () => import(/* webpackChunkName: "group-foo" */ './Baz.vue')
+       #+end_src
+    2. Register route record as normal
+       #+begin_src javascript
+       const routes = [{path: '/user', component: Foo}]
+       #+end_src
+    
+*** $route API
+    #+begin_src javascript
+    // 获取/user/:id/info/:type中的占位符:id和:type的具体值
+    // $route.params.id 和 $route.params.type
+    $route.params
+
+    // 获取/user?a=1&b=2中的a和b的具体值
+    $route.query
+    // 获取/user#abc中的abc
+    $route.hash
+    #+end_src
+
+*** $router API
+    #+begin_src javascript
+    $router.go(int step) // go forwards or go backwards in the history stack by indicated steps.
+    $router.push(String URI) // as the same as <router-link :to="URI"/>
+    $router.replace(location: String, onComplete?: function,  onAbort?: function) // as the same as <router-link :to="URI" replace/>
+    #+end_src
+
+**** Navigation Failures
+     通过 ~router.push~ 和 ~router.replace~ 进行路由切换时，如出现如下情况将会报异常信息
+     1. Users are already on the page that they are trying to navigate to.
+     2. A navigation guard aborts the navigation by calling ~next(false)~ or ~next(error)~
+  
+     Catch the Exceptions
+     #+begin_src javascript
+     router.push("/hi").catch(failure => {
+       const navigationFailureTypes = [NavigationFailureTypes.redirected, // call next(newLocation) to redirect to somewhere else inside of a navigation guards 
+                                                         NavigationFailureTypes.aborted, // next(false)
+			                     NavigationFailureTypes.cancelled, // call router.push() inside of a navigation guards
+                                                         NavigationFailureTypes.duplicated ] // we are already at the target location
+
+         
+         switch(navigationFailureTypes.find(isNavigationFailure.bind(null, failure))) {
+           case NavigationfailureTypes.redirected:
+	   // failure.to.path
+	   // failure.from.path
+	   break
+           case NavigationfailureTypes.aborted:
+	   break
+           case NavigationfailureTypes.cancelled:
+	   break
+           case NavigationfailureTypes.duplicated:
+	   break
+         }
+       }
+     })
+     #+end_src
+   
+* 代码高亮显示——highlight.js
+** 通过vue-highlightjs集成highlight.js到Vue
+  1. 安装依赖 ~npm i highlight.js vue-hightlightjs --save~
+  2. 配置依赖
+     #+begin_src javascript
+     import Vue from 'vue'
+     // vue-highlightjs提供highlight.js集成到Vue，但不提供highlight.js内置的样式，因此需要另外引入样式。
+     import VueHighlightjs from 'vue-highlightjs'
+     import 'highlight.js/styles/atom-one-dark.css' 
+
+     Vue.use(VueHighlightjs)
+     #+end_src
+  3. 使用
+     #+begin_src html
+     <pre v-highlightjs>
+       <code class="language-sql">
+       SELECT * FROM DUAL;
+       </code>
+     </pre>
+     #+end_src
+
+** 直接使用highlight.js
+   #+begin_src javascript
+   import hljs from 'highlight.js'   
+   import 'highlight.js/styles/atom-one-dark.css' 
+
+   function highlightCode(){
+     document.querySelectorAll('pre')
+       .forEach(hljs.highlightBlock.bind(hljs))
+   }
+
+   // 由于官网中调用initHighlighting()用于对静态页面进行渲染，而通过vue-router导航到新页面后则需要通过updated重新渲染。
+   export default {
+     mounted(){
+       highlightCode()
+     },
+     updated(){
+       highlightCode()
+     }
+   }
+   #+end_src
+
+
+** QA
+   1. Q:html代码无效
+      A: ~<,>~ 需要采用编码实体 ~&lt,&gt~ 代替。
+      
+* 复制到剪切板
+** vue-clipboard2
+   1. 安装依赖 ~npm i vue-clipboard2 --save~
+   2. 配置
+       #+begin_src javascript
+       import VueClipboard from "vue-clipboard2"
+       Vue.use(VueClipboard)
+       #+end_src
+   3. 使用
+      #+begin_src html
+      <template>
+        <div>
+	<button type="button"
+	  v-clipboard:copy="message"
+	  v-clipboard:success="onSuccess"
+	  v-clipboard:error="onError">Copy</button>
+        </div>
+      </template>
+      <script>
+       export default {
+         data() {
+           return { message: "被复制的内容" }
+         },
+         methods: {
+           onSuccess(e){}
+           onError(e){}
+         }
+       }
+      </script>
+      #+end_src
+
+** 原生
+   #+begin_src javascript
+   let targetEl = document.getElementById("app")
+   targetEl.select()
+   document.execCommand("Copy")
+   #+end_src

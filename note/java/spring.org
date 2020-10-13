@@ -485,7 +485,7 @@
           @PostMapping("/")
           @ResponseBody
           @ResponseStatus(HttpStatus.CREATED)
-          public String[] create(@ResponseBody NewOrderRequest newOrder){
+          public String[] create(@RequestBody NewOrderRequest newOrder){
               return new String[] {"a", "b"};
           }
           #+END_EXAMPLE
@@ -722,7 +722,7 @@
             return formName;
         }
         #+END_EXAMPLE
-*** 数据转换、格式化和数据校验
+*** TODO 数据转换、格式化和数据校验
     转换流程：
     1) 通过ServletRequest获取请求消息，并通过反射获取Handle入参对象，将这些信息交给DataBinder
     2) DataBinder调用装配在 Spring Web 上下文中的 ConversionService 组件进行数据类型转换、格式化工作，并将 ServletRequest 中的消息填充的参数对象中
@@ -777,6 +777,7 @@
 
 **** 数据校验
 
+*** TODO Handler返回值
 *** TODO RESTful API
 
 *** TODO WebService
@@ -1226,6 +1227,44 @@ pulbic class MyTypeFilter implements TypeFilter {
    ctx2.refresh();
    #+end_example
 
+**** @Value注入支持的形式
+     1. 普通字符串
+	#+begin_src
+        @Value("hello")
+        String str;
+	#+end_src
+     2. 配置项(application.properties或@PropertySource引入的)
+	#+begin_src
+        @PropertyResource("classpath:my.properties")
+	public class IndexController{
+          @Value("${spring.application.name}")
+          String name;
+
+          @Value("${spring.application.name:'default value'}")
+          String nameWithDefault;
+
+          # digits值为1,2,3
+          # 自动以逗号为分隔符，分割属性值
+          @Value("${digits}")
+	  List<Integer> digits;
+        }
+	#+end_src
+     3. Spel表达式
+     4. 文件资源
+	#+begin_src
+        @Value("classpath:/wsdl/test.wsdl")
+	org.springframework.core.io.Resource resource;
+	#+end_src
+     5. URL资源
+	#+begin_src
+        @Value("http://www.test.com")
+	URL page;
+	#+end_src
+
+**** ~classpath:~ 和 ~classpath*:~ 的区别
+     ~classpath:~ 仅搜索当前项目中的路径
+     ~classpath*:~ 搜索当前项目中的路径和所依赖的jar包中的路径
+
 ** Bean的配置和实例化
    通过配置文件(XML或Properties文件)注册并管理Bean之间的依赖关系。
 
@@ -1558,6 +1597,85 @@ pulbic class MyTypeFilter implements TypeFilter {
       }
       #+end_example
 
+*** Bean的加载顺序
+
+**** 关于加载顺序的误区
+     1. @Configuration中的@Bean按从上往下注册是错误的
+     2. @Order能控制加载顺序是错误的。@Order的正确用途如下
+	1. 控制AOP的类(@Aspect标注的类)的加载顺序
+	2. 控制ApplicationListener实现类的加载顺序
+	3. 控制CommandLineRunner实现类的加载顺序
+	4. 控制bean集合中元素的顺序(4.0+才支持)
+	   #+begin_src
+	   @Bean 
+	   @Order(2)
+	   public IBean aBean(){return new ABean();}
+	   @Bean 
+	   @Order(1)
+	   public IBean bBean(){return new BBean();}
+
+	   @Bean
+	   public A a(List<IBean> beans){
+	     beans.get(0); // 必定为bBean
+	     beans.get(1); // 必定为aBean
+	   }
+	   #+end_src
+
+**** 控制加载顺序
+     1. ~@DependsOn~, 表示当前bean依赖另一个bean，因此要先加载并初始化另一个bean后再初始化当前bean
+	- 适用场景
+	  1. 直接或间接标注在带有@Component的类上
+	  2. 直接或间接标注在带有@Bean的方法上
+	  3. 若使用xml配置则改为 ~<bean depends-on="..."/>~
+	- 示例
+	   #+begin_src
+	   @Configuration
+	   public class Config {
+	     @Bean
+	     public A a(){ return new A(); }
+
+             @Bean
+	     @DependsOn({"a", "c"})
+	     public B b(){ return new B(); }
+
+             @Bean
+	     public C c(){ return new C(); }
+	   }
+	   #+end_src
+     2. 参数注入
+	#+begin_src
+	@Configuration
+	public class Config {
+          @Bean
+	  public A a(){return new A();}
+
+	  @Bean
+	  public B b(A a){return new B(a);}
+	}
+	#+end_src
+     3. @AutoConfigureOrder(int priority)
+	- 适用场景：控制外部@Configuration类的加载顺序，priority越小越先加载。
+	  - 外部@Configuration，当前工程不位于basePackage下，无法被ComponentScan自动识别加载的@Configuration。即通过spring.factories罗列，由Spring的增强的SPI机制加载的@Configuration。
+	  - 内部@Configuration，当前工程位于basePackage下，被ComponentScan自动识别加载的@Configuration。
+	  - 内部@Configuration加载后再加载外部@Configuration。
+	- 示例
+	  - 代码
+	    #+begin_src
+	    @Configuration
+	    @AutoConfigureOrder(1)
+	    public class AConfig{}
+
+	    @Configuration
+	    @AutoConfigureOrder(2)
+	    public class BConfig{}
+	    #+end_src
+	  - spring.factories
+	    #+begin_src
+	    org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+	    com.my.demo.BConfig,\
+	    com.my.demo.AConfig
+	    #+end_src
+	
 ** Spring IoC/DI
    Spring IoC通过反射实习。
    IoC和DI只是从不同的角度描述同一个事物。
@@ -2458,11 +2576,115 @@ Spring定义7种事务传播行为
 | PROPAGATION_REQUIRED      | 若存在活动事务,则在当前事务运行；否则创建新事务运行                                            |
 | PROPAGATION_SUPPORTS      | 若存在活动事务,则在当前事务运行；否则直接运行                                                  |
 | PROPAGATION_MANDATORY     | 若存在活动事务,则在当前事务运行；否则抛出异常                                                  |
-| PROPAGATION_REQUIRED_NEW  | 无论如何均创建新事务运行,若存在活动事务则将当前事务挂起                                        |
+| PROPAGATION_REQUIRES_NEW  | 无论如何均创建新事务运行,若存在活动事务则将当前事务挂起                                        |
 | PROPAGATION_NOT_SUPPORTED | 若存在活动事务则挂起当前事务,再运行                                                            |
 | PROPAGATION_NEVER         | 若存在活动事务则挂起当前事务,则直接抛出异常                                                    |
 | PROPAGATION_NEST          | 若存在活动事物在创建嵌套事务(独立于当前事务执行提交和回滚)；否则创建新事务运行(逻辑由厂商决定) |
 
+通过枚举类 ~Propagation~ 定义，其中 ~Propagation.REQUIRED~, ~Propagation.REQUIRES_NEW~ 和 ~Propagation.NEST~ 最为常用。
+使用示例
+1. ~Propagation.REQUIRED~
+   #+begin_src java
+   @Service
+   public class UsersService {
+       @Autowired
+       UserService userService;
+       @Autowired
+       UserMapper dao;
+
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUsers(List<User> users) {
+         for (User user : users) {
+           dao.insert(user);
+           userService.save(user);
+         }
+       }
+   }
+
+   @Service
+   public class UserService {
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUser(User user) {
+         throw new RuntimeException("");
+       }
+   }
+   #+end_src
+   - 过程
+     1. 调用saveUsers时会创建一个事务上下文
+     2. 调用saveUser时，由于调用点已经存在一个事务上下文，因此saveUser处直接加入已有的事务上下文即可
+     3. saveUser中抛出运行时异常，导致其所在的事务上下文发生回滚操作
+     4. dao.insert的操作也被回滚
+2. ~Propagation.REQUIRES_NEW~
+   #+begin_src java
+   @Service
+   public class UsersService {
+       @Autowired
+       UserService userService;
+       @Autowired
+       UserMapper dao;
+
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUsers(List<User> users) {
+         for (User user : users) {
+           dao.insert(user);
+           userService.save(user);
+         }
+       }
+   }
+
+   @Service
+   public class UserService {
+       @Transactional(propagation=Propagation.REQUIRES_NEW)
+       public void saveUser(User user) {
+         if (user == null) {
+             throw new RuntimeException("");
+         }
+       }
+   }
+   #+end_src
+   - 过程
+     1. 调用saveUsers时会创建一个事务上下文
+     2. 调用saveUser时，虽然调用点已经存在一个事务上下文，但每次调用该方法时都会创建一个新的事务上下文，并且saveUser将加入这个新的事务上下文
+     3. 当saveUser执行第N次时，因user为null而抛出运行时异常，那么将会导致第N次调用所属事务上下文的回滚
+     4. 前N-1次的saveUser执行内容将不被回滚
+     5. dao.insert操作也不会被回滚
+3. ~Propagation.NEST~
+   #+begin_src java
+   @Service
+   public class UsersService {
+       @Autowired
+       UserService userService;
+       @Autowired
+       UserMapper dao;
+
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUsers(List<User> users) {
+         for (User user : users) {
+           dao.insert(user);
+           userService.save(user);
+         }
+       }
+   }
+
+   @Service
+   public class UserService {
+       @Transactional(propagation=Propagation.NEST)
+       public void saveUser(User user) {
+         if (user == null) {
+             throw new RuntimeException("");
+         }
+       }
+   }
+   #+end_src
+   - 过程
+     1. 调用saveUsers时会创建一个事务上下文
+     2. 调用saveUser时，调用点已经存在一个事务上下文，因此每次调用saveUser时则在当前事务上下文上添加保存点(Transaction Savepoint)
+     3. 当saveUser执行第N次时，因user为null而抛出运行时异常，那么将会事务将回滚到上一个保存点
+     4. 前N-1次的saveUser执行内容将不被回滚
+     5. dao.insert操作也不会被回滚
+   - 注意： 必须资源管理器(如数据库)支持保存点技术时才会启用Propagation.NEST配置，否则将自动降级为Propagation.REQUIRES_NEW
+   - Propagation.REQUIRES_NEW 和 Propagation.NEST的区别： Propagation.REQUIRES_NEW可以设置与调用方所在事务上下文不同的隔离级别，而Propagation.NEST只能保持和调用方所在事务上下文一致的隔离级别。
+     
 **** 隔离级别
 | 级别                          | 说明                                                                                                                |
 |-------------------------------+---------------------------------------------------------------------------------------------------------------------|
@@ -2478,6 +2700,102 @@ Spring定义5种事务隔离级别
 | ISOLATION_READ_COMMITTED   | 仅允许读取已提交的数据,会出现不可重复读和幻读             |
 | ISOLATION_REPEATABLE_READ  | 会出现幻读                                                |
 | ISOLATION_SERIALIZABLE     | 最好的隔离级别,完全服从ACID的隔离级别,性能最低的隔离级别.不会出现脏读,不可重复读和幻读问题 |
+
+*** @Transactional自调用失效问题
+**** 失效场景一及原因
+     #+begin_src java
+     @Service
+     public class UserService {
+       @Autowired
+       UserMapper dao;
+
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUsers(List<User> users) {
+           for (User user : users) {
+               saveUser(user);
+           }
+       }
+
+       @Transactional(propagation=Propagation.REQUIRES_NEW)
+       public void saveUser(User user) {
+         if (user == null) {
+           throw new RuntimeException("");
+         }
+         dao.insert(user);
+       }
+     }
+     #+end_src
+     - 预期结果
+       每次调用saveUser方法时都会创建一个新的事务上下文，并且saveUser方法隶属于这个新的事务上下文。
+     - 实际结果
+       每次调用saveUser方法时均不会创建事务上下文，甚至不会执行于 ~@Transactional~ 配置相关的任何操作。
+     - 原因分析
+       由于Spring的 ~@Transactional~ 是通过AOP织入事务管理的相关代码，而saveUsers调用saveUser属于类内部方法自调用，因此根本调用已被AOP织入事务管理代码的saveUser方法。
+
+***** 解决方法1——拆分逻辑到不同的类，防止自调用
+     #+begin_src java
+     public class UserService {
+       @Autowired
+       UserMapper dao;
+
+       @Transactional(propagation=Propagation.REQUIRES_NEW)
+       public void saveUser(User user) {
+         if (user == null) {
+           throw new RuntimeException("");
+         }
+         dao.insert(user);
+       }
+     }
+     public class UsersService {
+         @Autowired
+         UserSerivce userService;
+
+         @Transactional(propagation=Propagation.REQUIRED)
+         public void saveUsers(List<User> users) {
+             for (User user : users) {
+                 userService.saveUser(user);
+             }
+         }
+     }
+     #+end_src
+      
+***** 解决方法2——通过Spring的ApplicationContext获取bean，调用已被AOP织入事务管理代码的saveUser方法
+     #+begin_src java
+     @Service
+     public class UserService implements ApplicationContextAware{
+       @Autowired
+       UserMapper dao;
+       ApplicationContext ctx;
+
+       public void setApplicationContext(ApplicationContext ctx) {
+           this.ctx = ctx;
+       }
+
+       @Transactional(propagation=Propagation.REQUIRED)
+       public void saveUsers(List<User> users) {
+           UserService service = ctx.getBean(UserService.class);
+           for (User user : users) {
+	       service.saveUser(user);
+           }
+       }
+
+       @Transactional(propagation=Propagation.REQUIRES_NEW)
+       public void saveUser(User user) {
+         if (user == null) {
+           throw new RuntimeException("");
+         }
+         dao.insert(user);
+       }
+     }
+     #+end_src
+
+**** 失效场景儿及原因
+     @Transactional既可以修饰接口也可以修饰类。
+     失效场景：修饰接口时AOP实现方式必须采用JDK动态代理，若采用GCLIB动态代理则失效。
+     原因：由于GCLIB动态代理时直接代理目标类，不涉及目标类所继承的接口，那么修改接口的@Transactional自然就无法读取并根据其值织入事务相关代码
+     2个解决方法：
+     1. @Transactional修饰实现类
+     2. AOP实现使用JDK动态代理
 
 *** Spring提供的事务管理接口及实现
 Spring提供的事务管理接口(SPI)
@@ -2536,7 +2854,7 @@ public interface TransactionStatus {
 
 由于步骤6中数据库事务已经成功提交, 而MQ的事务却被回滚, 因此两者状态不一致.
 
-*** 全局事务
+*** TODO 全局事务
 一个事务管理器对应多个数据源, 用于在分布式系统中解决状态不一致的问题.
 
 **** JTA(Java Transaction Manager)
@@ -2752,7 +3070,9 @@ public class MyApplicationListener implements ApplicationListener<ApplicaitonEve
 
 ApplicationEvent的子类
 org.springframework.context.event.ContextRefreshedEvent 容器刷新完成事件(所有Bean已准备好)
+- 默认情况(DefaultLifecycleProcessor)下在所有SmartLifecycle执行完start方法后再发布该事件。
 org.springframework.context.event.ContextClosedEvent 容器关闭事件
+- 在所有Lifecycle执行stop方法前已发布该事件。
 org.springframework.context.event.ContextStartedEvent 容器创建完成事件
 org.springframework.context.event.ContextStoppedEvent 容器停止事件
 
@@ -2763,7 +3083,6 @@ ctx.publishEvent(new ApplicationEvent("custom event") {});
 #+end_example
 ** Spel
 Spring Expression Language, 可用在 ~@Value~ 注解、XML配置和代码块中。
-
 
 *** 基本语法
 #+begin_example bash
@@ -2785,7 +3104,7 @@ Spring Expression Language, 可用在 ~@Value~ 注解、XML配置和代码块中
 # 三元运算
 2 > 1 ? 1 : 2
 
-# Elvis运算符
+# Elvis运算符，空格可忽略
 null ?: 'default value'
 
 # 正则全匹配，返回boolean值
@@ -2798,7 +3117,13 @@ T(java.lang.Math).PI
 name?.length
 name?.size()
 
-# 直接使用new/insance of
+# 操作系统属性
+systemProperties['os.name']
+
+# 操作@PropertySource引入的配置项目
+'${words}'.split('\\|')
+
+# 直接使用new/instance of
 # 注意：仅java.lang下的类可以省略包名，其它必须为全限定类名
 new String('hello world')
 
@@ -2808,19 +3133,19 @@ new String('hello world')
 # 访问字面量列表的元素
 {1,2,3}[0]
 # 访问外部传入的列表(命名为coll)的元素
-#coll[1]
+coll[1]
 # 向外部传入的列表(命名为coll)添加元素
-#coll[1] = 3
+coll[1] = 3
 # filter表达式，表达式中#this指向当前元素, 表达式返回true则保留该元素
-#coll.?[#this>2]
+coll.?[#this>2]
 # map表达式
-#coll.![name]
+coll.![name]
 
 # 映射操作
 # 访问外部传入的映射(命名为kvs)的元素
-#kvs['name']
+kvs['name']
 # filter表达式，表达式中#this指向当前元素， 表达式返回true则保留该元素
-#kvs.?[#this['name']=='john']
+kvs.?[#this['name']=='john']
 #+end_example
 
 *** 默认上下文运行Spel表达式
@@ -2885,14 +3210,141 @@ Expression expr = exprParser.parseExpression("bean1.getValue() == 'test'");
 Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
 #+end_example
 
+** Spring容器的生命周期
+   https://blog.csdn.net/boling_cavalry/article/details/82051356
+
+*** 通过实现SmartLifecycle接口感知容器的变化
+    继承关系：SmartLifecycle extends Lifecycle, Phased
+    | 接口           | 方法                    | 描述                                                                                                  |
+    |----------------+-------------------------+-------------------------------------------------------------------------------------------------------|
+    | Lifecycle      | void start()            | 当Spring容器上下文被刷新(所有bean初始化完毕后)时，若为SmartLifecycle实例则判断isAutoStartup方法是否返回true，若为false则不立即调用而是等待显式调用；若为Lifecycle实例则直接调用。注意执行完需要设置isRunning=true |
+    | Lifecycle      | void stop()             | 容器关闭时，Spring容器先检查isRunning值，若为true并发现当前对象实现SmartLifecycle则调用stop(Runnable)，若实现Lifecycle则调用stop()。注意执行完需要设置isRunning=false  |
+    | Liefcycle      | boolean isRunning()     | 返回当前实例的状态，返回isRunning字段值。                                                                    |
+    | Phased         | int getPhase()          | 返回值决定start和stop方法在众多Lifecycle实现类的执行顺序，start顺序为从小到大，而stop顺序则刚好相反。默认值为0    |
+    | SmartLifecycle | boolean isAutoStartup() | 执行start方法前先调用该方法，若返回false则不执行start方法                                             |
+    | SmartLifecycle | void stop(Runnable)     | 容器关闭时，Spring容器发现当前对象实现SmartLifecycle则调用stop(Runnable)，若实现Lifecycle则调用stop()。注意必须调用Runnable.run方法，否则Spring容器关闭流程会被阻塞直到超时，超时默认为30秒 |
+
+**** Spring容器启动与SmartLifecycle的关系 
+     AbastractApplicationContext的refresh方法中，在所有bean实例化和初始化操作完毕后会调用finishRefresh方法。
+	#+begin_src java
+	protected void finishRefresh() {
+          /* LifecycleProcessor是所有Lifecycle实例的管家，包含对Lifecycle的各种操作。
+             若Spring容器中已经存在LifecycleProcessor实例则将其赋值给applicationContext的成员变量lifecycleProcessor；
+	     否则注册一个类型为DefaultLifecycleProcessor的bean，并将其赋值给applicationContext的成员变量lifecycleProcessor。
+           */
+	  initLifecycleProcessor();
+
+          /* DefaultLifecycleProcessor的onRefresh方法逻辑为
+	     1. 筛选出isAutoStartup方法返回true的SmartLifecycle实例
+             2. 根据getPhase的返回值将SmartLifecycle实例分组(LifecycleGroup)。对于只实现Lifecycle的实例，DefaultLifecycleProcessor的onReresh方法将排除它们。
+             3. 根据getPhase返回值，从小到大调用LifecycleGroup的start方法
+             4. LifecycleGroup的start方法内部会先遍历旗下的Lifecycle实例
+             5. 若当前Lifecycle实例存在依赖项目，则递归执行依赖项start方法
+             6. 最后若当前Lifecycle实例isRunning返回false，若当前为SmartLifecycle则isAutoStartup必须返回true才执行start方法
+           */
+          getLifecycleProcessor().onRefresh();
+	}
+	#+end_src
+
+**** Spring容器关闭与SmartLifecycle的关系
+     AbstractApplicationContext的doClose方法中，在Spring容器关闭(调用applicationContext.close方法或JVM关闭)时会
+     1. 发布容器关闭事件 ~publicEvent(new ContextClosedEvent(this))~
+     2. 调用lifecycleProcessor的onClose方法
+	1. 根据getPhase的返回值将Lifecycle实例分组，仅实现Lifecycle的getPhase恒返回0
+	2. 根据getPhase返回值，从大到小调用LifecycleGroup的stop方法
+	3. LifecycleGroup的stop方法内部会先遍历旗下的Lifecycle实例
+        4. 若当前Lifecycle实例存在依赖项目，则递归执行依赖项stop方法
+	   - 对于SmartLifecycle实例的stop方法是在新线程中执行，因此多个实例可以并行执行stop方法。
+	5. 通过CountDownLatch实例控制当所有Lifecycle均执行完stop方法后或超时后，再执行Spring容器关闭操作中的后续操作
+     3. 销毁所有Scope为Sigleton的Bean
+
+**** DefaultLifecycleProcessor
+     1. 配置
+	#+begin_src xml
+	<bean id="lifecycleProcessor" class="org.springframework.context.support.DefaultLifescycleProcessor">
+	  <!-- Spring容器关闭超时，默认为30秒。单位毫秒 -->
+	  <property name="timeoutPerShutdownPhase" value="100000"/>
+	</bean>
+	#+end_src
+
+**** 使用Lifecyle还是SmartLifecycle
+     - 使用Lifecycle，对执行顺序没有要求，并且在Spring容器关闭时没有性能或时间要求。
+       注意：若要调用Lifecycle实例的start方法，那么需要显式调用applicationContext.start方法。
+     - 使用SmartLifecycle，对执行顺序有要求，或在Spring容器关闭时没有性能或时间要求。
+
+** TODO BeanFactory
+   
+*** API
+    #+begin_src
+    boolean containsLocalBean(String beanName);
+    T getBean(String beanName, Class<T> clazz);
+    void registerSingleton(String beanName, Object instance);
+    // 获取指定bean的依赖bean name
+    String[] getDependenciesForBean(String beanName);
+    #+end_src
+
 * Spring Boot
   通过 [[https://start.spring.io/][Spring Initializr]] https://start.spring.io/ 初始化项目。
 
 ** Spring Boot的Maven插件
-   #+begin_src
-   # 启动Spring Boot项目
-   mvn spring-boot:run
+   1. 插件配置
+      #+begin_src xml
+      <build>
+        <plugins>
+	<plugin>
+	  <groupId>org.springframework.boot</groupId>
+              <artifactId>spring-boot-maven-plugin</artifactId>
+              <configuration>
+                <fork>true</fork>
+                <!--<mainClass>启动类的全限定类名，默认不用写，但存在两个或以上的启动类时则需要显式指定</mainClass>-->
+              </configuration>
+	</plugin>
+        </plugins>
+      </build>
+      #+end_src
+   2. 插件命令
+       #+begin_src bash
+       # 默认的goal。在执行mvn package后，再次打包可执行的jar/war，同时保留mvn package生成的(jar/war).original
+       mvn spring-boot:repackage
+
+       # 启动Spring Boot项目
+       mvn spring-boot:run
+
+       # 在mvn integration-test阶段，进行Spring Boot应用生命周期的管理
+       mvn spring-boot:start
+       # 在mvn integration-test阶段，进行Spring Boot应用生命周期的管理
+       mvn spring-boot:stop
+
+       # 生成Actuator使用的的构建信息文件build-info.properties
+       mvn spring-boot:build-info
    #+end_src
+
+*** Debug模式
+    1. 运行 ~spring-boot:run~ 时添加debug参数
+       - 方式1
+	 1. 在pom.xml中设置
+	    #+begin_src xml
+	    <plugin>
+	      <groupId>org.springframework.boot</groupId>
+	      <artifactId>spring-boot-maven-plugin</artifactId>
+	      <configuration>
+	        <jvmArguments>
+		-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005
+	        </jvmArguments>
+	      </configuration>
+	    </plugin>
+	    #+end_src
+	 2. 运行 ~mvn spring-boot:run~ 或点击 Idea 中的 Maven/Plugin/spring-boot/run
+       - 方式2，通过 ~mvn spring-boot:run -Drun.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"~
+    2. 在Run/Edit Configurations中新增类型为 *Remote* 的配置项
+       - Debugger mode设置为 Attach to remote JVM
+       - Port设置为5005
+    3. 先运行 ~mvn spring-boot:run~ 启动应用，然后再以Debug方式运行Remote类型的配置项。
+
+    参数讲解
+    - ~-Xdebug~ 告知JVM工作在DEBUG模式
+    - ~-Xrunjdwp~
+https://blog.csdn.net/u013862444/article/details/81159173
 
 ** Starter Template
 
@@ -2914,25 +3366,6 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
    </dependency>
    #+end_example
    Spring Boot Starter Template是功能相关的一系列依赖的集合， ~spring-boot-starter-parent~ 用于
-
-** 事例
-#+begin_example java
-@Controller
-@EnableAutoConfiguration
-public class MainController {
-    public static void main(String args) throws Exception {
-        SpringApplication.run(MainController.class, args);
-    }
-
-    @RequestMapping("/")
-    @ResponseBody
-    public String home() {
-        return "Hi";
-    }
-}
-#+end_example
-
-运行： ~maven spring-boot:run~
 
 ** 打包非内置Web容器的Spring Boot应用
 Spring Boot打包时可以内置Tomcat或Jetty。
@@ -2983,6 +3416,82 @@ Spring Boot打包时可以内置Tomcat或Jetty。
    </dependency>
    #+end_src
    原理：启动LiveReload Server监控Spring Boot应用文件变化，并且仅重新加载变化的类。因此热部署速度非常快。
+
+** 自定义Spring Boot Starter
+   Starter也称为场景启动器
+   1. 定义场景依赖项目
+      #+begin_src xml
+      <!-- pom.xml -->
+      <parent>
+        <groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-parent</artifacId>
+	<version>2.3.1.RELEASE</version>
+	<relativePath/>
+      </parent>
+
+      <dependencies>
+        <dependency>
+	  <groupId>org.springframework.boot</groupId>
+	  <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- 下面为自定义Starter的依赖项 -->
+      </dependencies>
+      #+end_src
+   2. 如何编写自动配置
+      #+begin_src
+      @Configuration
+      @ConditionOnWebApplication
+      @AutoConfigureOrder(Ordered.HIGHEST_PRECEDENCE + 10) // 设置自动配置类的执行顺序
+      @AutoConfigureAfter({}) // 设置在哪些配置生效后执行
+      @EnableConfiguationProperties({}) // 启用ConfigurationProperties引入外部配置
+      public class MyConfig {
+        // @Bean
+      }
+
+      @ConfigurationProperties(prefix="my.properties")
+      public class MyProperties {
+      }
+      #+end_src
+   3. 启动时加载自动配置类
+      将标记@Configuration的自动配置类的全限定类名，放在classpath的META-INF/spring.factories文件中的 ~org.springframework.boot.autoconfigure.EnableAutoConfiguration~ 中。
+   4. Starter开发模式
+      1. xxx-starter项目为一个空JAR文件，仅提供辅助性依赖管理，这些依赖可能用于自动装配或者其他类库，并引用xxx-starter-autoconfigurer项目。
+      2. xxx-starter-autoconfigurer项目内包含自动配置的内容
+	 - pom.xml
+	   #+begin_src
+	   <groupId>org.springframework.boot</groupId>
+	   <artifactId>spring-boot-starter</artifactId>
+	   #+end_src
+	 - resources/META-INF/spring.factories(利用SPI机制，完成组件的自动装配功能)
+	   #+begin_src
+	   org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+	   com.my.starter.MyAutoConfiguration
+	   #+end_src
+   5. 命名规约
+      - 官方命名空间
+	- 前缀 ~spring-boot-starter~
+	- 模式 spring-boot-starter-模块名
+	- 举例 spring-boot-starter-web, spring-boot-starter-actuator
+      - 自定义命名空间：
+	- 后缀 ~-spring-boot-starter~
+	- 模式 模块名-spring-boot-starter
+	- 举例 mybatis-spring-boot-starter
+
+** 参数配置
+
+*** 默认的参数配置优先级（从高到低排列）
+    1. 命令行参数
+    2. 来自 ~java:comp/env~ 的JNDI属性
+    3. Java系统属性(~System.getProperties()~)
+    4. 操作系统环境变量
+    5. ~RandomValuePropertySource~ 配置的 ~random.*~ 属性值
+    6. jar包外部的 ~application-{profile}.properties/yml~ 或 带 ~spring.profile~ 的 ~application.yml~ 配置文件
+    7. jar包内部的 ~application-{profile}.properties/yml~ 或 带 ~spring.profile~ 的 ~application.yml~ 配置文件
+    8. jar包外部的 ~application.properties~ 或 不带 ~spring.profile~ 的 ~application.yml~ 配置文件
+    9. jar包内部的 ~application.properties~ 或 不带 ~spring.profile~ 的 ~application.yml~ 配置文件
+    10. ~@Configuration~ 注解类上的 ~@PropertySource~
+    11. 通过 ~SpringApplication.setDefaultProperties~ 指定的默认属性
 
 * TODO QA
   

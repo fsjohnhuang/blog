@@ -3,7 +3,40 @@ WAR，用于网站发布的包
 [[http://maven.apache.org/][官网]]
 
 * 仓库资源
-  https://maven.aliyun.com/mvn/view
+  #+begin_src xml
+  	<repositories>
+		<repository>
+			<id>aliyun-central</id>
+			<name>aliyun-central</name>
+			<url>https://maven.aliyun.com/repository/central</url>
+		</repository>
+		<repository>
+			<id>aliyun-jcenter</id>
+			<name>aliyun-jcenter</name>
+			<url>https://maven.aliyun.com/repository/public</url>
+		</repository>
+		<repository>
+			<id>aliyun-public</id>
+			<name>aliyun-public</name>
+			<url>https://maven.aliyun.com/repository/public</url>
+		</repository>
+		<repository>
+			<id>aliyun-spring</id>
+			<name>aliyun-spring</name>
+			<url>https://maven.aliyun.com/repository/spring</url>
+		</repository>
+		<repository>
+			<id>aliyun-spring-plugin</id>
+			<name>aliyun-spring-plugin</name>
+			<url>https://maven.aliyun.com/repository/spring-plugin</url>
+		</repository>
+		<repository>
+			<id>163</id>
+			<name>163</name>
+			<url>http://mirrors.163.com/maven/repository/maven-public</url>
+		</repository>
+	</repositories>
+  #+end_src
 
 * TODO Ant,Maven和Gradle对比
   
@@ -107,6 +140,36 @@ WAR，用于网站发布的包
       <activeProfile>downloadSources</activeProfile>
     </activeProfiles>
     #+END_EXAMPLE
+  - 配置本地仓库地址
+    #+begin_src xml
+    <localRepository>/path/to/local/repo</localRepository>
+    #+end_src
+
+* Eclipse中使用Maven
+  Eclipse的默认Maven不支持修改Maven本地仓库路径，因此一般都使用Eclipse自带的默认Maven。
+  配置独立安装的Maven： 
+  1. 在Window/Preference/Maven/Installations下添加Maven Home目录；
+  2. 在Window/Preference/Maven/User Settings下将Global Settings设置为conf/settings.xml。那么其它项目将会自动根据全局配置的内容设置。
+
+* Idea中使用Maven
+
+** 配置
+   由于Idea自带的Maven不禁止我们自定义本地仓库(配置文件在Idea安装路径/plugins/maven/lib/maven3/conf/settings.xml)，所以可以直接使用。若要配置独立的Maven，可按如下步骤：
+   1. File/Settings/Build, Execution, Deployment/Build Tools/Maven中配置Maven Home目录
+   2. File/Settings/Build, Execution, Deployment/Build Tools/Maven中配置User settings file并勾选Override
+   3. File/Settings/Build, Execution, Deployment/Build Tools/Maven中配置Local repository并勾选Override
+   4. File/Settings/Build, Execution, Deployment/Build Tools/Maven/Importing中勾选Import Maven projects automatically，那么会自动引入Maven依赖的JAR包。
+
+** 配置Tomcat
+   1. 在Run/Edit Configuration中，添加Tomcat Server Local；
+   2. 在Application server中选中Tomcat安装的目录
+   3. 选择Deployment页签，并添加Artifact
+   4. 将Application Context修改为自定义字符串，那么在浏览器上输入 ~localhost:8080/{Application Context}/~ 就可以访问站点
+
+** 导入Maven工程
+   1. 在Project Structure/Modules，点击Import Module
+   2. 选择Maven工程所在的目录
+   3. 在Import module from external model中选择Maven
 
 * 项目结构
   #+BEGIN_EXAMPLE yml
@@ -313,9 +376,9 @@ pom.xml中包含如下信息
 https://search.maven.org/
 
 *** 远程仓库
-    1) 在 ~$MAVEN_HOME/conf/setting.xml~ 或 ~$LOCAL_REPOSITORY/setting.xml~ 中设置
+    1) 在 ~$MAVEN_HOME/conf/setting.xml~ 或 ~$LOCAL_REPOSITORY/setting.xml~ 中配置远程仓库镜像。
        - 规则
-         1) 一个respository最多配置一个mirror
+         1) 一个respository最少配置一个mirror
        - 示例
        #+BEGIN_EXAMPLE xml
        <!-- 设置远程仓库的镜像信息 -->
@@ -328,6 +391,8 @@ https://search.maven.org/
            <!-- 镜像地址 -->
            <url>https://maven.aliyun.com/repository</url>
            <!-- 仓库镜像中包含多个仓库(如central,google,jcenter等)，通过mirrorOf设置使用该镜像下哪个仓库。
+	    并且可以通过mirrorOf的值实现继承或直接查找的单个或多个仓库的目的。
+
                 * 匹配所有仓库请求，当搭建私有仓库时通常使用*匹配所有仓库请求
                 repo1,repo2 配置repo1或repo2仓库
                 *, !repo1 配置除repo1外的其它所有仓库
@@ -915,7 +980,7 @@ Goal作为Maven中任务的最小单位。
    - 前提：项目已经执行到某个Phase，才能执行非绑定Goal。
 
 ** Plugin
-插件提供一组Goal，这组Goal可包含Phase绑定和不绑定的，我们也可以重新绑定。
+插件包含一组Goal，这组Goal可包含Phase绑定和不绑定的，我们也可以重新绑定。
 Plugin的命名规则: ~plugin-artifactId:plugin-version:plugin-goal(goal-execution-id)~
 
 直接调用Plugin的Goal，跳过所有Phase
@@ -952,6 +1017,82 @@ mvn jar:jar
 mvn help:describe -Dplugin=org.apache.maven.plugins:maven-eclipse-plugin:2.10
 #+end_example
 
+* 从非Maven Central Respository下载安装依赖
+** 在本地编译打包并安装到Maven Local Repository
+   1. 下载依赖项目源码并编译为JAR包
+   2. 利用maven-install-plugin插件的install-file目标安装到Maven Local Repository
+      #+begin_src bash
+      # -Dfile: 包的本机绝对路径
+      # -Dpackaging: jar或war，生成包的后续
+      # -Dclassifier: 兄弟包的别名，也就是-Dversion值后面的字符，如common-auth-0.0.1-SNAPSHOT-core.jar中的core
+      mvn install:install-file -Dfile=<path-to-file> -DgroupId=<group-id> -DartifactId=<artifact-id> -Dversion=<version> -Dpackaging=<packaging>
+
+      # 通过pom.xml读取groupId等信息
+      mvn install:install-file -Dfile=<path-to-file> -DpomFile=<path-to-pomfile>
+
+      # Maven 2.5+已简化为如下命令
+      mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=<path-to-file>
+      #+end_src
+
+** 从GitHub/git/svn安装
+   1. 编译发布到本地某目录下
+      #+begin_src xml
+      <!-- pom.xml -->
+      <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <source>1.8</source>
+                        <target>1.8</target>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+      </build>
+      <distributionManagement>
+        <repository>
+            <id>internal</id>
+            <url>file://${project.build.directory}/mvn-repo</url>
+        </repository>
+      </distributionManagement>
+      #+end_src
+      执行 ~mvn deploy~
+   2. 将mvn-repo下的内容上传到GitHub
+   3. 从GitHub下载
+      #+begin_src xml      
+      <!-- pom.xml -->
+      <repositories>
+        <repository>
+	  <id>mvn-repo</id>
+	  <url>url-to-github-branch</url>
+	  <releases><enable>true</enable></releases>
+	  <snapshots><enable>true</enable></snapshots>
+        </repository>
+      </repositories>
+      #+end_src
+      执行 ~mvn compile~
+
+** 利用JitPack从GitHub下载
+   JitPack builds GitHub projects on demand and provides ready-to-user packages.
+   pom.xml配置
+   #+begin_src xml
+   <!-- 引入GitHub的项目 -->
+   <dependency>
+    <groupId>com.github.User</groupId>
+    <artifactId>Repo name</artifactId>
+    <version>Release tag</version>
+   </dependency>
+
+   <!-- 添加JitPack作为远程库 -->
+   <repository>
+    <id>jitpack.io</id>
+    <url>https://jitpack.io</url>
+   </repository>
+   #+end_src
+   
 * 通过Jetty运行Web项目
   Jetty相当与IIS Express
   #+BEGIN_EXAMPLE xml

@@ -1,0 +1,47 @@
+主要提供 $函数的异步版本Q.$Async 和 消息总线 两个工具。(转载自智安大神)
+这两个工具是兼容Chrome6x,7x和8x版本的。
+
+1. Q.$Async使用说明
+问题点： Chrome80下界面组件的只读状态、默认值等失效
+检查点： 是否在页面加载时通过JavaScript马上获取元素配置，或通过formhelper的加载事件来配置只读状态、默认值等
+解决办法：
+示例1：
+// 原来的代码
+jq(this).find("m-textbox[name='abc']")[0].disabled = true;
+
+// 修改为
+Q.$Async("m-textbox[name='abc']", jq(this))
+.thenMap(function($el){
+$el[0].disabled = true
+})
+
+示例2：
+// 原来的代码
+$("m-textbox[name='abc']")[0].disabled = true;
+
+// 修改为
+Q.$Async("m-textbox[name='abc']")
+.thenMap(function($el){
+$el[0].disabled = true
+})
+
+注意：Q.$Async返回的Promise实例，提供then和thenMap两个方法。
+then(func)是提取Promise实例中的值a作为入参调用方法func；
+thenMap(func)是提取Promise实例中的值a，若值a为null或undefined则不执行func。
+** 请大家一定要使用thenMap **
+
+2. 消息总线
+这个主要用于解决多页面间的组件依赖，遇到问题再联系我吧。
+
+-----------------------------------------------------------------------------华丽的分割线-------------------------------------------------------------------------------------------------------------
+
+对于需要调用formParams和getparams获取表单信息代码，需要进行如下调整
+示例1：
+修改前
+var params = $btnForm[0].formParams(true, true)
+
+修改后
+var paramsPromise = Promise.resolve($btnForm[0].formParams(true, true))
+paramsPromise.then(function(params){
+// 如常使用params值
+})

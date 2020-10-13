@@ -1066,7 +1066,6 @@ select event, total_waits from v$system_event;
      alter session set cursor_sharing=exact
      #+end_example
 
-
 ** 导致性能问题的可能原因
 1) 表没有正确建立索引——导致错误的执行计划
 2) 表没有及时的分析——因表提供的信息量不足，导致错误的执行计划

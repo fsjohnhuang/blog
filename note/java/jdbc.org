@@ -471,8 +471,8 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
 ** 事务隔离级别
    | 隔离级别        | 描述                                                                                                                |
    |-----------------+---------------------------------------------------------------------------------------------------------------------|
-   | READ UNCOMMITED | 允许事务读取其它事务未提交的变更。存在脏读、不可重复读和幻读的问题                                                  |
-   | READ COMMITED   | 只允许事务读取其它事务已经提交的变更。存在不可重复读和幻读的问题                                                    |
+   | READ UNCOMMITTED | 允许事务读取其它事务未提交的变更。存在脏读、不可重复读和幻读的问题                                                  |
+   | READ COMMITTED  | 只允许事务读取其它事务已经提交的变更。存在不可重复读和幻读的问题                                                    |
    | REPEATABLE READ | 在事务持续期间，通过禁止其它事务对指定字段提交变更(CUD)，从而确保该事务可以从该字段重复读取相同的值。存在幻读的问题 |
    | SERIALIZABLE    | 在事务持续期间，通过禁止其它事务对指定表提交变更(CUD)，从而确保该事务可以从该表重复读取相同的行数。                 |
 
@@ -483,8 +483,8 @@ JDBC(Java Database Connectivity)，是一个独立于特定数据库管理系统
    Connection conn = getConnection();
    /*
    * Connection.TRANSACTION_NONE
-   * Connection.TRANSACTION_READ_UNCOMMITED
-   * Connection.TRANSACTION_READ_COMMITED
+   * Connection.TRANSACTION_READ_UNCOMMITTED
+   * Connection.TRANSACTION_READ_COMMITTED
    * Connection.TRANSACTION_REPEATABLE_READ
    * Connection.TRANSACTION_SERIALIZABLE
    */
@@ -658,7 +658,7 @@ API:
     // 第一个参数为返回值
     // 第二个参数为IN类型的参数
     // 第三个参数为OUT类型或IN OUT类型的参数
-    String sql = "{?= call function_name[(?, ?)]}";
+    String sql = "{? = call function_name(?, ?)}";
     Connection conn = null;
     CallableStatement stat = null;
 
@@ -666,7 +666,7 @@ API:
       conn = getConnection();
       stat = conn.preparedCall(sql);
       // 通过registerOutParameter方法注册 返回值、OUT参数或IN OUT参数
-      stat.registerOutParameter(1, java.sql.Types.NUMERIC);
+      stat.registerOutParameter(1, java.sql.Types.NUMERIC); // 返回值
       stat.registerOutParameter(3, java.sql.Types.NUMERIC);
       // 通过setXxx方法注册 IN参数
       // 通过setNull方法注册null值作为参数值
@@ -696,11 +696,11 @@ API:
     }
   }
   public void callProcedure(){
-    String sql = "{call procedure_name[(?, ?)]}";
+    String sql = "{call procedure_name(?, ?)}";
 
     // 第一个参数为IN类型的参数
     // 第二个参数为OUT类型或IN OUT类型的参数
-    String sql = "{call procedure_name[(?, ?)]}";
+    String sql = "{call procedure_name(?, ?)}";
     Connection conn = null;
     CallableStatement stat = null;
 

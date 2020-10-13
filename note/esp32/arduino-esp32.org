@@ -1,0 +1,146 @@
+* 教程和示例
+  https://randomnerdtutorials.com/installing-the-esp32-board-in-arduino-ide-windows-instructions/
+
+* USB to UART Bridge VCP
+  若在Arduino IDE的tools菜单下的port项目无效，则需要安装以下驱动。
+  驱动安装地址：https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers
+  
+  ESP32的USB芯片采用的是CP21012芯片，因此需要安装驱动。
+
+* Arduino-ESP32开发环境安装
+  1. 下载Arduino IDE1.8.10+
+  2. 打开Arduino IDE，附加开发板管理器网址
+     在菜单栏 *文件* / *首选项* / *附加开发板管理器网址* 中填入 "https://dl.espressif.com/dl/package_esp32_index.json" 。 若要填写多个，则网址之间用逗号分隔即可。
+  3. 安装Arduino-ESP32
+     - 方式1，通过Arduino的开发板管理器安装。(由于墙的关系，安装特别慢)
+       在 菜单栏 *工具* / *开发板* / *开发板管理器* 中搜索 ESP32，然后安装。
+     - 方式2，手动下载并配置
+       1. https://github.com/espressif/arduino-esp32/ 将整个仓库下载
+       2. 然后在Arduino的安装目录下的hardware目录下创建espressif/esp32目录
+       3. 将从 https://github.com/espressif/arduino-esp32/ 下载的仓库内容解压到hardware/espressif/esp32目录下
+       4. 将以下3个文件复制到hardware/espressif/esp32/tools/dist目录下（文件链接: https://pan.baidu.com/s/1sYJqFrNYm3U5BEqitQCXQQ 提取码: s4fe）
+	  - esptool-2.6.1-windows.zip
+	  - mkspiffs-0.2.3-arduino-esp32-win32.zip
+	  - xtensa-esp32-elf-win32-1.22.0-80-g6c4433a-5.2.0.zip
+       5. 运行hardware/espressif/esp32/tools/get.exe
+  4. 安装CP21012 USB to UART Bridge VCP Driver
+  5. 重启Arduino IDE，选择开发板型号
+     在菜单栏 *工具* / *开发板* / *ESP32 Arduino* 中随便选一个即可。
+  6. 设置Upload Speed为115200波特率
+  7. 设置端口
+  8. 编译上传程序到板上
+     1. 按着板的BOOT/FLASH按钮，让ESP32处于flashing/uploading mode。
+	若不想按着BOOT/FLASH按钮，则参考https://randomnerdtutorials.com/solved-failed-to-connect-to-esp32-timed-out-waiting-for-packet-header/
+     2. 点击菜单栏的 *项目* / *上传*
+     3. 当输出框显示 "Writing at 0x00001000 … (100%)" 时就可以松开BOOT/FLASH按钮
+     4. 当输出框显示 "Hard resetting via RTS pin"，那么就可以按一下板的REST/EN/ENABLE按钮，那么通过菜单栏 *工具* / *串口监视器* 就能看到板启动并执行程序的结果。
+
+** QA
+   1. 菜单栏的工具/端口不可用
+      - 前提：已经安装USB to UART Bridge VCP Driver
+      - 解决方法：USB电缆线分为充电专用和充电+数据传输两种，有可能是因为用了充电专用的USB电缆线。
+   2. 若上传程序时报串口连接不上
+      - 报如下异常
+	#+begin_quote
+	Serial port COM
+	Connecting=......
+
+	A fatal error occurred: Failed to connect to ESP32: Time out waiting for packet header.
+	#+end_quote
+      - 解决方法：Upload Speed设置为115200波特率
+   3. 烧录引导程序出错
+      - 报如下异常
+	#+begin_quote
+	java.lang.NullPointerException
+	  at cc.arduino.packages.uploaders.SerialUploader.burnBootloader(SerialUploader.java:329)
+  	  at processing.app.Editor.lambda$handleBurnBootloader$61(Editor.java:2379)
+	  at java.lang.Thread.run(Thread.java:748)
+	烧录引导程序出错。
+	#+end_quote
+      - 解决方法？
+
+* Digital Input and Output
+
+** Digital Output
+   ~pinMode(GPIO, OUTPUT)~ 用于设置指定的GPIO(int值)为输出。ESP32中除GPIO6~11,34~36,39外都可以设置为OUTPUT。
+   ~digitalWrite(GPIO, STATE)~ 向指定的GPIO写电平，HIGH或LOW。
+
+** Digital Input
+   ~pinMode(GPIO, INPUT)~ 用于设置指定的GPIO(int值)为输入。ESP32中除GPIO6~11外都可以设置为INPUT。   
+   ~int state = digitalRead(GPIO)~ 向指定的GPIO读电平
+
+** Sample
+   #+begin_src c++
+   void setup() {}
+   void loop() {}
+   #+end_src
+
+* 面包板(Breadboard)
+* 万用表(Multimeter)
+* 电解电容器(Electrolytic Capacitor)
+  电解电容器存在正负极(Polarity), 负极(Negative Lead)上有白/灰条纹(Stripe)标识。
+
+** 容量单位
+uF
+   
+* 电阻器(Resistor)
+* 杜邦线(Jumper Wire)
+* GPIO(Generic Purpose Input Output)
+  通用输入输出，可通过编程的方式修改具体用途。
+
+** ESP32 共有39个 GPIO
+
+*** GPI(GPIO34~39)
+    GPIO 34到39由于没有 pull-up 或 pull-down 电阻，因此只能作为GPI(通用输入)。
+    pull-up(上拉)和pull-down(下拉)电阻合称拉电阻，用于防止信号线处于悬空状态（circuit float），在上电或在运行中收到其它噪声干扰触发不期望的电平变化。
+    - 上拉电阻，可稳定在高电平
+    - 下拉电阻，可稳定在低电平
+    根据电压、电阻和电流关系公式： ~VCC/R=A~ ，电阻越小拉电阻越强，那么外部信号需要修改电平时则需要提供更高的功率。
+    一般都采用弱拉，即采用大概10K左右的拉电阻。
+    https://blog.csdn.net/ffdia/article/details/85678244
+
+
+ VCC供电电压，VCC/R=A    
+ EN为高位有效使能控制信号
+ RST#/BOOT为低位有效复位控制信号
+
+*** SPI Flash(GPIO6~11)——一般不使用
+    SPI(Serial Peripheral Interface) 串行接口设备
+    SPI Flash 就是通过串行接口操作的nor Flash存储设备。(Flash存储设备分为nor flash和nand flash两种)
+    SPI Flash的特点：读写较慢，次数有限制，一般用于不经常更改的存储。
+
+    建议项目中不要使用这些信号线。
+
+*** Capacitive touch(GPIO 4, 0, 2, 15, 13, 12, 14, 27, 33, 32)
+    电容触摸传感器
+
+*** RTC(Real Time Clock)
+
+*** PWM(脉冲宽度调制)
+
+* 数字信号读写
+  #+begin_src c
+  // 设置GPIO引脚的工作模式
+  // 所有GPIO引脚均可以作为输入引脚，而除34~39外均也可作为输出引脚。
+  // 34~39作为输入引脚时，不能设置为上拉或下拉模式
+  // mode取值有INPUT, OUTPUT, INPUT_PULLUP, INPUT_PULLDOWN
+  pinMode(pin, mode);
+
+  // 从指定引脚读取外部输入的数字信号
+  // 高电平为1，低电平为0
+  // 若34~39引脚设置为上拉或下拉输入，则无返回值。即无法接收外部输入。
+  unsigned int =  digitalRead(pin);
+
+  // 从指定引脚输出数字信号
+  // value取值有HIGH,LOW
+  digitalWrite(pin, value);
+  #+end_src
+* 模拟信号读写
+  输入： ~analogRead()~
+  输出
+  1. LECD：基于PWM调制的16通道模拟输出；
+  2. SigmaDelta：基于SigmaDelta调制的8通道模式输出；
+  3. DAC：硬件(DAC)实现的2个通道的模式输出。
+
+* 英语 
+  relay 中继设备

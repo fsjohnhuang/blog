@@ -16,7 +16,6 @@
   # 检查安装是否成功
   ./node_modules/.bin/webpack -v
   # 或 npx webpack -v，npx会自动搜索并执行node_modules/.bin/webpack
-
   #+end_example
 
 * 配置

@@ -1,0 +1,725 @@
+* 单例模式
+  注意：两种方式都必须在 ~app.on('ready', createWindow)~ 之前执行。
+
+** Electron 2.x 的方法
+   #+begin_src javascript
+   import {app, BrowserWindow} from 'electron'
+   let mainWindow = null
+
+   function doMakeSingleInstance(commandLine, workingDirectory) {
+     if (mainWindow !== null) {
+       if (mainWindow.isMinimized()) {
+         mainWindow.restore()
+       }
+       mainWindow.focus()
+     }
+   }
+   if (app.makeSingleInstance(doMakeSingleInstance)) {
+     app.quit()
+   }
+
+   function createWindow() {
+     //......
+   }
+
+   app.on('ready', createWindow)
+   #+end_src
+
+** Electron 3.x+ 的方法
+   Electron 3.x以后新增如下方式，但Electron 2.x的方法依然可用。
+   #+begin_src javascript
+   import {app, BrowserWindow} from 'electron'
+   let mainWindow = null
+
+   function handleSecondInstance(event, commandLine, workingDirectory) {
+     if (mainWindow !== null) {
+       if (mainWindow.isMinimized()) {
+         mainWindow.restore()
+       }
+       mainWindow.focus()
+   }
+
+   function createWindow() {
+     //......
+   }
+
+   if (app.requestSingleInstanceLock()) {
+     app.on('second-instance', handleSecondInstance)
+     app.on('ready', createWindow)
+   }
+   else {
+     app.quit()
+   }
+   #+end_src
+   
+   另外相关的新增API还有：
+   1. ~app.hasSingleInstanceLock()~ 检查单实例锁状态
+   2. ~app.releaseSingleInstanceLock()~ 释放单实例锁
+
+* 使用ffi-napi调用c/c++的动态链接库(dll)
+  限制：
+  1. 只能调用动态链接库中按照C标准编译的函数；
+  2. 不能用于多线程的环境；
+  3. dll与调用函数共用同一个线程，因此dll报错会导致整个线程退出。
+
+** 历史版本——node-ffi 和 ref
+   限制：仅支持Nodejs8，但Nodejs8已经处于废弃的状态。
+   node-ffi让开发者可以仅使用JavaScript来加载和调用c/c++动态链接库的Node.js插件。
+   1. 通过内存共享实现C函数和JavaScript代码间的调用；
+   2. 数据类型转换则通过 ~ref~, ~ref-array~ 和 ~ref-struct~.
+
+** ffi-napi(https://github.com/node-ffi-napi/node-ffi-napi) 和 ref-napi(https://github.com/node-ffi-napi/ref-napi)
+   ffi-napi则是基于node-ffi修改为兼容Nodejs12。
+   ref-napi则是基于ref修改为兼容Nodejs12。
+
+*** 安装
+    注意：使用npm安装不要使用cnpm。
+
+    1. 为node-gyp安装python2.7和VC++ build tools，以管理员身份运行
+       #+begin_src bash
+       npm i -g --production windows-build-tools
+       #+end_src
+    2. 配置python2.7和VC++ build tools
+       #+begin_src bash
+       npm config set python python2.7
+       npm config set msvs_version 2015
+       # 将python家目录添加到系统环境变量PATH中
+       #+end_src
+    3. 安装node-gyp
+       #+begin_src bash
+       npm i -g node-gyp
+       node-gyp list # 查看是否缺少node.lib库，并按提示安装 node-gyp install
+       #+end_src
+    4. 安装ffi-napi ~npm i ffi-napi --save~
+    5. 安装ref-napi ~npm i ref-napi --save~
+
+*** 使用
+    注意：
+    1. 64位的Nodejs只能调用64位的DLL，32位的Nodejs只能调用32位的DLL。
+    2. Library方法的第一个实参不用带文件扩展名，Nodejs会根据操作系统自动补充。
+
+    官方使用示例：https://github.com/node-ffi/node-ffi/wiki/Node-FFI-Tutorial
+    #+begin_src javascript
+    const ffi = require('ffi-napi')
+
+    // JavaScript字符串转换为为C/C++的wchar_t*类型(a 32-bit pointer to a constant string of 16-biy Unicode Character)
+    function convertString2LPCWSTR(str) {
+      return new Buffer(str, 'ucs2').toString('binary')
+    }
+
+    // 通过ffi加载user32.dll
+    const user32_dll = new ffi.Library('user32', {
+      'MessageBox': // 声明dll中的按照C标准编译的某个函数
+      ['int32', ['int32', 'string', 'string', 'int32']] // 声明函数的返回值，参数列表
+    })
+
+    let resultCode = user32_dll.MessageBox(0, convertString2LPCWSTR('标题'), convertString2LPCWSTR('内容'), 1)
+
+    const my_dll = new ffi.Libary('../myAdd', {
+      'funAdd':
+      ['int32', ['int32', 'int32']]
+    })
+
+    let sum = my_dll.funAdd(1, 2) // 同步调用
+    my_dll.funAdd.async(1, 2, (error, res) => {
+       // ......
+    }) // 异步调用
+    #+end_src
+
+*** QA
+    1. 报 ~LINK 126~
+       1. 函数以C++方式编译，因此ffi无法从ddl找到该函数。
+       2. ~ffi.Library~ 的第一个参数若为名称，那么该dll必须已注册，否则需要指定dll的具体路径。
+       3. dll依赖其他dll，但ffi无法加载这些dll。
+    2. 报 ~LINK 127~
+       - 找到dll但无法找到声明的函数，可能是返回值类型、参数个数或参数类型不一致导致。
+    3. 32位的操作系统无法调用64位的dll。
+    
+** Electron + ffi-napi
+     安装自动编译原生node模块
+       #+begin_src bash
+       npm i electron-rebuild -D
+       npx electron-rebuild # 运行自动编译
+       #+end_src
+       - 手动编译 进入node_module/ffi-napi文件夹执行node-gyp rebuild --target='当前electron的版本' --arch=x64 --dist-url=https://atom.io/download/atom-shell编译node原生模块
+	 1. arch ： 计算机的架构（x64或者ia32），如果node环境是32位，那么这里就是ia32，如果是node环境是64位，那么这里就是x64。
+	 2. 如果路径错误，换成国内镜像路径 --dist-url=https://npm.taobao.org/mirrors/atom-shell
+
+* 打包
+** electron-builder
+*** 配置
+    1. 安装 ~cnpm i electron-builder -D~
+    2. 配置(package.json)
+       #+begin_src javascript
+       {
+         "scripts": {
+           "package": "electron-builder --dir",
+           "dist": "electron-builder"
+         },
+         "build": {
+           "appId": "com.example.app", // 应用程序id 
+           "productName": "测试", // 应用名称 
+          // 设置为 true 可以把自己的代码合并并加密
+         "asar": true,
+         "directories": {
+            "buildResources": "build", // 构建资源路径默认为build
+            "output": "dist" // 输出目录 默认为dist
+          },
+          "mac": {
+            "category": "public.app-category.developer-tools", // 应用程序类别
+            "target": ["dmg", "zip"],  // 目标包类型 
+            "icon": "build/icon.icns" // 图标的路径
+          },
+          "dmg": {
+            "background": "build/background.tiff or build/background.png", // 背景图像的路径
+            "title": "标题",
+            "icon": "build/icon.icns" // 图标路径
+           },
+           "win": {
+             // 打包成一个独立的 exe 安装程序
+             // 'target': 'nsis',
+             // 这个意思是打出来32 bit + 64 bit的包，但是要注意：这样打包出来的安装包体积比较大，所以建议直接打32的安装包。
+             // 'arch': [
+             //   'x64',
+             //   'ia32'
+             // ]
+              "target": ["nsis","zip"] // 目标包类型 
+             },
+       "nsis": {
+          // 是否一键安装，建议为 false，可以让用户点击下一步、下一步、下一步的形式安装程序，如果为true，当用户双击构建好的程序，自动安装程序并打开，即：一键安装（one-click installer）
+          "oneClick": false,
+          // 允许请求提升。 如果为false，则用户必须使用提升的权限重新启动安装程序。
+          "allowElevation": true,
+          // 允许修改安装目录，建议为 true，是否允许用户改变安装目录，默认是不允许
+          "allowToChangeInstallationDirectory": true,
+          // 安装图标
+          "installerIcon": "build/installerIcon_120.ico",
+          // 卸载图标
+          "uninstallerIcon": "build/uninstallerIcon_120.ico",
+          // 安装时头部图标
+          "installerHeaderIcon": "build/installerHeaderIcon_120.ico",
+          // 创建桌面图标
+          "createDesktopShortcut": true,
+          // 创建开始菜单图标
+          "createStartMenuShortcut": true,
+          // electron中LICENSE.txt所需要的格式，并非是GBK，或者UTF-8，LICENSE.txt写好之后，需要进行转化，转化为ANSI
+         "license": "LICENSE.txt"
+       }
+       #+end_src
+    3. 运行打包
+       #+begin_src bash
+       # 打包但不会生成安装程序或屏蔽源码
+       npm run package
+       # 打包出可发布包
+       npm run dist
+       #+end_src
+
+*** 打包时下载electron失败的解决方案
+    原因：
+    1. 由于electron-builder在打包时会检查npm的cache中是否包含electron包，若没有则从github上下载，而国内网络环境从github上拉取大部分情况下会失败。
+    2. 已从淘宝镜像安装electron，且在如下npm的cache路径下存在安装包
+       - Linux: ~$XDG_CACHE_HOME~ or ~~/.cache/electron/~
+       - MacOS: ~~/Library/Caches/electron/~
+       - Windows: ~%LOCALAPPDATA%/electron/Cache~ or ~~/AppData/Local/electron/Cache/~
+    解决方法：从淘宝的 ~~/AppData/Local/electron/Cache/httpscdn.npm.taobao.orgdistelectronv9.2.1electron-v9.2.1-win32-x64.zip~ 目录复制其中的 ~electron-v9.2.1-win32-x64.zip~ 到 ~~/AppData/Local/electron/Cache/~ 即可。
+
+*** 打包时包 ~react-script/node_modules/.......~ 无法解析的解决方案
+    - 原因：
+      若通过npm安装依赖，那么各模块的依赖的模块会在node_modules下不断嵌套，导致模块的文件路径非常长。而Windows下很多程序无法处理长度超过260个字符的文件路径长度，因此会报路径无法解析的异常。
+    - 解决方法：
+      1. 删除项目的node_modules目录
+      2. 使用yarn重新安装所有依赖， ~yarn~
+
+*** QA
+    1. Application entry file "build\electron.js" in the "E:\repos\l1k\l1k-client-fed\dist\win-unpacked\resources\app.asar" does not exist.
+       A: 将Electron的主进程文件main.js，复制到build目录下，并且重命名为electron.js.
+    2. 通过 ~electron-builder --dir~ 打包后在main.js获取的__dirname为 E:\repos\l1k\l1k-client-fed\dist\win-unpacked\resources\app.asar\build
+    3.  Package "electron" is only allowed in "devDependencies". Please remove it from the "dependencies" section in your package.json.
+
+* misc
+** ~<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />~ 的作用？
+   用于防止XSS攻击，设置仅允许加载的脚本源。
+
+** ~window.open~ 使用native和chrome的区别？
+   window.open默认会创建一个BrowserWindow实例，那么就无法使用window.opener获取父窗口实例。
+   若设置 ~nativeWindowOpen: true~ 且 ~nodeIntegration: false~ 那么就会使用chrome内置的window.open。
+
+** electron-rebuild的作用？
+   若electron内置的node版本和本机的版本不一致，则在使用node原生模块时可能会报错 ~Error: The module 'path/to/native/module.node'~ .
+   因此需要借助electron-rebuild自动编译node原生模块。
+* 调试模式
+** 主进程调试
+   Electron主进程是一个Nodejs进程，而Nodejs8+引入 ~--inspect~ 参数用于调试，默认监听 ~9229~ 端口。然后通过Chrome浏览器访问 ~chrome://inspect~ 即可看到对应的调试会话，点击会话即可打开DevTools进行调试。
+   1. 调试模式启动electron
+      #+begin_src bash
+      # 指定监听端口为1234
+      ./node_modules/.bin/electron . --inspect=1234
+
+      # 在JavaScript脚本的第一行暂停运行
+      ./node_modules/.bin/electron . --inspect-brk=[port]
+      #+end_src
+   2. 打开Chrome浏览器，访问 ~chrome://inspect~
+      1. 等待几秒钟后，在Remote Target下会出现可附加的Nodejs进程
+      2. 点击inspect即会打开DevTools工具
+
+** 渲染进程调试
+   1. 启动Electron时自动打开调试渲染进程的DevTools工具
+      #+begin_src javascript
+      const mainWindow = new BrowserWindow()
+      mainWindow.loadURL('file://path/to/index.html')
+      mainWindow.webContents.openDevTools()
+      #+end_src
+   2. 启动Electron后手工打开调试渲染进程的DevTools工具
+
+** 生产环境调试
+   Debugtron是一个调试生产环境的Electron应用的工具，无需再客户端继承任何代码，而其本身也是基于Electron构建，支持多平台。
+   下载地址：https://github.com/bytedance/debugtron/releases
+   1. 打开Debugtron应用
+   2. 自动检测并展示所有已安装的Electron应用
+   3. 点击主进程或渲染进程会话，即可进行调试
+
+** VSCode集成调试
+   1. 安装插件：Debugger for Chrome
+   2. 在项目根目录下添加配置文件 ~.vscode/launch.json~
+      #+begin_src javascript
+      {
+      "version": "0.2.0",
+      "configurations": [
+         {
+         "type": "node",
+         "request": "launch",
+         "name": "Main",
+         "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+         "runtimeArgs": ["--remote-debugging-port=9222", "."],
+         "windows": {
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
+           }
+        },
+        {
+         "name": "Renderer",
+         "type": "chrome",
+         "request": "attach",
+         "port": 9222,
+         "webRoot": "${workspaceFolder}" // HTML引用的静态资源位于根目录下
+         }
+      ],
+      "compounds": [ // 指定一个组合会话
+      {
+        "name": "All",
+        "configurations": ["Main", "Renderer"] // 分别对应主进程和渲染进程
+      }
+     ]
+     }
+      #+end_src
+   3. 在VSCode左侧选择debug面板，启动 ~All~ 项目开始调试。此时即可在主进程和渲染进程对应的文件中添加断点。
+* 开发环境hot reload
+** Electron Connect方案
+   通过electron-connect可实现代码文件发生修改后自动重启Electron主进程的功能。
+
+*** TODO 问题
+    1. 启动调试模式并通过Chrome://inspect启动DevTools附加到相应Node进程，重启主进程后该附加会失效，必须重新附加才能继续调试。
+
+* 主进程和渲染进程间通信
+  注意：
+  1. 主进程和渲染进程间的通信，均是由渲染进程发起。
+  2. 消息在传输前会被序列化，因此对象的原型链将被擦除，并且不能将Function,Promise,Symbol,WeakMap和WeakSet作为消息传递。
+
+** 异步通信
+   1. 普通方式
+      #+begin_src javascript
+      // renderer
+      const {ipcRenderer} = require('electron')
+      
+      ipcRenderer.send(channel: string, ...args: any)
+      ipcRenderer.on('asyncReply', (event, args)=>{
+        // listen to asyncReply from main process.
+      })
+      
+      // main
+      const {ipcMain} = require('electron')      
+      
+      ipcMain.on(channel, (event, args: any[])=>{
+        // do something
+        event.sender.send('asyncReply', 'hi') // 向渲染进程的main frame返回消息
+        // 或者用 event.reply('asyncReply', 'hi'), 向渲染进程的iframe中发送消息到主进程的frame返回消息
+      })
+      ipcMain.once(channel, (event, args: any[])=>{
+        // remove this listener after invoking automatically
+      })
+      #+end_src
+   2. Promise方式
+      #+begin_src javascript
+      // renderer      
+      const {ipcRenderer} = require('electron')
+
+      async function(){
+        const result = await ipcRenderer.invoke(channel, arg1, arg2)
+      }()
+
+      // main
+      const {ipcMain} = require('electron')      
+
+      ipcMain.handle(channel, async function(event, ...args){
+        const result = await somePromise(...args)
+        return result
+      })
+      ipcMain.handleOnce(channel, async function(event, ...args){
+        const result = await somePromise(...args)
+        return result
+      })
+      #+end_src
+
+** 同步通信
+    #+begin_src javascript
+    // renderer      
+    const {ipcRenderer} = require('electron')
+
+    let reply = ipcRenderer.sendSync(channel: string, args: any[])
+
+    // main
+    const {ipcMain} = require('electron')      
+
+    ipcMain.on(channel, (event, args: any[]) => {
+      event.returnValue = 'Return value synchronously.'
+    })
+    #+end_src
+
+* 计算密集型任务的解决方案
+  由于渲染进程在渲染界面时，会通过IPC与主进程进行同步通信，因此若主进程一直繁忙则会导致UI卡顿。
+  
+** 通过BrowserWindow创建预加载tray窗口的Web Worker执行计算密集型运算
+   注意：
+   1. Web Worker位于渲染进程中；
+   2. Web Worker中可使用Node模块；
+   3. 绝大部分Node模块为线程不安全，因此不能在多个线程中使用相同的Node模块。
+
+* 本地文件和目录选择
+  通过 ~dialog~ 模块使用本地对话框来实现消息提示、选择目录、打开文件和保存文件等操作。
+  注意：该模块必须在主进程中使用，因此渲染进程中需要通过IPC(Inter-Process Comminucation)或 ~remote~ 模块间接调用。
+
+** 选择本地文件
+   #+begin_src javascript
+   // in main process
+   const {dialog} = require('electron')
+
+   // 单选
+   // 同步方式
+   let filepath = dialog.showOpenDialog()
+   // 异步方式
+   dialog.showOpenDialog(filepath=>{
+     console.log(filepath)
+   })
+
+   // 多选
+   // 同步方式
+   let filepaths = dialog.showOpenDialog({properties:['multiSelections']})
+   // 异步方式
+   dialog.showOpenDialog({properties: ['multiSelections']}, filepath=>{
+     console.log(filepath)
+   })
+   #+end_src
+
+** 选择本地目录
+   #+begin_src javascript
+   // in main process
+   const {dialog} = require('electron')
+
+   // 单选
+   // 同步方式
+   let filepath = dialog.showOpenDialog({properties: ['openDirectory']})
+   // 异步方式
+   dialog.showOpenDialog({properties: ['openDirectory']}, filepath=>{
+     console.log(filepath)
+   })
+
+   // 多选
+   // 同步方式
+   let filepaths = dialog.showOpenDialog({properties:['openDirectory', 'multiSelections']})
+   // 异步方式
+   dialog.showOpenDialog({properties: ['openDirectory', 'multiSelections']}, filepath=>{
+     console.log(filepath)
+   })
+   #+end_src
+** ~dialog.showOpenDialog~ 详解
+   #+begin_src javascript
+   dialog.showOpenDialog([browserWindow: BrowserWindow][, options: object][, callback: Function]): string|string[]
+   #+end_src
+   1. browserWindow 可选入参，提供则作为对话框的父窗口，并以模态方式显示对话框
+      #+begin_src javascript
+      // 创建BrowserWindow
+      const win  = new BrowserWindow({width: 800, height: 800})
+      #+end_src
+   2. callback 可选入参，提供则为异步调用，否则为同步调用。回调函数的首个实参为选中的文件/目录的绝对路径。
+   3. options 可选入参，默认为选择单个文件
+      - ~title: string~ Title of the dialog box
+      - ~defaultPath: string~ Absolute path to use by default
+      - ~buttonLabel: string~ Custom label for the ~open~ button, meanwhile the label of ~cancel~ button can not be customized.
+      - ~filters: object[]~ Specifies an array of file types that can be displayed or selected when you want to limit the user to a specific type. For example:
+	#+begin_src javascript
+	[
+	  {name: 'Images', extensions: ['jpg', 'png']},
+	  {name: 'Movies', extensions: ['avi', 'mp4']},
+	  {name: 'All Files', extensions: ['*']}
+            ]
+	#+end_src
+      - ~properties: string[]~ features the dialog should use. The following values are supported
+	- openFile
+	- openDirectory
+	- multiSelections
+	- showHiddenFiles
+	- ~createDirectory~ Only available on macOS. Allow creating new directories from dialog.
+	- ~promptToCreate~ Only available on Windows. Prompt for creation if the file path entered in the dialog does not exist. This does not actually create the file at the path but allows non-existent paths to be returned that should be created by the application.
+	- ~noResolveAliases~ Only available on macOS. Disable the automatic alias(symlink) path resolution. Selected aliases will now return the aliase path instead of their target path.
+	- ~treatPackageAsDirectory~ Only available on macOS. Treat packages, such as .app folders, as a directory instead of a file.
+      - ~message: string~ Only available on macOS. Message to display above input boxes.
+      - ~securityScopedBookmarks~ Only available on macOS. Create security scoped bookmarks when packaged for the Mac App Store.
+
+** ~dialog.showSaveDialog~ 详解
+   用法和 ~dialog.showOpenDialog~ 一致，只是options入参中增加如下配置
+   - ~nameFieldLabel: string~ Only available on macOS. Custom label for the text displayed in front of the filename text field.
+   - ~showsTagField~ Only available on macOS. Show the tags input box.
+** ~dialog.showErrorBox(title: string, content: string)~ 详解
+   在主进程进入 ~ready~ 状态前都可以使用的方法，用于提示错误信息。
+
+** ~dialog.showMessageBox(title: string, content: string)~ 详解
+   和 ~dialog.showOpenDialog~ 用法一致，但回调函数包含两个实参，分别是
+   1. response, the index of the button that was clicked.
+   2. checkboxChecked, the checked state of the checkbox if ~checkboxLabel~ was set in ~options~ object.
+
+   options入参的属性
+   - ~buttons: string[]~ Array of texts for buttons i.e. ["Yes", "No"]
+   - ~message: string~ Content of the message box
+   - ~detail: string~ Extra infomation of the message
+   - ~defaultId: number~ Index of the button in the ~buttons~ array which will be selected by default when the message box opens.
+   - ~title: string~ Title of the message box
+   - ~type: string~ The type of the message box, can be ~none, info, error, question, warning~ to show respective icon.
+   - ~checkboxLabel: string~ if provided, the message box will include a checkbox with the given label. The checkbox state can be inspected only when using callback function.
+   - ~checkboxChecked: boolean~ Initial checked state of the checkbox. False by default.
+   - ~icon: string~ The image path to show custom icon on message box.
+   - ~cancelId: number~ The index of in the ~buttons~ array to be used cancel the dialog , via the Esc key. By default this is assigned to the first button.
+   - ~onLink: boolean~ Set it true if you don't want the dialog to appear in the style of modern Windows apps.
+   - ~normalizeAccessKeys: boolean~ Set it true to enable ~Alt~ key shortcuts for buttons.
+     #+begin_src javascript
+     normalizeAccessKeys: true,
+     buttons: ["&Yes", "&No"]
+     // 键盘按Alt-Y，会选中Yes按钮。
+     #+end_src
+
+* Node进程清理工作
+  #+begin_src javascript
+  function exitHandler(err) {
+     if(err) console.error(err)
+    // do something before exit
+    process.exit()
+  }
+
+  process.on('exit', exitHandler)  
+  process.on('SIGINT', exitHandler) // catches ctrl+c event
+  process.on('SIGUSR1', exitHandler) // catches kill pid
+  process.on('SIGUSR2', exitHandler) // catches kill pid
+  process.on('SIGTERM', exitHandler) // catches kill pid
+  process.on('uncaughtException', exitHandler) // catches uncaught exceptions
+  #+end_src
+* React组件内部引入Electron
+  1. 主进程创建渲染进程时需要让渲染进程可使用NodeAPI
+     #+begin_src javascript
+     const win = new BrowserWindow({
+       webPreferences: {
+         nodeIntegration: true
+       }
+     })
+     #+end_src
+  2. React代码运行在渲染进程上，通过 ~window.require~ 引入而不是 ~require~ 引入，避免与Browserify产生冲突。
+     #+begin_src javascript
+     import { React } from 'react'
+     const { ipcRenderer } = window.require('electron') // 必须放在所有import语句之下，否则ES6编译会报错
+     #+end_src
+* 调用外部程序
+  使用Node的 ~child_process~ 模块创建子进程并调用外部程序。
+
+** 命令行参数长度的限制及解决方案
+   参考：https://stackoverflow.com/questions/57166113/how-to-fix-error-spawn-enametoolong-probably-cause-by-jq-in-javascript
+   - 问题描述：
+     1. 报 ~ENAMETOOLARGE problems~
+     2. 报 ~E2BIG error~
+   - 命令行参数长度限制：
+     1. Windows程序单个参数和所有参数长度上限为 8192 bytes
+     2. UNIX/Linux程序单个参数和所有参数长度上限为 128~256 kilobytes
+
+*** 基于stdin的单行数据传递参数的解决方案
+    - 优点：
+      1. 代码简单：服务提供方仅需从stdin读取单行数据即可获取参数。
+    - 遗留问题：
+      1. Windows程序stdin单行输入的字符串长度有限制，若数据量太大则无法采用该方案。
+
+    #+begin_src javascript
+    const { execFile } = require('child_process')
+    
+    /*
+     * @param {string} executablePath - 外部程序的绝对路径或基于于调用者的相对路径，如 /path/to/file.exe, ./path/to/file.exe
+     * @param {Array<string>} paramsInline - 通过CLI参数形式传递给外部程序的参数
+     * @param {string} paramsStdin - 通过外部程序的Stdin形式传递给外部程序的参数，具体参数间的格式必须由服务提供方和服务调用方约定
+     * @param {object} [opts={ windowHide: true }] - 外部程序窗口属性
+     * @return {Promise}
+     */
+    function execFileAsync(executablePath: string, paramsInline: string[], paramsStdin: string, opts: object = { windowHide: true }): Promise {
+        return new Promise((resolve, reject) => {
+            const child = execFile(exectablePath, paramsInline, opts, (error, stdout, stderr) => {
+                if (error) {
+                    reject({error, stdout, stderr})
+                }
+               else {
+                    resolve({stdout, stderr, child})
+               }
+             })
+
+            if (paramsStdin) {
+                child.stdin.end(paramsStdin)
+            }
+        })
+    }
+    #+end_src
+
+*** 基于stdin的多行数据传递参数的解决方案
+    - 优点：
+      1. 参数长度无上限：通过stdin多行传输参数，不受单行字符串长度的限制。
+    - 缺点：
+      1. 服务提供方和服务调用方除约定参数格式外，还有约定 ~接收结束符~ 否则无法完成参数的传输，进入下一阶段。
+
+    #+begin_src javascript
+    const { execFile } = require('child_process')
+    
+    /*
+     * @param {string} executablePath - 外部程序的绝对路径或基于于调用者的相对路径，如 /path/to/file.exe, ./path/to/file.exe
+     * @param {Array<string>} paramsInline - 通过CLI参数形式传递给外部程序的参数
+     * @param {string} paramsStdin - 通过外部程序的Stdin形式传递给外部程序的参数，具体参数间的格式必须由服务提供方和服务调用方约定
+     * @param {string} [eof='==EOF=='] - 接收结束符
+     * @param {number} [lineSize=6000] - 每行字符数，Windows的上限大约为6500
+     * @param {object} [opts={ windowHide: true }] - 外部程序窗口属性
+     * @return {Promise}
+     */
+    function execFileAsync(executablePath: string, paramsInline: string[], paramsStdin: string, eof: string = '==EOF==', lineSize: number = 6000, opts: object = { windowHide: true }): Promise {
+        if (paramsStdin) {
+          assert.ok(eof != null && eof.trim() != 'Parameter `eof` must be a non empty string.')
+        }
+
+        return new Promise((resolve, reject) => {
+            const child = execFile(exectablePath, paramsInline, opts, (error, stdout, stderr) => {
+                if (error) {
+                    reject({error, stdout, stderr})
+                }
+               else {
+                    resolve({stdout, stderr, child})
+               }
+             })
+
+            if (paramsStdin) {
+	    writeAsync(paramsStdin, lineSize, eof, child)
+            }
+        })
+    }
+
+    function writeAsync(paramsStdin: string, lineSize: number, eof: string, child: ChildProcess): Promise {
+        if (paramsStdin.length) {
+            const line = paramsStdin.slice(0, lineSize)
+            const restParamsStdin = paramsStdin.slice(lineSize)
+            return new Promise((resolve, reject) => child.stdin.write(`${line}\r\n`, error => error ? reject(error) : resolve()))
+	    .then(() => writeAsync(restParamsStdin, lineSize, eof, child), () => new Promise(resolve => child.stdin.end(eof, resolve)))
+        }
+        else {
+            return new Promise(resolve => child.stdin.end(eof, resolve))
+        }
+    }
+    #+end_src
+** Windows系统路径空格问题
+   若要通过命令行参数传递文件/目录路径，那么必须要注意空格的处理。
+   因为Windows命令行参数默认以空格作为参数分隔符，即 ~a b/test.txt~ 默认会被分割为参数 ~a~ 和 ~b/test.txt~ 。
+   所以要通过双引号括住参数，防止被意外拆开，即 ~"a b/test.txt"~ 。
+
+** 权限问题
+   1. 使用Administrator启动Electron，那么必须以Administrator启动Photoshop，否则通过ActiveX操作Photoshop时会报权限不足。
+* yarn和npm
+  yarn比npm3.x有如下优势：
+  1. 安装速度快，并行下载
+  2. 依赖项的版本锁定
+     - npm采用语义化版本控制机制
+       - 语义化版本的语法及含义
+	 1. ~5.0.3~ 精准指定版本号
+	 2. ~~5.0.3~ 下载安装 ~5.0.x~ 中的最新版即可
+	 3. ~^5.0.3~ 下载安装 ~5.x.x~ 中的最新版即可
+       - 语义化版本的问题
+	 由于不能确保依赖的模块能实现100%的向上兼容，且语义化版本严格管理升级，那么就容易出现相同packages.json下载安装不同版本依赖模块，导致有的开发者有问题而其他人却没有问题。
+     - yarn通过生成yarn.lock文件，锁定项目各依赖模块的具体版本号，所有开发者均按照yarn.lock文件下载并安装依赖。
+       - npm3.x则需要通过 ~npm shrinkwrap~ 来生成 shrinkwrap.json 实现 yarn.lock的功能
+       - npm5.x后新增package-lock.json实现yarn.lock的功能
+  3. 缓存机制
+     - yarn会将模块缓存到本地，当新项目需要安装依赖时可离线从本地缓存中下载安装；而npm3.x则必须在线下载安装。
+     - npm5.x后在用户家目录下创建 ~.npminstall_tarball~ 目录缓存所有模块，而项目中的node_modules下则用软连接引用项目所依赖的模块。
+
+** yarn
+*** 卸载方式
+    #+begin_src bash
+    # Mac OSX
+    npm uninstall -g yarn
+    rm -rf /usr/local/lib/node_modules/yarn
+    rm -rf /usr/local/bin/yarn yarnpkg
+
+    # brew
+    brew uninstall yarn
+    # tarball
+    rm -rf "$HOME/.yarn"
+    # npm 
+    npm uninstall -g yarn
+    # ubuntu
+    sudo apt-get remove yarn && sudo apt-get purge yarn
+    # debian 
+    yum uninstall yarn
+    # windows
+    choco uninstall yarn
+    #+end_src
+*** 基本操作
+    #+begin_src bash
+    yarn # 根据yarn.lock或packages.json的配置安装依赖模块
+    yarn add <module_name> # 下载安装依赖
+    yarn add <module_name> --dev # 下载安装依赖，并作为开发时用的依赖
+    yarn remove <module_name> # 移除模块
+    yarn upgrade # 更新所有运行时的依赖模块
+    #+end_src
+* Nodejs函数的Promisify
+** 通过 ~util~  模块的 promisify方法转换
+   - 前提： ~util.promisify(original: Function)~ 中的original参数的函数签名必须为 ~(...args, (error, value))~ 即遵守nodeCallback签名。
+   - 使用示例：
+     #+begin_src javascript
+     const { promisify } = require('util')
+     const { stat } = require('fs')
+     // 回调函数使用方式
+     stat('.', (error, stats) => {
+         if (error) {
+            // 处理异常
+         }
+         else {
+           // 使用 `stats`
+         }
+     })
+     // Promisify后的使用方式
+     const statAsync = promisify(stat)
+     statAsync('.').then(stats => {
+         // 使用 `stats`
+     }).catch(error => {
+        // 处理异常
+     })
+     #+end_src
+   - 当original参数不满足函数签名必须为 ~(...args, (error, value))~ 的要求，则可以通过 ~util.promisify.custom~ Symbol自定义 ~util.promisify~ 的返回值
+
+** 通过bluebird的 ~promisify~ 和 ~promisifiyall~ 方法转换
+   #+begin_src javascript
+   const Promise = require('bluebird')
+   const { readFile } = require('fs')
+
+   // promisify单个函数
+   const readFileAsync = Promise.promisify(readFile)
+   // promisify整个模块
+   const fs = Promise.promisifyall(require('fs'))
+   fs.readFileAsync // 会自动在原函数名后添加Async。
+   #+end_src
+
