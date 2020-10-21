@@ -684,6 +684,10 @@
     yarn add <module_name> --dev # 下载安装依赖，并作为开发时用的依赖
     yarn remove <module_name> # 移除模块
     yarn upgrade # 更新所有运行时的依赖模块
+    
+    yarn start # Starts the development servetr
+    yarn build # Bundles the app into static files for production
+    yarn test # Starts the test runner
     #+end_src
 * Nodejs函数的Promisify
 ** 通过 ~util~  模块的 promisify方法转换

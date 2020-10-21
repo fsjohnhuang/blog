@@ -5,7 +5,6 @@
 原理：1px的渐变背景，50%有颜色，50%为透明。
 缺点：无法实现圆角
 
-
 *** Transform:scale(0.5)
 原理：通过~::before~或~::after~的border或box-shadow加~transform:scale(0.5)~缩放。
 优点：可实现圆角

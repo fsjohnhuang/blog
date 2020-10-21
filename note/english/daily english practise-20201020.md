@@ -1,0 +1,3 @@
+# What are the top benifits of working from home? Why?
+
+Honestly I have been an office worker after graduation. But I had experienced working remotely during the period of pandemic. And I found there are so many rewarding parts for remote working, especially to programmer. But I think the most top benifit to me is it save the time of commute. Because it takes me almost three hours to drive between home and company now. And the traffic jam makes me feel upset all day. So avoiding commute peak, I would have much more time to do something meaningful rather than be compelled to listen radio on the road.
