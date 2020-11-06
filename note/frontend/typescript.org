@@ -109,25 +109,94 @@
     1. ~this~ 永远指向Handler的实例
     2. 函数是定义在Handler的原型链上
 
-** 函数重载
-   函数参数列表不同即可实现函数重载，但注意：
+** 方法重载
+   方法参数列表不同即可实现函数重载，但注意：
    1. 若两函数参数列表除可选参数和带参数默认值不同外，参数个数和参数类型均相同时，该两个函数被认为是相同的函数。
+   2. 仅类的静态和实例方法可实现方法重载。
+
+* 枚举类型
+  TypeScript的枚举分为数字枚举和字符串枚举
+
+** 数字枚举
+   #+begin_src js
+   enum Response {
+       No = 1, // 默认从0开始，通过常量初始化器设置为1
+       Yes // 默认值为1，但由于第一个枚举值被设置为1，因此第二个枚举值自动计算为2
+   }
+   #+end_src
+   
+   注意：
+   1. 数字枚举可以混入 *表达式和常量成员* ，但表达式成员后的其它成员必须定义初始化器，要么是表达式要么是常量。
+      #+begin_src js
+      enum Response {
+        No = getSomeValue(),
+        Yes // Error
+      }
+      #+end_src
+      - 常量的类型
+	1. 数字字面量、字符串字面量
+	2. 之前定义的其它枚举成员的引用
+	3. 带括号的常量
+	4. 一元运算符 ~+,-,~~ 应用到常量枚举成员或常量
+	5. 二元运算符 ~+,-,*,/,%,<<,>>,>>>,&,|,^~ 应用到常量枚举成员或常量。但计算结果为NaN或Infinity则在编译时报错
+      - 实例
+             #+begin_src js
+	enum FileAccess {
+	  // constant member
+	  None,
+	  Read = 1 << 1,
+	  Write = 1 << 2,
+	  ReadWrite = Read | Write,
+	  // computed member
+	  G = '123'.length
+	}
+	#+end_src
+   2. 数字枚举支持反向映射
+      #+begin_src js
+      enum Color {
+        Red
+      }
+      // 编译后得到
+      var Color;
+      (function (Color) {
+          Color[Color["Red"] = 0] = "Red";
+      })(Color || (Color = {}));
+
+      // 因此使用可以通过值反向映射
+      Color[0] === 'Red'
+      Color.Red === 0
+      Color['Red'] === 0
+      #+end_src
+
+** 字符串枚举
+   #+begin_src js
+   enum Color {
+       Red = 'red'
+   }
+   #+end_src
+   注意：
+   1. 字符串枚举可以混入 *表达式和常量成员* ，但表达式成员后的其它成员必须定义初始化器，要么是表达式要么是常量。
+   2. 字符串枚举不支持反向映射，但会保留代码的调用形式。
 
 * ~enum~ 和 ~const enum~ 的区别
-  结论：若不需要通过value反向查询枚举类型，那么用 ~const enum~ 类型更安全。
-  1. enum
-     #+begin_src js
-     enum Color { Red, Green=2}
-     // 会生成JavaScript Object对象，因此支持通过value方向查询枚举类型
-     Color[0] // 返回 'Red'
-     Color[1] // 返回 undefined
-     Color[2] // 返回 'Green'
-     #+end_src
-  2. const enum
-     #+begin_src js
-     const enum Color { Red, Green=2}
-     // 不会产生JavaScript Object对象，而是直接在编译期将value替换到引用对应的枚举类型的位置
-     #+end_src
+   结论：
+   1. 若不需要通过value反向查询枚举类型，那么用 ~const enum~ 类型更安全；
+   2. 若需要编译后保留访问对象属性的形式(如 ~Color.Red~)， 那么使用 ~enum~ 。 ~const enum~ 会编译为枚举成员的值，如 ~0、1、'hi'~ 等。
+
+   使用：
+   1. enum
+      #+begin_src js
+      enum Color { Red, Green=2}
+      // 会生成JavaScript Object对象，因此支持通过value方向查询枚举类型
+      Color[0] // 返回 'Red'
+      Color[1] // 返回 undefined
+      Color[2] // 返回 'Green'
+      #+end_src
+   2. const enum
+      #+begin_src js
+      const enum Color { Red, Green=2}
+      // 不会产生JavaScript Object对象，而是直接在编译期将value替换到引用对应的枚举类型的位置
+      #+end_src
 
 * ~{}~, ~object~ 和 ~Object~ 的区别
   结论：若要声明变量为非原始类型，则使用 ~object~
@@ -147,6 +216,13 @@
 * 类型声明
   1. 类型声明的代码在编译后会被删除，不会影响正式代码；
   2. 对于用JavsScript开发的库，需要添加对应的类型声明后才能在TS中使用。
+
+** 进化历史
+   先后提出tsd、typings都已废弃，最终在 TypeScript 2.0 时重新整理为类型定义，提出 DefinitelyTyped。
+   DefinitelyTyped 就是把 *类型定义文件(.d.ts)* 发布到npm上，配合编辑器或插件就能检测到JS库的静态类型声明。
+
+** ~declare~
+   ~declare~ 用于在 ~*.d.ts~ 文件中声明类型，并且作用域只能用于最外层。
 
 ** 命名空间声明 ~namespace~
 
@@ -206,7 +282,8 @@
     #+end_src
 
 *** 类型声明文件的查找优先级
-    1. 根据tsconfig.json配置文件的paths查找类型声明文件；
+    1. 通过 ~reference~ type 
+    2. 根据tsconfig.json配置文件的paths查找类型声明文件；
        #+begin_src 
        {
            "compilerOptions": {
@@ -217,15 +294,25 @@
            }
        }
        #+end_src
-    2. 查找node_modules/XXX/packages.json中types字段查找类型声明文件；
-    3. 查找node_modules/XXX/index.d.ts；
-    4. 查找node_modules/@types/XXX/index.d.ts。
+    3. 查找node_modules/XXX/packages.json中types字段查找类型声明文件；
+    4. 查找node_modules/XXX/index.d.ts；
+    5. 查找node_modules/@types/XXX/index.d.ts。
+       也就是node_modules/@types作为默认的类型声明文件查找路径，tsc会搜索node_modules/@types下所有类型声明文件。
+       可以通过 ~compilerOptions/typeRoot~ 和 ~compilerOptions/types~ 来修改这默认值
+       1. ~compilerOptions/typeRoot~ 默认值为 ~["./node_modules/@types"]~ 那么可以修改为 ~["./node_modules/@types", "./typings"]~ 增加声明文件的查找路径
+       2. 而 ~compilerOptions/types~ 则用于限制在 ~compilerOptions/typeRoot~ 下仅能搜索某些指定模块的类型声明，而不是所有。如 ~"types": ["jquery"]~ 则表示只搜索 ~jquery~ 模块的类型声明文件。
 
-** 类型声明扩展
+** 类型声明扩展(Augmentations)
 
 *** 扩展全局变量 ~declare global~
+    Augmentations for the global scope can only be directly nested in external modules or ambient module declarations.
+    You can also add declarations to the global scope from inside a module:
+    即可以在module仲使用 ~declare global~ 增强ambient declaration。
+    module就是包含 ~export~ 或 ~import~ 的 ~xxx.ts~ 文件。
     #+begin_src js
-    // myglobal.d.ts
+    // myglobal.ts
+    export function getName(person: Person): string
+
     declare global {
         interface String {
 	double(): string
@@ -235,7 +322,7 @@
 	myname: string
         }
 
-        declare let globalVariable: string
+        let globalVariable: string
     }
 
     // index.ts
@@ -245,9 +332,19 @@
     window.myname = 'hi'
     globalVariable = 'john'
     #+end_src
+    若确实没有什么可以export，那么可以采用如下样板代码
+    #+begin_src js
+    export {}
+    
+    declare global {
+        interface File {
+	additional: any;
+        }
+    }
+    #+end_src
 
-*** 扩展全局变量 ~./src/globals.d.ts~
-    在 ~./src/globals.d.ts~ 定义全局对象的类型声明即可
+*** 扩展全局变量 ~./src/xxx.d.ts~
+    在 ~./src/xxx.d.ts~ 类型声明文件仲定义全局对象的类型声明即可，建议文件名为 ~./src/global.d.ts~ 。
     #+begin_src 
     declare let globalVariable: string
     declare interface Window {
@@ -255,6 +352,266 @@
     }
     #+end_src
 
+** 发布
+   有两种主要方式用于发布类型声明到npm：
+   1. 与包含定义的npm包捆绑一起(内置类型定义文件)
+      使用者直接下载npm包，即可自动检测并识别类型定义文件。
+   2. 直接发布到npm上的@types组织
+      - 源包中没有包含类型定义文件，仅包含类型声明文件。
+      - 使用者通过 ~npm i @types/xxxx~ 安装
+
+*** 与npm包捆绑发布
+    1. 开发目录
+       - 目录结构1
+	 - 目录结构
+	   #+begin_src yml
+	   /lib
+	   -- main.js
+	   -- main.d.ts
+	   packages.json
+	   #+end_src
+	 - package.json配置
+	   #+begin_src js
+	   {
+	     "name": "demo",
+                  "main": "./lib/main.js",
+                  "types": "./lib/main.d.ts" // 或者设置 "typeings": "./lib/main.d.ts" 亦可
+	   }
+	   #+end_src
+       - 目录结构2
+	 - 目录结构
+	   #+begin_src yml
+	   /lib
+	   -- main.js
+                index.d.ts
+	   packages.json
+	   #+end_src
+	 - package.json中不需要使用types或typeings配置类型声明文件。
+    2. 发布packages.json配置
+       #+begin_src js
+       {
+           "files": ["index.js", "*.d.ts"] // npm会根据files配置的规则决定发布哪些文件
+       }
+       #+end_src
+       
+*** 发布到@types组织
+     规则：
+     1. @types下的包是从DefinitelyTyped(https://github.com/DefinitelyTyped/DefinitelyTyped)通过DefinitelyTyped-tools(https://github.com/microsoft/DefinitelyTyped-tools/tree/master/packages/publisher)发布的；
+     2. 向 https://github.com/DefinitelyTyped/DefinitelyTyped 提交一个pull request；
+     3. 发布到 @types 组织的包可通过 TypeSearch(https://www.typescriptlang.org/dt/search/) 搜索。
+
+**** 目录结构
+     #+begin_src yml
+     /types
+     -- index.d.ts # 入口模块
+     -- user.d.ts
+     -- config.d.ts
+     #+end_src
+     入口模块作用：
+     1. 定义命名空间
+     2. 导出和聚合子模块
+
+     index.d.ts
+     #+begin_src js
+     import { User } from './user'
+     
+     declare namespace Models {
+         export type User = User
+     }
+     #+end_src
+     user.d.ts
+     #+begin_src js
+     export interface User {
+        name: string,
+        age: number
+     }
+     #+end_src
+
+** ~lib.d.ts~ 研究
+
+*** 示例
+    #+begin_src js
+    // There is a good reason for using interface for these globals.
+    // It allows you to add additional properties to these globals without a need to change lib.d.ts.
+    declare interface File extends Blob{
+	readonly lastModifed: number;
+	readonly name: string;
+    }
+    declare var File: {
+	prototype: File;
+	new(fileBits: BlobPart[], fileName: string, options?: FilePropertyBag): File;
+    }
+    #+end_src
+
+*** 声明策略——全闭合策略(Closed-ended)
+    全闭合策略：不允许使用者扩展类型的静态成员和实例成员。
+    #+begin_src js
+    // xxx.d.ts
+    declare class Folder {
+        static separator: string
+        readonly path: string
+        constructor(path: string) // 声明构造函数签名，不声明则自动补充无参数构造函数。
+    }
+    #+end_src
+
+*** 声明策略——半开放策略(Semi Open-ended)
+    半开发策略1——锁定静态成员+开发实例成员扩展
+    #+begin_src  js
+    // 声明实例成员
+    delcare interface Folder {
+        readonly path: string
+    }
+
+    // 声明静态成员
+    declare var Folder: {
+        separator: string
+        new(path: string): Folder
+    }
+    #+end_src
+
+    半开发策略2——锁定实例成员+开发静态成员扩展
+    #+begin_src  js
+    // 声明实例成员
+    declare type Folder = {
+        readonly path: string
+    }
+
+    // 声明静态成员
+    declare interface FolderConstructor {
+        separator: string
+        new(path: string): Folder
+    }
+
+    declare var Folder: FolderConstructor
+    #+end_src
+
+*** 声明策略——开放策略(Open-ended)
+    开发策略：允许使用者扩展类型的静态成员和实例成员。
+    #+begin_src  js
+    // 声明实例成员
+    declare interface Folder {
+        readonly path: string
+    }
+
+    // 声明静态成员
+    declare interface FolderConstructor {
+        separator: string
+        new(path: string): Folder
+    }
+
+    declare var Folder: FolderConstructor
+    #+end_src
+
+*** ~--noLib~ 的使用
+    默认配置时，TypeScript编译器会自动加载标准库 ~lib.d.ts~ 和 ~lib.dom.ts~ 的类型声明文件。
+    而 ~--noLib~ 或 ~///<reference no-default-lib="true"/>~ 都会告知TypeScript编译器排除上述两个类型声明文件，因此编译时会报缺失 ~String~ 等基本类型声明的TypeScript Error，但不会终端编译过程。
+    通常存在如下两种原因才考虑排除标准类型声明文件：
+    1. You are running in a custom JavaScript environment that differs significantly from the standard browser based runtime environment.
+    2. You like to have strict control over the globals available in your code. E.g. lib.d.ts defines ~item~ as a global variable and you don't want this to leak into your code.
+    
+    使用 ~--noLib~ 需要注意的是：
+    Once you are in noLib land, if you choose to share your project with others(e.g. others installs your project by npm or yarn), they will be forced into noLib land (or rather your lib land).
+
+*** ~--lib~ 的使用
+    通过 ~--lib~ 可以实现编译目标(the generated JavaScript version)和上下文库(ambient library)解耦。
+    默认情况下，设置 ~--target es5~ 则自动关联ES5和DOM的ambient library，但可以通过  ~--target es5 --lib dom,es6~ 实现编译目标为ES5，但关联的ambient library采用DOM和ES6的。
+    那么通过 ~--target es5 --lib es5~ 即可实现仅包含lib.d.ts的ES5版本作为embient library，把lib.dom.d.ts排除掉。
+    默认配置：
+    For --target es5 => es5, dom, scripthost
+    For --target es6 => es6, dom, dom.iterable, scripthost
+
+*** TODO Polyfill for old JavaScript Engines by ~core-js~
+    core-js(https://github.com/zloirock/core-js/)是babel-runtime, babel-plugin-transform-runtime和babel-polyfill的底层依赖，通过各种奇迹淫招基于ES3实现大部分的ES2017原生标准库，同时严格遵守规范。
+    ~npm i core-js --save-dev~, ~import 'core-js'~
+
+*** Polyfill for old JavaScript Engines by ~es5-shim~
+    所有es-shim: https://github.com/es-shims
+    若采用core-js对Photoshop的类JavaScript（相当于ES3）引擎打补丁，由于语法问题会导致部分代码执行失败。而更稳妥的方式是采用es5-shim。
+    Photoshop采用core-js时报的语法错误：
+    1. ~!!called++~
+    2. 连续没有使用括号标识优先级的 ~?:~
+
+** 特殊声明方式
+
+*** 可索引类型
+    #+begin_src js
+    class Person {
+      [name: string]: number
+    }
+
+    let person = new Person()
+    person['hi'] = 1
+    person.hello = 2
+    #+end_src
+    由于person可接收任何string类型的属性名，因此IDE智能提示中无法提示person实例下存在hello属性。
+
+*** 可索引类型+函数接口
+    即声明符合如下JS调用的类型声明
+    #+begin_src js
+    funtion TID(name) {
+        return Number(name)
+    }
+
+    TID['Svng'] = TID('Svng')
+    var num = TID['Svng']
+    #+end_src
+    定义文件
+    #+begin_src js
+    // xxx.ts
+    interface CallableTID {
+        (name: string): number
+    }
+    interface TID extends CallableTID{
+        [prop: string]: number
+    }
+    
+    var callableTID: CallableTID = (name: string): number => Number(name)
+    export var TID: TID = callableTID as TID
+    #+end_src
+
+*** 可索引类型+混合类型
+    即声明符合如下JS调用的类型声明
+    #+begin_src js
+    funtion TID(name) {
+        return Number(name)
+    }
+
+    TID['Svng'] = TID('Svng')
+    var num1 = TID['Svng']
+    var num2 = TID.Svng
+    #+end_src
+    定义文件
+    #+begin_src js
+    // xxx.ts
+    interface CallableTID {
+        (name: string): number
+    }
+    interface TID extends CallableTID{
+        [prop: string]: number
+        Svng: number
+        YsN: number
+    }
+    
+    var callableTID: CallableTID = (name: string): number => Number(name)
+    export var TID: TID = callableTID as TID
+    TID.Svng = TID('Svng')
+    TID['YsN'] = TID('YsN')
+    #+end_src
+    更简约的写法：
+     #+begin_src js
+    // xxx.ts
+    interface TID {
+        (name: string): number
+        [prop: string]: number
+        Svng: number
+        YsN: number
+    }
+    
+    export var TID: TID = ((name: string): number => Number(name)) as TID
+    TID.Svng = TID('Svng')
+    TID['YsN'] = TID('YsN')
+    #+end_src
+    
 * 类型保护
   用于对联合类型变量进行类型分支判断。
 
@@ -326,6 +683,62 @@
    }
    #+end_src
    
+* 接口
+
+** 基础
+   #+begin_src js
+   interface Point {
+       readonly x: number; // 只读属性
+       y?: number; // 可选属性
+       
+       (start: number): string; // 方法签名
+   }
+   #+end_src
+
+** TypeScript提供的 ~ReadonlyArray<T>~ 只读数组
+   #+begin_src js
+   let a: number[] = [1,2,3]
+   let ro: ReadonlyArray<number> = a
+   ro[0] = 2 // Error
+   ro.push(4) // Error
+   ro.length = 100 // Error
+   a = ro // Error
+   a = ro as number[] // OK
+   #+end_src
+   
+** readonly与const的区别
+   变量适用const，类属性使用readonly。
+
+** 索引签名
+   存在两种索引签名，且可同时定义：
+   1. 字符串类型的索引签名
+      #+begin_src js
+      interface StringArray {
+          [index: string]: string
+      }
+
+      let names: StringArray = {'hi': 'hhh'}
+      #+end_src
+   2. 数字类型的索引签名
+      #+begin_src js
+      interface StringArray {
+          [index: number]: any
+      }
+
+      let names: StringArray = ['hi', 'hhh']
+      #+end_src
+
+** 函数转换为接口
+   #+begin_src js
+   interface Counter {
+       (start: number): string
+       interval: number
+   }
+
+   let counter = <Counter>function(start: number): string { return String(start) }
+   counter.interval = 1000
+   #+end_src
+
 * 泛型
   
 ** 泛型函数
@@ -359,6 +772,7 @@
    #+begin_src js
    <T extends Number> // 泛型类型T必须为Number类型的子类
    <A extends Object>(arg: new () => A): A // arg的实参为Object的子类型，而不是Object的子类型的实例
+   <A extends {new(...args:any[]):{}}>(arg: A): A // arg的实参为构造函数，可以用于 class extends arg
    #+end_src
 
 * 类型兼容
@@ -650,31 +1064,39 @@
    #+end_src
 
 ** 外部模块声明和使用
-   若第三方JS库以模块为组织架构，那么可以以如下方式定义声明和使用
 
-*** 定义声明
+*** 模块作为组织形式
+    若第三方JS库以模块为组织架构，那么可以以如下方式定义声明和使用
+
+**** 定义声明
+     #+begin_src js
+     // node.d.ts
+     declare module 'url' {
+         export interface Url {
+             protocol?: string,
+             hostname?: string,
+         }
+
+         export function parse(urlStr: string, parseQuerystring?, slashesDenoteHost?): Url;
+     }
+
+     declare module 'path' {
+         export function normalize(p: string): string;
+     }
+     #+end_src
+
+**** 使用
+     #+begin_src js
+     /// <reference path="node.d.ts"/>
+     import * as URL from 'url'
+
+     let myUrl = URL.parse('test')
+     #+end_src
+
+*** 全局作为组织形式
+    若第三方JS库以全局为组织架构(如es5-shim)，则采用如下形式：
     #+begin_src js
-    // node.d.ts
-    declare module 'url' {
-        export interface Url {
-            protocol?: string,
-            hostname?: string,
-        }
-
-        export function parse(urlStr: string, parseQuerystring?, slashesDenoteHost?): Url;
-    }
-
-    declare module 'path' {
-        export function normalize(p: string): string;
-    }
-    #+end_src
-
-*** 使用
-    #+begin_src js
-    /// <reference path="node.d.ts"/>
-    import * as URL from 'url'
-
-    let myUrl = URL.parse('test')
+    import 'es5-shim'
     #+end_src
 
 * 命名空间(namespace)
@@ -769,7 +1191,7 @@
   applyMixins(User, [Disposable, Serializable])
   #+end_src
 
-  * 三斜杠指令
+* 三斜杠指令
     TypeScript编译器在预处理阶段会对文件的三斜杠指令进行处理。
     注意：
     1. TypeScript编译器是以 *根文件集合* 开始加载并执行三斜杠指令的预处理。
@@ -783,13 +1205,24 @@
    #+begin_src js
    /// <reference path='./path/to/xxx.d.ts'/>
 
-   /// <reference type='moudleName'/> // moduleName会被展开为@types/moduleName的路径，即@types/moduleName/index.d.ts
+    // moduleName会被展开为@types/moduleName的路径，即@types/moduleName/index.d.ts
+    // moduleName会被展开为/moduleName的路径，即moduleName/index.d.ts
+   /// <reference types='moudleName'/>
 
    /// <reference no-default-lib="true"/> // 表示该声明文件不依赖标准声明文件 lib.d.ts，因此编译时不需要加载 lib.d.ts。若命令行设置--skipDefaultLibCheck，那么该指令将会被忽略。
+   // 然后在编译过程中会报Cannot find global type 'Function'等信息。
    #+end_src
    注意:
    1. TypeScript编译阶段生成的声明文件，编译器会自动生成该指令描述依赖关系；
-   2. 若要在ts文件中声明一个对 ~@types~ 包的依赖，则需要通过命令行的 ~--types~ 或 tsconfig.json中指定；
+   2. 若要在ts文件中声明一个对 ~@types~ 包的依赖，则需要通过命令行的 ~--types~ 或 tsconfig.json的types属性中指定；
+
+*** 在.ts文件中使用 ~<reference types/>~
+    当仅依赖包的类型声明，而不是具体实现时则无法通过 ~import~ 引入依赖。
+    此时需要通过在.ts文件头加入 ~/// <reference types="moduleName"/>~ 引入依赖包的类型声明信息。
+    此时TypeScript编译器会按如下顺序查询类型声明信息:
+    1. node_modules/moduleName/packages.json的types属性指定的类型声明入口文件
+    2. node_modules/moduleName/index.d.ts
+    3. node_modules/@types/moduleName/index.d.ts
 
 ** ~<amd-module/>~ 指令
    以AMD作为目标模块系统时，其模块默认均为匿名。但采用如r.js作为模块系统处理程序时，匿名模块将产生问题。
@@ -797,3 +1230,145 @@
    #+begin_src js
    /// <amd-module name='Validator'/>
    #+end_src
+* 装饰器(Decorators)
+  该特性处于实验性阶段，因此需要在命令行或tsconfig.json中启用experimentalDecorators编译器选项。 
+  - ~tsc --target ES5 --experimentalDecorators~
+  - tsconfig.json
+    #+begin_src js
+    {
+        "compilerOptions": {
+	"target": "ES5",
+	"experimentalDecorators": true
+        }
+    }
+    #+end_src
+
+** 适用目标对象
+   装饰器能被附加到 *类声明*, *方法*, *访问符*, *属性* 或 *参数* 上。
+   语法为 ~@expression~ 且 expression的求值结果为一个函数，而该函数的入参就是修饰符所附加的对象。
+
+** 修饰器工厂 
+   用于传递额外信息给修饰器
+   #+begin_src js
+   function decoratorFactory(...extraData: any[]): (target: any, ...props: any[]) => any {
+       return function decorator(target: any, ...props: any[]): any {
+       }
+   }
+   #+end_src
+
+** 修饰器组合
+   修饰器组合的运算顺序：
+   1. 由上至下或左至右，依次对装饰器表达式进行求值；
+   2. 求值结果将转换为函数，并由下至上或右至左，依次调用。
+
+** 类中各装饰器的求值顺序
+   1. 参数装饰器，然后依次是：方法装饰器、访问符装饰器或属性装饰器应用到每个实例成员；
+   2. 参数装饰器，然后依次是：方法装饰器、访问符装饰器或属性装饰器应用到每个静态成员；
+   3. 参数装饰器应用到构造函数；
+   4. 类装饰器应用到类。
+
+** 类装饰器
+   应用于构造函数前，可用于监视、修改或替换类定义。
+   注意：
+   1. 签名为两种形式 
+      1. ~(clazz: Function): void~
+	 #+begin_src js
+	 function sealed(ctor: Function): void {
+	     Object.seal(ctor)
+	     Object.seal(ctor.prototype)
+	 }
+	 #+end_src
+      2. ~<T extends {new (...args: any[]): {}}>(ctor: T): T~
+	 #+begin_src js
+	 function enhance<T extends {new (...args: any[]): {}}>(clazz: T): T {
+                  // 创建匿名子类，并隐式转换为T类
+	     return class extends clazz {
+                      prefix = 'child_enhance'
+                      text: string
+                      show(): void {
+	             console.log(this.prefix, this.text)
+	         }
+	     }
+	 }
+              
+	 @enhance
+              class P {
+	     text: string
+                  constructor(text: string) {
+                      this.text = text
+                  }
+                  show(): void {
+                      console.log(this.text)
+                  }
+	 }
+
+              const p = new P('test')
+              p.show() // 回显 'child_enhance test'
+	 #+end_src
+   2. 不能用于声明文件(.d.ts)中
+   3. 也不用于任何外部上下文中(~declare class~)
+
+** 类方法装饰器
+   应用于方法的属性描述符上，可用于监视、修改或替换方法的定义。
+   注意：
+   1. 签名 ~(target: Object, propertyKey: string | symbol, descriptor?: PropertyDescriptor): void~
+      1. 若编译目标版本小于ES5，则descriptor将为undefined
+      2. 静态方法target为类的构造函数
+      3. 实例方法target为原型对象
+   2. 不能用于声明文件(.d.ts)中
+   3. 也不用于任何外部上下文(~declare class~)
+
+** 类访问器装饰器
+   应用于访问器的属性描述符上，可用于监视、修改或替换方法的定义。   
+   注意：
+   1. 签名 ~(target: Object, propertyKey: string | symbol, descriptor?: PropertyDescriptor): void~
+      1. 若编译目标版本小于ES5，则descriptor将为undefined
+      2. 静态方法target为类的构造函数
+      3. 实例方法target为原型对象
+   2. 不能同时附加到同一个成员的get/set访问器上，必须附加到按文档顺序的第一个访问器上。
+   3. 不能用于声明文件(.d.ts)中
+   4. 也不用于任何外部上下文(~declare class~)
+
+** 类字段/属性修饰器
+   仅能用于监视类中是否声明某个名字的属性，并添加与该属性相关联的元数据。
+   注意：
+   1. 签名 ~(target: Object, name: string | symbol): void~
+      1. 静态方法target为类的构造函数
+      2. 实例方法target为原型对象
+   2. 不能用于声明文件(.d.ts)中
+   3. 也不用于任何外部上下文(~declare class~)
+   
+** 参数装饰器
+   仅能用于为指定位置的参数添加元数据，无法独立对实参进行校验的操作。必须与类方法装饰器配合才能实现实参校验的工作。
+   注意：   
+   1. 签名 ~(target: Object, functionName: string | symbol, parameterIndex: number): void~
+      1. 静态方法target为类的构造函数
+      2. 实例方法target为原型对象
+   2. 不能用于声明文件(.d.ts)中
+   3. 也不用于任何外部上下文(~declare class~)
+* 工作流
+  注意：tsc编译报TypeScript Error并不会阻止生成js代码。
+
+** TODO gulp+typescript
+   
+* tsconfig.json文件说明
+** ~files: string[]~ 属性
+   默认情况下tsc会加载并编译tsconfig.json同级路径下的所有 ~.ts,.tsx,.d.ts~ 文件。
+   若设置files属性，那么tsc仅会加载并编译其指定的文件。文件中通过 ~import~ 引用其它文件，若没有在files属性中列出也不会被加载编译。
+
+** ~compilerOptions/target~
+   用于设置编译目标的ECMAScript版本。
+   可选值： ~'ES3' | 'ES5' | 'ES2015' | 'ES2016' | 'ES2017' | 'ES2018' | 'ES2019' | 'ES2020' | 'ESNEXT'~ 
+   当选择ES5或以上版本时，生成的模块会添加如下信息：
+   #+begin_src js
+   "use strict";
+   Object.defineProperty(exports, "__esModule", {value: true});
+   #+end_src
+   若选择ES3则为
+   #+begin_src js
+   "use strict";
+   exports.__esModule = true;
+   #+end_src
+* 《深入理解TypeScript》
+  英文原版：https://basarat.gitbook.io/typescript/type-system/lib.d.ts
+  中文翻译版：https://jkchao.github.io/typescript-book-chinese/typings/lib.html#%E4%BD%BF%E7%94%A8%E4%BE%8B%E5%AD%90

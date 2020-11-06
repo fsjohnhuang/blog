@@ -1646,7 +1646,7 @@ pulbic class MyTypeFilter implements TypeFilter {
 	#+begin_src
 	@Configuration
 	public class Config {
-          @Bean
+              @Bean
 	  public A a(){return new A();}
 
 	  @Bean
@@ -3455,6 +3455,7 @@ Spring Boot打包时可以内置Tomcat或Jetty。
       #+end_src
    3. 启动时加载自动配置类
       将标记@Configuration的自动配置类的全限定类名，放在classpath的META-INF/spring.factories文件中的 ~org.springframework.boot.autoconfigure.EnableAutoConfiguration~ 中。
+      - 注意：内部Configuration执行完成才会执行外部Configuration。
    4. Starter开发模式
       1. xxx-starter项目为一个空JAR文件，仅提供辅助性依赖管理，这些依赖可能用于自动装配或者其他类库，并引用xxx-starter-autoconfigurer项目。
       2. xxx-starter-autoconfigurer项目内包含自动配置的内容
@@ -3478,6 +3479,34 @@ Spring Boot打包时可以内置Tomcat或Jetty。
 	- 模式 模块名-spring-boot-starter
 	- 举例 mybatis-spring-boot-starter
 
+*** 元数据配置
+
+**** 基础方式
+     1. 在resouces/META-INF创建spring-configuration-metadata.json文件
+     2. 配置如下格式信息
+	#+begin_src js
+	{
+	    "hints": [{
+	        "name": "hello.msg",
+                     "values": [{"value": "可选择值1", "description": "描述1"}, {"value": "option2", "description": "description for option2"}]
+                 }],
+                 "groups": [{
+	        "sourceType": "com.seagetech.spring.boot.helloworld.HelloWorldProperties",
+	        "name": "hello",
+                     "type": "com.example.HelloProperties"
+	    }],
+                 "properties": [{
+	        "sourceType": "com.example.HelloProperties",
+	        "name": "hello.msg",
+                     "type": "java.lang.String",
+                     "description": "description for the property",
+                     "defaultValue": "yeah"
+	    }]
+	}
+	#+end_src
+
+**** 自动方式
+
 ** 参数配置
 
 *** 默认的参数配置优先级（从高到低排列）
@@ -3492,6 +3521,9 @@ Spring Boot打包时可以内置Tomcat或Jetty。
     9. jar包内部的 ~application.properties~ 或 不带 ~spring.profile~ 的 ~application.yml~ 配置文件
     10. ~@Configuration~ 注解类上的 ~@PropertySource~
     11. 通过 ~SpringApplication.setDefaultProperties~ 指定的默认属性
+
+** 日志
+   Spring Boot内置Logback作为日志框架。
 
 * TODO QA
   

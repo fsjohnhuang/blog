@@ -1,0 +1,34 @@
+While this tutorial has content that we believe is of great benefit to our community, we have not yet tested or edited it to ensure you have an error-free learning experience.
+It's on our list, and we're working on it!
+You can help us out by using the "Report an issue" button at the bottom of the tutorial.
+
+
+If you're an avid reader of our reptilian friendly site, you have probably seen both commands mentioned in our other Node.js articles.
+
+Sometimes you want to install a package outside of the current project, so it's available to all projects on your system.
+These are install globally and are great for packages that also include command-line utilities that you want to run alongside your other command-line utilities.
+
+
+** Document 1
+According to business needs, approved by Group, the organizational structure adjustment and personnel appointment have been decided as follows:
+
+Organizational Structure Adjustment
+In order to improve operating efficiency of Group's overseas logistics and forge a global logistics system to support global breakthrough strategy,
+International Logistics Sharing Platform which is responsible for the end-to-end operation of overseas logistics, 
+has been integrated and established based on Annto Internatianol Logistics, Purchasing Center, Customs Broker, MIB logistics functions, and partial functions of international logistics sector in business division.
+Established Shanghai Park Project Office under Executive Office.
+
+Personnel Appointment
+is in charge of (分管)
+has been appointed as (任职)
+currently serves as (兼任)
+
+Hereby Decided! (特此决定)
+
+** Docment 2
+To all BUs(各单位)
+To fully realize paperless and automatic accounting of material payable business, after the pilot project(试点项目) in RAC,
+the efficiency of supplier reconciliation(供方对账) has been improved by 85% and about 50,000 paper documents are reduced per month.
+Now it is promoted in all BUs and details are as follows.
+
+

@@ -2884,9 +2884,49 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
    3. SpringBoot启动类
       #+begin_src java
       @SpringBootApplication
-      @MapperScan("com.test.myapp.mapper") // 指定某包路径下的所有类都为Mapper接口
+      @MapperScan("com.test.myapp.mapper") // 指定某包路径下的所有类都为Mapper接口，否则就要在每个Mapper类添加@Mapper的Annotation
       public class Application {}
       #+end_src
+
+** 实体类
+
+
+*** 字段默认值
+    实体字段在插入或更新时可以设置默认值。
+    #+begin_src java
+    @TableName("User")
+    public class User implements Serializable {
+        @TableId(type=IdType.AUTO)
+        private String id;
+        private String name;
+
+        // 插入记录时自动填充默认值	
+        @TableField(fill=FieldFill.INSERT) 
+        private Date createdDate;
+        // 更新记录时自动填充默认值	
+        @TableField(fill=FieldFill.UPDATE)
+        private Date modifiedDate;
+    }
+    #+end_src
+    生成默认值
+    #+begin_src java
+    @Component // 集成到Spring时，只需添加@Component即可
+    public class MyBatisFillHandler implements MetaObjectHandler {
+        @Override
+        public void insertFill(MetaObject metaObject) {
+           if (metaObject.getOriginalObject() instanceof User) {
+               this.fillStratege(metaObject, "createdDate", new Date());
+           }
+        }
+        @Override
+        public void updateFill(MetaObject metaObject) {
+           if (metaObject.getOriginalObject() instanceof User) {
+               this.fillStratege(metaObject, "modifiedDate", new Date());
+           }
+        }
+    }
+    #+end_src
+
 ** QA
    1. ~selectList,selectOne~ 等方法返回的实体类中存在表不存在的字段时，报如 ~Cause: java.lang.IndexOutOfBoundsException: Index 8 out of bounds for length 8~ 的异常
       - 检查点：

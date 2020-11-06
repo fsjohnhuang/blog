@@ -146,15 +146,48 @@
 	 2. 如果路径错误，换成国内镜像路径 --dist-url=https://npm.taobao.org/mirrors/atom-shell
 
 * 打包
+主流的打包工具有 ~electron-builder~ 和 ~electron-packager~ 。
+
 ** electron-builder
+*** 文件大小
+    Electron项目内嵌整个V8引擎和Chromium内核，因此通过 ~electron-builder --dir~ 打包但尚未压缩的空项目大小已经达到121.MB，而压缩后则为36MB。
+*** 打包后的项目结构
+    #+begin_src yml
+    /dist/win-unpacked
+    -- /locals
+        -- am.pak
+        -- 一堆pak文件
+    -- /resources
+        -- app.asar (空项目为2KB，一个实际项目为130MB+)
+        -- electron.asar (250KB左右)
+    -- electron.exe (67.5MB)
+    -- ......
+    #+end_src
+
+**** app.asar文件分析
+     1. 解压asar文件
+	#+begin_src bash
+	npm install -g asar
+	asar extract app.asar ./app
+	#+end_src
+     2. 其内容为包含node_modules目录的项目内容
+	注意：node_modules中仅包含production dependencies的依赖项目。
+
+**** electron.asar文件分析
+     内部包含Electron相关的源代码，包含remote, ipcMain, ipcRenderer等模块。
+
+**** electron.exe文件分析
+     其功能为加载 ~resources/app.asar~ 文件中的内容，包括入口文件的位置(app.asar/package.json的main字段值)。
+     打包工具可修改electron.exe的图标、作者和版本号等信息。
+
 *** 配置
-    1. 安装 ~cnpm i electron-builder -D~
+    1. 安装 ~npm i electron-builder --save-dev~ 或 ~yarn add electron-builder --dev~
     2. 配置(package.json)
        #+begin_src javascript
        {
          "scripts": {
-           "package": "electron-builder --dir",
-           "dist": "electron-builder"
+           "pack": "electron-builder --dir", // npm run pack, 生成package目录但不打包为一个文件
+           "dist": "electron-builder" // npm run dist, 生成一个exe或dmg文件
          },
          "build": {
            "appId": "com.example.app", // 应用程序id 
@@ -209,7 +242,7 @@
     3. 运行打包
        #+begin_src bash
        # 打包但不会生成安装程序或屏蔽源码
-       npm run package
+       npm run pack
        # 打包出可发布包
        npm run dist
        #+end_src
@@ -229,6 +262,25 @@
     - 解决方法：
       1. 删除项目的node_modules目录
       2. 使用yarn重新安装所有依赖， ~yarn~
+
+*** 打包优化
+    优化方向：缩小项目所打包进app.asar的node_modules文件体积。
+    由于有些npm包为了性能或其它原因，使用C/C++实现。而electron-builder在打包时会根据打包目标平台重新下载并编译C/C++代码，并打包到app.asar的node_modules中。
+    
+**** 视图层
+     使用webpack等工具打包压缩代码，并将不必要的视图层依赖(如 ~eslint~)从package.json的dependencies字段中移除，避免被打包到app.asar文件中。
+
+**** 主进程(Electron层)代码打包
+     可以使用webpack对主进程的代码进行打包压缩，但注意 ~target~ 需要设置为 ~electron-main~
+
+**** 双package.json文件进行依赖管理
+     作用：用于将package.json中dependencies中的部分依赖排除在打包之外。
+     用法：
+     1. 在项目下创建app目录
+	若根目录下存在app目录，那么electron-builder会以该目录作为打包的根目录，并且只会打包该目录下的文件(即package.json中的build配置均是基于app目录而定)
+     2. 将根目录的package.json复制app目录下，并删除devDependencies和dependencies中不被打包的依赖。
+	
+     这时开发使用的依赖则写入根目录的package.json，而打包用的则写入app/package.json。
 
 *** QA
     1. Application entry file "build\electron.js" in the "E:\repos\l1k\l1k-client-fed\dist\win-unpacked\resources\app.asar" does not exist.
@@ -320,70 +372,120 @@
     1. 启动调试模式并通过Chrome://inspect启动DevTools附加到相应Node进程，重启主进程后该附加会失效，必须重新附加才能继续调试。
 
 * 主进程和渲染进程间通信
-  注意：
-  1. 主进程和渲染进程间的通信，均是由渲染进程发起。
-  2. 消息在传输前会被序列化，因此对象的原型链将被擦除，并且不能将Function,Promise,Symbol,WeakMap和WeakSet作为消息传递。
 
-** 异步通信
-   1. 普通方式
-      #+begin_src javascript
-      // renderer
-      const {ipcRenderer} = require('electron')
+** ipcMain和ipcRenderer方式
+   注意：
+   1. 主进程和渲染进程间的通信，均是由渲染进程发起。
+   2. 消息在传输前会被序列化，因此对象的原型链将被擦除，并且不能将Function,Promise,Symbol,WeakMap和WeakSet作为消息传递。
+
+*** 异步通信
+    1. 普通方式
+       #+begin_src javascript
+       // renderer
+       const {ipcRenderer} = require('electron')
       
-      ipcRenderer.send(channel: string, ...args: any)
-      ipcRenderer.on('asyncReply', (event, args)=>{
-        // listen to asyncReply from main process.
-      })
+       ipcRenderer.send(channel: string, ...args: any)
+       ipcRenderer.on('asyncReply', (event, args)=>{
+         // listen to asyncReply from main process.
+       })
       
-      // main
-      const {ipcMain} = require('electron')      
+       // main
+       const {ipcMain} = require('electron')      
       
-      ipcMain.on(channel, (event, args: any[])=>{
-        // do something
-        event.sender.send('asyncReply', 'hi') // 向渲染进程的main frame返回消息
-        // 或者用 event.reply('asyncReply', 'hi'), 向渲染进程的iframe中发送消息到主进程的frame返回消息
-      })
-      ipcMain.once(channel, (event, args: any[])=>{
-        // remove this listener after invoking automatically
-      })
-      #+end_src
-   2. Promise方式
-      #+begin_src javascript
-      // renderer      
-      const {ipcRenderer} = require('electron')
+       ipcMain.on(channel, (event, args: any[])=>{
+         // do something
+         event.sender.send('asyncReply', 'hi') // 向渲染进程的main frame返回消息
+         // 或者用 event.reply('asyncReply', 'hi'), 向渲染进程的iframe中发送消息到主进程的frame返回消息
+       })
+       ipcMain.once(channel, (event, args: any[])=>{
+         // remove this listener after invoking automatically
+       })
+       #+end_src
+    2. Promise方式
+       #+begin_src javascript
+       // renderer      
+       const {ipcRenderer} = require('electron')
 
-      async function(){
-        const result = await ipcRenderer.invoke(channel, arg1, arg2)
-      }()
+       async function(){
+         const result = await ipcRenderer.invoke(channel, arg1, arg2)
+       }()
 
-      // main
-      const {ipcMain} = require('electron')      
+       // main
+       const {ipcMain} = require('electron')      
 
-      ipcMain.handle(channel, async function(event, ...args){
-        const result = await somePromise(...args)
-        return result
-      })
-      ipcMain.handleOnce(channel, async function(event, ...args){
-        const result = await somePromise(...args)
-        return result
-      })
-      #+end_src
+       ipcMain.handle(channel, async function(event, ...args){
+         const result = await somePromise(...args)
+         return result
+       })
+       ipcMain.handleOnce(channel, async function(event, ...args){
+         const result = await somePromise(...args)
+         return result
+       })
+       #+end_src
 
-** 同步通信
-    #+begin_src javascript
-    // renderer      
-    const {ipcRenderer} = require('electron')
+*** 同步通信
+     #+begin_src javascript
+     // renderer      
+     const {ipcRenderer} = require('electron')
 
-    let reply = ipcRenderer.sendSync(channel: string, args: any[])
+     let reply = ipcRenderer.sendSync(channel: string, args: any[])
 
-    // main
-    const {ipcMain} = require('electron')      
+     // main
+     const {ipcMain} = require('electron')      
 
-    ipcMain.on(channel, (event, args: any[]) => {
-      event.returnValue = 'Return value synchronously.'
-    })
-    #+end_src
+     ipcMain.on(channel, (event, args: any[]) => {
+       event.returnValue = 'Return value synchronously.'
+     })
+     #+end_src
 
+*** 优化手段
+    Electron原生IPC的可优化点：
+    1. 存在同步通信接口，稍不留神使用就会导致性能下降；
+    2. 不支持异步消息合并；
+    3. 序列化支持Buffer等特殊类型，大部分系统只需传输JSON，增加序列化和反序列化耗时；
+    4. API不一致。
+
+** 主进程向渲染进程发起通信
+   主进程中通过BrowserWindow实例的webContents可向渲染进程发起通信。
+   #+begin_src js
+   const {app, BrowserWindow} from 'electron'
+   let win = null
+   
+   app.on('ready', () => {
+       win = new BrowserWindow({width: 800, height: 600})
+       win.loadURL(`file://${__dirname}/index.html`)
+       win.webContents.on('did-finish-load', () => {
+           win.webContents.send('ping', 'hi')
+       })
+   })
+   #+end_src
+   #+begin_src html
+   <script>
+       require('electron').ipcRenderer.on('ping', (event, message) => {
+           console.log(message)
+       })
+   </script>
+   #+end_src
+   注意： ~webContents.on~ 只能监听Electron内置的事件。
+
+** remote模块
+   作用：让渲染进程以简便的无入侵的形式访问主进程的模块和数据。
+   #+begin_src html
+   <script>
+   var remote = require('electron').remote
+   // 在渲染进程中创建另一个渲染进程
+   var BrowserWindow = remote.BrowserWindow
+   var other = new BrowserWindow({width: 800, height: 800})
+   other.loadURL('xxxxx')
+   </script>
+   #+end_src
+
+*** 注意
+    1. remote底层采用同步IPC。
+    2. 数据传输时采用如下策略
+       1. 简单数据类型，无需序列化直接传输
+       2. Object子类，均采用远程对象方式传输。而不是简单的序列化和反序列化。
+   
 * 计算密集型任务的解决方案
   由于渲染进程在渲染界面时，会通过IPC与主进程进行同步通信，因此若主进程一直繁忙则会导致UI卡顿。
   
@@ -684,11 +786,43 @@
     yarn add <module_name> --dev # 下载安装依赖，并作为开发时用的依赖
     yarn remove <module_name> # 移除模块
     yarn upgrade # 更新所有运行时的依赖模块
+    yarn global add <module_name> # 安装全局模块
+    yarn global remove <module_name> # 卸载全局模块
     
     yarn start # Starts the development servetr
     yarn build # Bundles the app into static files for production
     yarn test # Starts the test runner
+
+    # run this command in the package folder you'd like to link.
+    # for example, project A depends to package B, run `yarn link` in package B folder first, and then change directory to project A folder and run `yarn link b`.
+    # Links are registered in ~/.config/yarn/link, specify it by `yarn link --link-folder path/to/dir`.
+    yarn link
+    # link another package that you'd like to test into your current project.
+    # this will create a symlink links to your local package folder.
+    yarn link [package...]
+
+    yarn unlink
+    yarn unlink [package...]
+
+    # 初始化.yarnclean文件，功能和.gitignore一样
+    yarn autoclean -I
+    # 删除README代码无关等文件
+    yarn autoclean -F
     #+end_src
+
+*** 从git下载包
+    #+begin_src bash
+    yarn add <git remote url>
+    yarn add <git remote url>@<branch/commit/tag>    
+    yarn add https://my-project.org/package.tgz # installs a package from a remote gzipped tarball.
+    #+end_src
+
+*** 从本地下载包
+    #+begin_src bash
+    yar add file:/path/to/your-project # Absolute path. This works both of Yarn and NPM as well.
+    yar add file:../to/your-project # Relative path. This works both of Yarn and NPM as well.
+    #+end_src
+
 * Nodejs函数的Promisify
 ** 通过 ~util~  模块的 promisify方法转换
    - 前提： ~util.promisify(original: Function)~ 中的original参数的函数签名必须为 ~(...args, (error, value))~ 即遵守nodeCallback签名。

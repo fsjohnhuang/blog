@@ -1,0 +1,9 @@
+While this tutorial has content that we believe is of great benefit to our community, we have not yet tested or edited it to ensure you have an error-free learning experience.
+It's on our list, and we're working on it!
+You can help us out by using the "Report an issue" button at the bottom of the tutorial.
+
+
+If you're an avid reader of our reptilian friendly site, you have probably seen both commands mentioned in our other Node.js articles.
+
+Sometimes you want to install a package outside of the current project, so it's available to all projects on your system.
+These are install globally and are great for packages that also include command-line utilities that you want to run alongside your other command-line utilities.

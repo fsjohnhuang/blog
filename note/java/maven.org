@@ -1039,7 +1039,6 @@ mvn help:describe -Dplugin=org.apache.maven.plugins:maven-eclipse-plugin:2.10
       #+begin_src xml
       <!-- pom.xml -->
       <build>
-        <pluginManagement>
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -1047,10 +1046,24 @@ mvn help:describe -Dplugin=org.apache.maven.plugins:maven-eclipse-plugin:2.10
                     <configuration>
                         <source>1.8</source>
                         <target>1.8</target>
+                        <!-- 编译后保留方法形参名称不变 -->           
+                        <compilerArgs>
+	                <arg>-parameters</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
+                <!-- 在打包后的JAR文件中保留javadoc注释，实际会另外生一个xxxx-sources.jar文件 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+	       <version>2.4</verion>
+                    <executions>		    
+                        <execution>	
+                            <goals><goal>jar</goal></goals>	    
+                        </execution>		    
+                    </executions>		    
+                </plugin>		
             </plugins>
-        </pluginManagement>
       </build>
       <distributionManagement>
         <repository>
@@ -1165,6 +1178,100 @@ mvn help:describe -Dplugin=org.apache.maven.plugins:maven-eclipse-plugin:2.10
   </configuration>
 </plugin>
 #+END_EXAMPLE
+* plugins和pluginManagement的区别
+** plugins
+   特性：
+   1. 用于定义插件，及引入插件。
+   2. 绑定到Mavne生命周期的各个阶段，即执行mvn命令时会加载通过plugins定义的插件。
+
+** pluginManagement
+   特性：
+   1. 用于声明插件，而不是引入插件。
+   2. 不绑定到Maven生命周期的各个阶段，即执行mvn命令时不会加载通过pluginManagement声明的插件。但可声明插件绑定的Maven生命周期phase和goals。
+   用处：
+   一般在父POM中声明各子POM会使用的插件及版本号，并且在实际使用该插件的子POM中通过plugins通过 ~groupId~ 和 ~artifactId~ 引入插件，而插件版本号则统一由父POM维护，从而保持各子模块的插件版本号一致。
+
+** 示例
+   1. 父POM
+      #+begin_src xml
+      <pluginManagement>
+          <plugins>
+	  <plugin>
+	      <groupId>org.apache.maven.plugins</groupId>
+	      <artifactId>maven-source-plugin</artifactId>
+	      <version>2.1</version>
+                   <configuration>
+                       <attach>true</attach>
+                   </configuration>
+                   <executions>
+                       <execution>
+	              <phase>compile<phase>
+                           <goals>
+                               <goal>jar</goal>
+                           </goals>
+                       </execution>
+                   </executions>
+	  </plugin>
+          </plugins>
+      </pluginManagement>
+      #+end_src
+   2. 子POM
+      #+begin_src xml
+      <plugins>
+          <plugin>
+	      <groupId>org.apache.maven.plugins</groupId>
+	      <artifactId>maven-source-plugin</artifactId>
+          </plugin>
+      </plugins>
+      #+end_src
+
+* TODO cxf-codegen-plugin插件使用
+* Oracle JDBC Driver安装
+  由于Oracle为public maven repository提供Oracle JDBC Driver，因此我们需要自行到官网下载JAR文件，并通过Maven安装到local repository。
+  1. 将ojdbc7-12.1.0.2.jar放置到项目根目录的lib目录下，随项目进行版本管理；
+  2. 在POM.xml文件中加入dependency定义
+     #+begin_src xml
+     <dependency>
+         <groupId>com.oracle</groupId>
+         <artifactId>ojdbc7</artifactId>
+         <version>12.1.0.2</version>
+     </dependency>
+     #+end_src
+  3. 安装Oracle JDBC Driver到local repository
+     #+begin_src shell
+     # 在项目根目录下执行
+     mvn install:install-file -Dfile=./lib/ojdbc7-12.1.0.2.jar -DgroupId=com.oracle -DartifactId=ojdbc7 -Dversion=12.1.0.2 -Dpackaging=jar
+     #+end_src
+
+** Spring Boot中 ~<scope>system</scope>~ 的陷阱
+   若部署环境安装了Oracle客户端或打包为非内置Web容器的SpringBoot包时，那么可以将dependency定义写为
+   #+begin_src xml
+     <dependency>
+         <groupId>com.oracle</groupId>
+         <artifactId>ojdbc7</artifactId>
+         <version>12.1.0.2</version>
+         <scope>system</scope>
+         <systemPath>${basedir}/lib/ojdbc7-12.1.0.2.jar</systemPath>
+     </dependency>
+   #+end_src
+   即可不必将Oracle JDBC Driver安装到local repository，即可成功编译和发布应用。
+   注意：此方式打包出来的JAR内并没有Oracle JDBC Driver的JAR包，需要部署环境提供。直接运行SpringBoot应用会报如下异常：
+   #+begin_quote
+   ############
+   application failed to start
+   
+   Description:
+   ..................................
+   Reason: Failed to load driver class oracle.jdbc.driver.OracleDriver in either of HikariConfig class loader or Thread context classloader.
+
+   Action:
+   Update your application's configuration
+   ############
+   #+end_quote
+   解决方法：
+   1. 外置Web容器时，则需要在部署目录的lib下放置ojdbc7-12.1.0.2.jar。
+   2. 内置Web容器则无法通过上述方式设置dependency定义，必须通过local repository安装Oracle JDBC Driver。
+
 * QA
 1) 执行 ~mvn site~ 报异常 ~java.lang.NoClassDefFoundError: org/apache/maven/doxia/siterenderer/DocumentContent~
    - 解决方法：在pom.xml中添加
