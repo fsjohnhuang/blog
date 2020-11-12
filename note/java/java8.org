@@ -3816,10 +3816,85 @@ assert data[0] == "1"
 *** 发送邮件
 
 *** 接收邮件
-* TODO 调用外部进程
+* 调用外部进程
+** java.lang.Runtime#exec
+   1. 方法描述
+      #+begin_src java
+      /**
+      Executes the specified command and arguments in a separate process with the specified environment and working directory.
+      @argument dir - the working directory.
+      @throws
+      SecurityException - If a security manager exists and its checkExec method doesn't allow creation of the subprocess.
+      IOException - If an I/O errors occurs.
+      NullPointerException - If command is null.
+      IllegalArgumentException - If command is empty.
+      */
+      Process java.lang.Runtime#exec(String[] cmdarray, String[] envp, File dir);
+      Process java.lang.Runtime#exec(String cmd);
+      #+end_src
+   2. 简单示例
+      #+begin_src java
+      // Windows下调用系统命令，像dir等命令是由cmd解析器解释执行的，因此若直接写"dir"则会被认为在当前工作目录下有一个"dir.exe"文件，那么当然会执行失败。
+      Runtime.getRuntime().exec(new String[]{"cmd", "/C", "copy /path/to/src /path/to/dest"});
+      Runtime.getRuntime().exec(new String[]{"cmd", "/C", "start copy /path/to/src /path/to/dest"}); // 弹出另一个console执行系统命令
+      // Linux下调用系统命令
+      Runtime.getRuntime().exec(new String[]{"/bin/sh", "-c", "cp /path/to/src /path/to/dest"});
+      Runtime.getRuntime().exec(new String[]{"/bin/sh", "-c", "xterm -e cp /path/to/src /path/to/dest"});// 弹出另一个终端执行系统命令
+      #+end_src
+   3. 输出重定向
+      #+begin_src java
+      String cmd = "/path/to/getipconfig.bat"; // 自己写的bat脚本文件，里面包含ipconfig /all命令。注意：不支持cmd中直接使用>或>>执行标准输出重定向
+      Process p;
+
+      try {
+          p = Runtime.getRunTime().exec(cmd);
+          InputStream input = p.getInputStream();
+          InputStreamReader streamReader = new InputStreamReader(input);
+          BufferedReader bufReader = new BufferedReader(streamReader);
+          String line = null;
+
+          while ((line = bufReader.readLine()) != null) {
+	  System.out.println(line);
+          }
+      }
+      catch (IOException e) {
+      }
+      #+end_src
+   4. 输入重定向
+      #+begin_src java
+      try {
+          String cmd = "cmd /c start cmd.exe";
+          Process child = Runtime.getRuntime().exec(cmd);
+          
+          OutputStream output = child.getOutputStream();
+          output.write("cd C:/ /r/n".getBytes());
+          output.flush();
+          output.write("dir /r/n".getBytes());          
+          output.close();	  
+      }
+      catch (IOException e) {}
+      #+end_src
+
+    ~java.lang.Runtime.getRuntime()~ 是Java中唯一可以得到运行时环境的方法。
+
 ** java.lang.Process
-   #+begin_src java
-   
-   #+end_src
+   1. 成员方法
+      - ~int exitValue()~, 以非阻塞方式获取进程执行的返回值。若进程尚未完成时调用该方法，则会报异常 ~java.lang.IllegalThreadStateException~
+      - ~int waitFor()~, 以阻塞方式获取进程执行的返回值。若进程尚未完成则会等待进程完成后才恢复当前线程。
+	- 问题：若进程无法正常关闭，则会导致Java线程一直挂起。
+      - ~void destory()~
+      - ~InputStream getErrorStream()~
+      - ~InputStream getInputStream()~
+      - ~OutputStream getOutputStream()~
 
 ** java.lang.ProcessBuilder
+   功能和java.lang.runtime#exec一样，只是java.lang.ProcessBuilder仅接收命令行以数组形式传递给java.lang.ProcessBuilder#command()而已。
+   #+begin_src java
+   ProcessBuilder pb = new ProcessBuilder();
+   pb.command("cmd", "/c", "dir"); // pb.command("cmd /c dir"); 这样会报错
+   try {
+       Process process = pb.start();
+       // 后面都是操作Process实例的方法
+   }
+   catch (IOException e){}
+   #+end_src

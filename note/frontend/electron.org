@@ -56,7 +56,7 @@
    1. ~app.hasSingleInstanceLock()~ 检查单实例锁状态
    2. ~app.releaseSingleInstanceLock()~ 释放单实例锁
 
-* 使用ffi-napi调用c/c++的动态链接库(dll)
+* TODO 使用ffi-napi调用c/c++的动态链接库(dll)
   限制：
   1. 只能调用动态链接库中按照C标准编译的函数；
   2. 不能用于多线程的环境；
@@ -145,10 +145,102 @@
 	 1. arch ： 计算机的架构（x64或者ia32），如果node环境是32位，那么这里就是ia32，如果是node环境是64位，那么这里就是x64。
 	 2. 如果路径错误，换成国内镜像路径 --dist-url=https://npm.taobao.org/mirrors/atom-shell
 
+* Integrated with SQLite3
+** Prerequisites
+   Install Python2.7 and VC++ build tools as ffi-napi does on Windows. Execute the following as Administrator.
+   #+begin_src bash
+   npm i -g --production windows-build-tools
+   npm config set python python2.7
+   npm config set msvs_version 2015
+   npm i -g node-gyp # `cnpm` is fine while installing node-gyp
+   #+end_src
+   
+** Solution One
+   #+begin_src bash
+   # It is the same for Mac OS and Windows.
+   cnpm install sqlite@latest --build-from-source --runtime=electron --target=1.7.9 --dist-url=http://atom.io/download/electron --save
+   # above command will compile node-sqlite3 by `node-gyp rebuild --target=1.7.9 --arch=x64 --target-arch=x64 --msvs_version=2015 --dist-url=http://atom.io/download/electron` after node-sqlite3 source has been downloaded.
+   #+end_src
+   If cnpm fails to download the prebuild of SQLite3 cooresponding to the electron version specified by ~--target~ option, it will build a proper one for you immediately. 
+   After all, it's hard to prebuild all kinds of combinations of ~sqlite version~, ~electron version~ and ~mac|win|linux~.
+   The prebulid node-sqlite3 can be download from https://npm.taobao.org/mirrors/sqlite3/
+
+   *Error and Solution*:
+   1. If the above command is success, but ~Cannot find module '..../node_sqlite3.node'~ error occurs while the app is running.
+      - Ensure the followings are same:
+	1. ~electron --version~
+	2. ~./node_modules/.bin/electron --version~
+	3. electron version in package.json
+	4. ~--target~ option value
+   2. There is a 404 error occured while installing ~node-pre-gyp~.
+      - Ignore this error with ease. It doesn't matter at all.
+      - ~node-pre-gyp~ is a set of prebuild binary tools(e.g. some versions of node-sqlite3), but now we want to compile node-sqlite3 from source, so the ~node-pre-gyp~ is not necessary.
+
+** Solution Two
+   #+begin_src bash
+   npm install sqlite3 --save
+   npm install electron-rebuild --save
+   
+   # Mac OS
+   ./node_modules/.bin/electron-rebuild
+   # Windows
+   .\node_modules\.bin\electron-rebuild.cmd
+   #+end_src
+
+* TODO Rebuild Electron
+  It is necessary to rebuild electron while integrating with ~ffi-napi~ or ~node-sqlite3~.
+  In fact ~ffi-napi~, ~node-sqlite3~ and other binary library are as Node.js native addon compiled with Node.js/Electron headers.
+  
+** Prerequisites
+   The Node.js native addon build tool ~node-gyp~ requires Python2.7 and CPP compiler.
+   1. Mac OS
+      Pyton2.7 is built-in on Mac OS, and CPP compiler would be installed with ~xcode~. The only one extra installation on Mac OS is the ~xcode-select~ (~xcode-select --install~)
+   2. Windows
+      1. Solution One *windows-build-tools* (Recommanded)
+	 The npm package ~windows-build-tools~ willl install Python2.7 and visualstudiotools for you just by typing ~npm install windows-build-tools -g --production~ on CMD or Powershell as *Administrator*, and boost the download progress by ~npm config set registry https://registry.npm.taobao.org/~. 
+      2. Solution Two
+	 1. Install Python2.7 and configure it into  environment variable ~%PATH%~ manually.
+	 2. Install the giant /visual studio/ with CPP compiler and related library.
+
+** The options of ~node-gyp~
+   1. ~--dist-url~, use to specify the fixed URL of Node.js *cpp header tarball*.
+      #+begin_src bash
+      # For Global
+      --dist-url=https://atom.io/download/electron
+      # For China
+      --dist-url=https://npm.taobao.org/mirrors/atom-shell
+      #+end_src
+   2. ~--arch~, specify the operating system architecture of native addon which must match the arch of Node.js. (one of ~x86~ and ~x64~)
+      There are two ways to get the arch of Node.js, ~ai32~ means the arch is x86, otherwise ~x64~ means it is x64.
+      1. Run ~node -p "process.arch"~ on shell
+      2. Run ~require('os').arch()~ on Node REPL
+   3. ~--target~, specify the electron version of current project. (check by ~./node_modules/.bin/electron --version~)
+   4. ~--python~, specify the path to Python2.7 interpretor, if it has been set in ~%PATH%~ environment variable or set by ~npm config set python /path/to/python.exe~ , ignore this option.
+   5. ~--msvs_version=2015~, a fixed option, if you have set it by ~npm config set msvs_version 2015 --global~ , ignore this option.
+      - If this option is not 2015, there will be ~MSBUILD: error MSB4132: ...... available tool version is 4.0 or 14.0~
+
 * 打包
 主流的打包工具有 ~electron-builder~ 和 ~electron-packager~ 。
 
 ** electron-builder
+   Electron-builder provides two package solutions.
+   1. ~electron-builder --dir~, package all into directory as a version without installing.
+      - Dependencies: ~winCodeSign~
+   2. ~electron-builder~, package into a single executable file.
+      - Dependencies: ~winCodeSign~, ~nsis~
+  
+   How to solve the dependencies:
+   1. Download the compressed files(.7z) from https://github.com/electron-userland/electron-builder-binaries/releases;
+   2. Uncompress them to the ~%LOCALAPPDATA%\electron-builder\cache\winCodeSign~ and ~%LOCALAPPDATA%\electron-builder\cache\nsis~ respectively, as follows:
+      #+begin_src yml
+      %LOCALAPPDATA%/electron-builder/cache
+      /winCodeSign
+      --/winCodeSign-2.6.0
+      /nsis
+      --/nsis-3.0.4.1      
+      --/nsis-resources-3.4.1      
+      #+end_src
+
 *** 文件大小
     Electron项目内嵌整个V8引擎和Chromium内核，因此通过 ~electron-builder --dir~ 打包但尚未压缩的空项目大小已经达到121.MB，而压缩后则为36MB。
 *** 打包后的项目结构
@@ -216,7 +308,9 @@
              //   'x64',
              //   'ia32'
              // ]
-              "target": ["nsis","zip"] // 目标包类型 
+              "icon": "path/to/icon.ico",
+              "target": ["nsis","zip"] // 目标包类型
+	  "requestedExecutionLevel": "highestAvailable" // Ask for executing this application as Administrator every time. The value "highestAvailable" is the same as "requireAdminstrator". And the "asInvoker" is the default value.
              },
        "nsis": {
           // 是否一键安装，建议为 false，可以让用户点击下一步、下一步、下一步的形式安装程序，如果为true，当用户双击构建好的程序，自动安装程序并打开，即：一键安装（one-click installer）
@@ -255,6 +349,7 @@
        - MacOS: ~~/Library/Caches/electron/~
        - Windows: ~%LOCALAPPDATA%/electron/Cache~ or ~~/AppData/Local/electron/Cache/~
     解决方法：从淘宝的 ~~/AppData/Local/electron/Cache/httpscdn.npm.taobao.orgdistelectronv9.2.1electron-v9.2.1-win32-x64.zip~ 目录复制其中的 ~electron-v9.2.1-win32-x64.zip~ 到 ~~/AppData/Local/electron/Cache/~ 即可。
+    Download all kinds of electron from https://npm.taobao.org/mirrors/electron/9.3.2/
 
 *** 打包时包 ~react-script/node_modules/.......~ 无法解析的解决方案
     - 原因：
@@ -861,3 +956,5 @@
    fs.readFileAsync // 会自动在原函数名后添加Async。
    #+end_src
 
+* CORS
+  ~new BrowserWindow({webPreferences: {webSecurity: false}})~ disable CORS limited.

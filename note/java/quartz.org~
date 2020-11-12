@@ -1,0 +1,118 @@
+Quartz Jobs can be persisted into a database, or a cache, or in-memory. 
+In contrast to Spring's built-in task scheduling API does not support persistent jobs.
+
+** Basic Terminologies
+Scheduler
+The primary API for scheduling, unscheduling, adding and removing jobs.
+Created by factory generally, There are 2 kinds of scheduler factories.
+1. ~DirectSchedulerFactory~ which is not as convenience as ~StdSchedulerFactory~ does.
+2. ~StdSchedulerFactory~ which is the preferred one.
+And 3 implements of Scheduler: ~RemoteMBeanScheduler~, ~RemoteScheduler~ and ~StdScheduler~
+
+Job
+The interface to be implemented by the classes that represent a /job/ in Quartz. It has a single method called /execute()/ where you write the work that needs to be performed by the job.
+
+JobDetail
+A JobDetail is an instance of a Job. It also contains additional data in the form of ~JobDataMap~ that is passed to the job when it's executed.
+Every JobDetail is identified by ~JobKey~ that consists of a name and a group. The name must be unique within a group.
+
+Tirgger
+A Trigger, as the name suggests, defines the schedule at which a given job will be executed. A job can have many triggers, but a trigger can only be associated with one job.
+Every Trigger is identified by ~TriggerKey~ that comprises of a name and a group. The name must be unique within a group. 
+Just like ~JobDetail~, Triggers can also send parameters/data to the job.
+Four types: ~SimpleTrigger~, ~CornTrigger~, ~DateIntervalTrigger~ and ~NthIncludeDayTrigger~.
+
+JobBuilder
+JobBuilder is a fluent builder-style API to construct JobDetail instances.
+
+TriggerBuilder
+TriggerBuilder is a fluent builder-style  API to instantiate Triggers.
+
+** Configuration
+   There is a ~quartz.properties~ file which contains the default configuration for Quartz within the Quartz Jar.
+   The default priority from high to low of configuration files:
+   1. ~classpath:quartz.yml~
+   2. ~classpath:quartz.properties~
+   3. ~org/quartz/quartz.properties~
+   
+   You can load the configuration file programmatically as following:
+   #+begin_src java
+   StdSchedulerFactory.initialize("classpath:quartz.properties");
+   Scheduler = StdSchedulerFactory.getScheduler();
+   #+end_src
+
+*** Settings for Scheduler
+    #+begin_src bash
+    # Names the scheduler what you like.
+    org.quartz.scheduler.instanceName=logic-name-for-all-schedulers-construct-cluster
+    # The unique id of the scheduler instance within a cluster. Generate random uuid for you automatically when you set ~AUTO~ to it.
+    org.quartz.scheduler.instanceId=AUTO
+    org.quartz.scheduler.rmi.export=false
+    org.quartz.scheduler.rmi.proxy=false
+
+    # False as default, and determines enable JTA transaction or not by annotated the Job implements by @ExecuteInJTATransaction.
+    # True if enable UserTransaction before executing jobs, and commit transaction after the JobDataMap has been updated in stateful Job.
+    org.quartz.scheduler.wrapJobExecutionInUserTransaction=false
+    # The default value is 1. This means the max count of triggers can be held by a single scheduler instance.
+    org.quartz.scheduler.batchTriggerAcquisitionMaxCount=1
+    #+end_src
+
+*** Settings for Thread Pool
+    #+begin_src bash
+    
+    #+end_src
+
+*** Settings for Job Store
+
+** TODO Stateful Job
+
+** Integrated with Spring Boot
+   Spring Boot has built-in support for Quartz. It automatically creats a Quartz ~Scheduler~ bean with the configuration that we supplied in the ~application.properties~ file.
+   That's why we could directly inject the ~Scheduler~ in the controller.
+
+   1. Configuration for Quartz
+      #+begin_src properties
+      # QuartzProperties
+      spring.quartz.job-store-type=jdbc
+      spring.quartz.properties.org.quarz.threadPool.threadCount=5
+      #+end_src
+   2. Implements ~QuartzJobBean~ rather than ~Job~ in Spring Boot.
+      #+begin_src java
+      @Component
+      public class EmailJob extends QuartzJobBean {
+          @Override
+          protected void executeInternal(JobExecutionContext jobExecuteionContext) throws JobExecutionException {
+	  JobDataMap jobDataMap = jobExecuteionContext.getMergedJobDataMap();
+	  String subject = jobDataMap.getString("subject");
+          }	  
+      }
+      #+end_src
+
+
+#+begin_src java
+JobDataMap jobDataMap = new JobDataMap();
+jobDataMap.put("email", "");
+jobDataMap.put("subject", "");
+jobDataMap.put("body", "");
+
+JobDetail jobDetail = JobBuilder.newJob(EmailJob.class)
+  .withIdentity(UUID.randomUUID().toString(), "email-jobs")
+  .withDescription("Send Email Job")
+  .usingJobData(jobDataMap)
+  .storeDurably() // ???
+  .build();
+#+end_src
+
+#+begin_src java
+Trigger trigger = TriggerBuilder.newTrigger()
+  .forJob(jobDetail)
+  .withIdentity(jobDetail.getKey().getName(), "email-triggers")
+  .withDescription("Send Email Trigger")
+  .startAt(Date.from(startAt.toInstant()))
+  .withSchedule(SimpelScheduleBuilder.simpleSchedule().withMisfireHandlingInstructionFireNow())
+  .build()
+
+scheduler.scheduleJob(jobDetail, trigger);
+#+end_src
+** Misfire Mechanism
+

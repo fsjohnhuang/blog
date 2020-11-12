@@ -878,6 +878,10 @@ mvn install:install-file -Dfile=/path/to/jdbc6-11.2.0.3.jar -DgroupId=com.oracle
      </plugin>
      #+end_example
 
+** Debug Mode
+   Once the Maven debug level logging is enabled, it will print all the actions that it takes during the build process.
+   ~mvn <phase|goal> -X~
+
 * Maven Wrapper
 由于Maven插件可能和特定版本的Maven兼容，因此需要通过Maven Wrapper锁定项目所使用的Maven版本。
 mvnw实际调用的是.mvn/wrapper/maven-wrapper.jar中的 ~org.apache.maven.wrapper.MavenWrapperMain~ 。

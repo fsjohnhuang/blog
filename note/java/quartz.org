@@ -1,0 +1,216 @@
+Quartz Jobs can be persisted into a database, or a cache, or in-memory. 
+In contrast to Spring's built-in task scheduling API does not support persistent jobs.
+
+** Basic Terminologies
+Scheduler
+The primary API for scheduling, unscheduling, adding and removing jobs.
+Created by factory generally, There are 2 kinds of scheduler factories.
+1. ~DirectSchedulerFactory~ which is not as convenience as ~StdSchedulerFactory~ does.
+2. ~StdSchedulerFactory~ which is the preferred one.
+And 3 implements of Scheduler: ~RemoteMBeanScheduler~, ~RemoteScheduler~ and ~StdScheduler~
+
+Job
+The interface to be implemented by the classes that represent a /job/ in Quartz. It has a single method called /execute()/ where you write the work that needs to be performed by the job.
+
+JobDetail
+A JobDetail is an instance of a Job. It also contains additional data in the form of ~JobDataMap~ that is passed to the job when it's executed.
+Every JobDetail is identified by ~JobKey~ that consists of a name and a group. The name must be unique within a group.
+
+Tirgger
+A Trigger, as the name suggests, defines the schedule at which a given job will be executed. A job can have many triggers, but a trigger can only be associated with one job.
+Every Trigger is identified by ~TriggerKey~ that comprises of a name and a group. The name must be unique within a group. 
+Just like ~JobDetail~, Triggers can also send parameters/data to the job.
+Four types: ~SimpleTrigger~, ~CornTrigger~, ~DateIntervalTrigger~ and ~NthIncludeDayTrigger~.
+
+JobBuilder
+JobBuilder is a fluent builder-style API to construct JobDetail instances.
+
+TriggerBuilder
+TriggerBuilder is a fluent builder-style  API to instantiate Triggers.
+
+** Configuration
+   There is a ~quartz.properties~ file which contains the default configuration for Quartz within the Quartz Jar.
+   The default priority from high to low of configuration files:
+   1. ~classpath:quartz.yml~
+   2. ~classpath:quartz.properties~
+   3. ~org/quartz/quartz.properties~
+   
+   You can load the configuration file programmatically as following:
+   #+begin_src java
+   StdSchedulerFactory.initialize("classpath:quartz.properties");
+   Scheduler = StdSchedulerFactory.getScheduler();
+   #+end_src
+
+*** Settings for Scheduler
+    #+begin_src bash
+    # Names the scheduler what you like.
+    org.quartz.scheduler.instanceName=logic-name-for-all-schedulers-construct-cluster
+    # The unique id of the scheduler instance within a cluster. Generate random uuid for you automatically when you set ~AUTO~ to it.
+    org.quartz.scheduler.instanceId=AUTO
+    org.quartz.scheduler.rmi.export=false
+    org.quartz.scheduler.rmi.proxy=false
+
+    # False as default, and determines enable JTA transaction or not by annotated the Job implements by @ExecuteInJTATransaction.
+    # True if enable UserTransaction before executing jobs, and commit transaction after the JobDataMap has been updated in stateful Job.
+    org.quartz.scheduler.wrapJobExecutionInUserTransaction=false
+    # The default value is 1. This means the max count of triggers can be held by a single scheduler instance.
+    org.quartz.scheduler.batchTriggerAcquisitionMaxCount=1
+    #+end_src
+
+*** Settings for Thread Pool
+    #+begin_src bash
+    # Set the full qualified class name of  implement thread pool. The ~SimpleThreadPool~ is enough for common cases.
+    org.quartz.threadPool.class=org.quart.simpl.SimpleThreadPool
+    # The fixed thread count.
+    org.quartz.threadPool.threadCount=10
+    # The priority of thread.
+    org.quartz.threadPool.threadPriority=5
+    # True if the thread use the ClassLoader as the same at the initial thread to load the job.
+    org.quartz.threadPool.threadsInheritContextClassLoaderOfInitializingThread=true
+    # True if the scheduler thread is daemon.
+    org.quartz.threadPool.makeSchedulerThreadDaemon=true
+    #+end_src
+
+*** Settings for Job Store
+    #+begin_src bash
+    # Save the scheduler info in RAM which is light, fast but will be lost after reboot.
+    org.quartz.jobStore.class=org.quartz.simpl.RAMJobStore
+    # The maximum amount of milliseconds to determines the job had misfired or not.
+    org.quartz.jobStore.misfireThreshold=60000
+
+    # JobStoreTx means the application mananges the transaction by itself.
+    # JobStoreJTA means the transactions are managed by container.
+    org.quartz.jobStore.class=org.quartz.impl.jdbcjobstore.JobStoreTX
+    # Set the class to handle the difference between various databases. And ~StdJDBCDelegate~ would be enough for common cases.
+    org.quartz.jobStore.driverDelegateClass=org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+    # The prefix of related table name.
+    org.quartz.jobStore.tablePrefix=QRTZ_
+    # Match to the dataSource configuration name
+    org.quartz.jobStore.dataSource=myDs
+    # True if all the properties of JobDataMap are type of String. There is no need to serialize the value to store in the BLOB field.
+    org.quartz.jobStore.useProperties=true
+    # The maximum amount of milliseconds to determines the job had misfired or not.
+    org.quartz.jobStore.misfireThreshold=60000
+    # True if multiple scheduler instances consists of a cluster, and must be set to true if multiple schedulers use the same database.
+    org.quartz.jobSore.isClustered=false
+    # The heartbeat checkin interval of a cluster.
+    org.quartz.jobStore.clusterCheckinInterval=15000
+    # The maximum of misfires to be handled by the JobStore.
+    # Note that it would postpone the normal triggers execution if the value is set to 12 and above.
+    org.quartz.jobStore.maxMisfiresToHandleAtATime=20
+    # True to tell Quartz don't call setAutoCommit(false) when receive connection from datasource.
+    org.quartz.jobStore.dontSetAutoCommitFalse=false
+    # Query and lock a row from a table naming as ~LOCK~ prefix with ~tablePrefx~ property. The default value is as below.
+    org.quartz.jobStore.selectWithLockSQL=SELECT * FROM {0}LOCKS WHERE LOCK_NAME=? FOR UPDATE
+    # True to tell Quartz call setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE) of connection while using JobStoreTX or CMT.
+    org.quartz.jobStore.txIsolationLevelSerializable=false
+    #+end_src
+
+**** Tables for JDBCJobStore
+     - job_details, record detail information of each jobs.
+     - triggers, record info of triggers.
+     - corn_triggers, record info of cornTrigger.
+     - scheduler_state, record info of each schedulers such as health.
+     - fired_triggers, record the triggers which are executing.
+     - locks, record the pessimisitic locks to prevent the same job from being executed currently.
+
+*** Settings for datasource
+    #+begin_src bash
+    org.quartz.dataSource.<Name>.driver
+    org.quartz.dataSource.<Name>.URL
+    org.quartz.dataSource.<Name>.user
+    org.quartz.dataSource.<Name>.password
+    org.quartz.dataSource.<Name>.maxConnections
+    #+end_src
+
+** Stateful Job
+   The ~StatefulJob~ interface acts as a marker to tell Quartz executes the jobs in different ways according to the type.
+   And the ~StatefulJob~ is deprecated and has been replaced by ~@DisallowConcurrentExecution~ and/or ~@PersistentDataAfterExecution~.
+   ~@DisallowConcurrentExecution~, indicates the job should be executed serially.
+   ~@PersistentDataAfterExecution~, persist JobData after exection.
+
+   The JobDataMap which belongs to ~Trigger~ itself could be updated during job exection by ~JobExecutionContext#getTrigger().getJobDataMap()~, but it would not be persistent, and effect the next turn, either.
+   Otherwise the method to get the JobDataMap instance belongs to Job is ~JobExecutionContext#getJobDetail().getJobDataMap()~.
+
+***  The difference between Stateful Job and Stateless Job
+    1. The features of stateful job:
+       1. The reference to the same JobDataMap instance are being sharing among all turns of execution of the specified job;
+       2. Persists the JobDataMap after each execution.
+    2. The features of stateless job:
+       1. There is a brand new JobDataMap instance for each execution.
+       2. Persists the JobDataMap at the very beginning of job register.
+
+** Integrated with Spring Boot
+   Spring Boot has built-in support for Quartz. It automatically creats a Quartz ~Scheduler~ bean with the configuration that we supplied in the ~application.properties~ file.
+   That's why we could directly inject the ~Scheduler~ in the controller.
+
+   1. Configuration for Quartz
+      #+begin_src bash
+      # Because we would prefer 3th-party library as datasource, the org.quartz.jobStore.dataSource setting is unavailable.
+      # Therefore, set spring.quartz.job-store-type=jdbc as instead.
+      spring.quartz.job-store-type=jdbc
+      # True if the container would not stop until all jobs complete.
+      spring.quartz.wait-for-job-to-complete-on-shutdown=false
+      # False as default, which may throw ~java.lang.IllegalStateException: JobStore is shutdown - aborting retry~ sometimes.
+      # True if it is able to overwrite the existing jobs.
+      spring.quartz.overwrite-existing-jobs=false
+      # All settings in the quartz.properties can be set prefix with spring.quartz.properties
+      spring.quartz.properties.org.quartz.threadPool.threadCount=5
+      #+end_src
+   2. Implements ~QuartzJobBean~ rather than ~Job~ in Spring Boot.
+      #+begin_src java
+      @Component
+      public class EmailJob extends QuartzJobBean {
+          @Override
+          protected void executeInternal(JobExecutionContext jobExecuteionContext) throws JobExecutionException {
+	  JobDataMap jobDataMap = jobExecuteionContext.getMergedJobDataMap();
+	  String subject = jobDataMap.getString("subject");
+          }	  
+      }
+      #+end_src
+
+#+begin_src java
+JobDataMap jobDataMap = new JobDataMap();
+jobDataMap.put("email", "");
+jobDataMap.put("subject", "");
+jobDataMap.put("body", "");
+
+JobDetail jobDetail = JobBuilder.newJob(EmailJob.class)
+  .withIdentity(UUID.randomUUID().toString(), "email-jobs")
+  .withDescription("Send Email Job")
+  .usingJobData(jobDataMap)
+  .storeDurably() // ???
+  .build();
+#+end_src
+
+#+begin_src java
+Trigger trigger = TriggerBuilder.newTrigger()
+  .forJob(jobDetail)
+  .withIdentity(jobDetail.getKey().getName(), "email-triggers")
+  .withDescription("Send Email Trigger")
+  .startAt(Date.from(startAt.toInstant()))
+  .withSchedule(SimpelScheduleBuilder.simpleSchedule().withMisfireHandlingInstructionFireNow())
+  .build()
+
+scheduler.scheduleJob(jobDetail, trigger);
+#+end_src
+** Misfire Mechanism
+*** What situation would occur misfire?
+    1. The scheduler has been closed;
+    2. There is no available thread to execute the jobs;
+    3. The process has been restarted;
+    4. Because of the serial execution of the jobs, some jobs misfire.
+
+*** Solution for misfire
+    The misfire instruction is a configuration of ~Trigger~. The default value is ~Trigger.MISFIRE_INSTRUCTION_SMART_POLICY~ which means difference to different types of Trigger.
+    1. Available misfire instruction of CornTrigger
+       - ~CornTrigger.MISFIRE_INSTRUCTION_IGNORE_MISFIRE_POLICY~, executes all misfired jobs immediately.
+       - ~CornTrigger.MISFIRE_INSTRUCTION_DO_NOTHING~, skips all misfired jobs, and executes the jobs of next round.
+       - ~CornTrigger.MISFIRE_INSTRUCTION_FIRE_ONCE_NOW~, the default value to CornTrigger, executes the latest misfired job immediately.
+    2. Available misfire instruction of SimpleTrigger
+       - ~SimpleTrigger.MISFIRE_INSTRUCTION_FIRE_NOW~, as the default value if ~Repeat~ is 0. Executes all misfired jobs right now.
+       - ~SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT~,  as default if ~Repeat~ is ~REPEAT_INDEFINITELY~. Skips the misfired jobs.
+       - ~SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT~, as default if ~Repeat~ is greater than 0.
+
+** TODO Cluster
+   

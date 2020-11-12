@@ -3286,6 +3286,7 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
 * Spring Boot
   通过 [[https://start.spring.io/][Spring Initializr]] https://start.spring.io/ 初始化项目。
 
+** TODO Spring Boot CLI
 ** Spring Boot的Maven插件
    1. 插件配置
       #+begin_src xml
@@ -3453,9 +3454,12 @@ Spring Boot打包时可以内置Tomcat或Jetty。
       public class MyProperties {
       }
       #+end_src
-   3. 启动时加载自动配置类
+   3. 启动时加载自动配置类（借鉴了SPI机制）
       将标记@Configuration的自动配置类的全限定类名，放在classpath的META-INF/spring.factories文件中的 ~org.springframework.boot.autoconfigure.EnableAutoConfiguration~ 中。
       - 注意：内部Configuration执行完成才会执行外部Configuration。
+      - 内部原理浅析：
+	使用starter的项目需要通过 ~@EnableAutoConfiguration~ 注解告知Spring容器通过 ~org.springframework.core.io.support.StringFactoriesLoader~ 将 ~META-INF/spring.factories~ 中key为 ~EnableAutoConfiguration~ 的所有value加载出来，然后可以进行常规的 ~@Configuration~ 配置类解析。
+	而 ~@SpringBootApplication~ 中包含 ~@EnableAutoConfiguration~ 。
    4. Starter开发模式
       1. xxx-starter项目为一个空JAR文件，仅提供辅助性依赖管理，这些依赖可能用于自动装配或者其他类库，并引用xxx-starter-autoconfigurer项目。
       2. xxx-starter-autoconfigurer项目内包含自动配置的内容
@@ -3478,11 +3482,27 @@ Spring Boot打包时可以内置Tomcat或Jetty。
 	- 后缀 ~-spring-boot-starter~
 	- 模式 模块名-spring-boot-starter
 	- 举例 mybatis-spring-boot-starter
-
+	  
 *** 元数据配置
+    在依赖starter的项目中执行如下操作
+    1. 引入spring-boot-configuration-processor依赖项
+       #+begin_src xml
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-configuration-processor</artifactId>
+           <optional>true</optional>
+           <!--
+	   It's a best practice to add a dependency as optional in Maven in order to prevent @ConfigurationProperties from being applied to other modules that our project uses.
+           -->
+       </dependency>
+       #+end_src
+       - ~spring-boot-configuration-processor~ 的作用
+	 Provide us with a Java annotation invoked when we build our project. The configuration processor scans for classes and methods with ~@ConfigurationProperties~ annotation to access the configuration parameters and generate configuration metadata.
+    2. 在Intellij IDEA中需要安装Spring Assistant插件
+       - 启用Enable annotation processing，勾选 Settings/Build, Execution & Deployment/Compiles/Annotation Processors/Enable annotation processing。
 
 **** 基础方式
-     1. 在resouces/META-INF创建spring-configuration-metadata.json文件
+     1. 在resouces/META-INF创建spring-configuration-metadata.json文件 或 additional-spring-configuration-metadata.json
      2. 配置如下格式信息
 	#+begin_src js
 	{
@@ -3505,7 +3525,115 @@ Spring Boot打包时可以内置Tomcat或Jetty。
 	}
 	#+end_src
 
+***** 属性讲解
+      Group：用于定义ConfigurationProperties的描述信息
+      /Groups/ are higher-level items used to group other properties, without specifying a value itself.
+
+      Property：用于定义Group描述的ConfigurationProperties类中属性的描述信息
+      /Properties/ are configuration items for which we can specify a value. These properties are set in .properties or .yml files and can have extra information, like default values and validations.
+
+      Hint：用于定义具体属性的可选择值以及可选择值的描述信息
+      /Hints/ are additional information to help the user set the property value. For example, if we have a set of allowed value for a property. we can provide a description of what each of them does. The IDE will provide auto-completion help for these hints.
+
+      Group属性
+      | Name         | Type   | Description                                                                                                                                                                                 |
+      |--------------+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+      | name         | String | Required. The property name of this group.  Set the value as same as the prefix property of ~@ConfigurationProperties~ which this group described.                                          |
+      | type         | String | Optional. The full qualified class name of class which is annotated by ~@ConfigurationProperties~, or the full qualified class name of the return value of the method annotated by ~@Bean~. |
+      | description  | String | Optional. The brief introdution for the group. Recommend a brief description as the first paragraph, and the last sentence is end with full stop.                                           |
+      | sourceType   | String | Optional. The full qualified class name of the class which contains the method anntotated by ~@Bean~ whose return value is described by this group.                                         |
+      | sourceMethod | String | Optional. The full method signature(includes square and parameter types) whose return value is described by this group.
+
+      Property属性
+      | Name         | Type       | Description                                                                                                                                                           |
+      |--------------+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+      | name         | String     | Required. The full name of the property in lower case separated by hyphen(e.g. server.servlet-path).                                                                  |
+      | type         | String     | Optional. The full qualified class name of this property. Use the wrapper class name rather than the primitive type(e.g. replace ~boolean~ with ~java.lang.Boolean~ ) |
+      | description  | String     | Optional.                                                                                                                                                             |
+      | sourceType   | String     | Optional. Set to the full qualified class name of the class annotated by ~@ConfigurationProperties~ if this property is belong to a class.                            |
+      | defaultValue | Object     | Optional. The default value of this property. Empty array if the ~type~ attribute is a kind of ~Array~.                                                               |
+      | deprecation  | Deprecated | Optional.  Indicate this property is deprecated when this attribute exists.                                                                                           |
+      
+      Deprecated属性
+      | Name         | Type       | Description                                                                                                                                                           |
+      |--------------+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+      | level        | String     | Optional. ~WARN~ as default value which can be used as usual. ~ERROR~ is out of control.                                                                              |
+      | reason       | String     | Optional. The brief reason for deprecation.                                                                                                                           |
+      | replacement  | String     | Optional. The replacement for the deprecated property.                                                                                                                |
+
+      Hint属性
+      | Name      | Type            | Description |
+      |-----------+-----------------+-------------|
+      | name      | String          | Required. The full name of the property in lower case separated by hyphen. Indicate the keys and values of a map by suffixed by ~keys~ and ~values~. (e.g. ~system.context.keys~, ~system.contexgt.values~ |
+      | values    | ValueHint[]     | Required. A list of ValueHints to describe valid values. |
+      | providers | ValueProvider[] | Optional.            |
+      ValueHint属性
+      | Name        | Type   | Description                                                                            |
+      |-------------+--------+----------------------------------------------------------------------------------------|
+      | value       | Object | Required. The valid value for specified property. Set an array if the type is ~Array~. |
+      | description | String | Optional.                                                                               |
+      ValueProvider属性
+      | Name       | Type        | Description                                                                                     |
+      |------------+-------------+-------------------------------------------------------------------------------------------------|
+      | name       | String      | The full qualified class name of the provider which provide extra information of this property. |
+      | parameters | JSON object | Optional.                                                                                       |
+
+      The full qualified class name for an inner class likes ~com.xxx.test.C$Server~.
+
+****** Deprecation of a property
+       #+begin_src js
+       {
+           "name": "my.property",
+           "deprecation": {
+	   "replacement": "my.new-property",
+                "reason": "This property is no longer needed."
+           }
+       }
+       #+end_src
+       或者在被废弃的属性上添加 ~@DeprecatedConfigurationProperty~
+
+****** Provider of a property
+       1. Class Reference Provider. Set the list of implements of the specified interface as the set of allowed values to this property.
+	  #+begin_src js
+	  {
+	       "name": "my.property",
+                    "providers": [{
+		    "name": "class-reference",
+                              "parameters": {
+                                  "target": "com.my.IStrategy" // The allowed list of values is consist of the implements of com.y.IStrategy interface.
+                              }
+                    }] 
+	  }
+	  #+end_src
+       2. Handle As Provider. Let IDE treat the String property as a Resource without creating an explicit dependency.
+	  #+begin_src js
+	  {
+	       "name": "my.property",
+                    "providers": [{
+		    "name": "handle-as",
+                              "parameters": {
+                                  "target": "org.springframework.core.io.Resource" // classpath:, file:, http: an so on are can be used in this property.
+                              }
+                    }] 
+	  }
+	  #+end_src
+
+       https://docs.spring.io/spring-boot/docs/1.3.1.RELEASE/reference/html/configuration-metadata.html#_value_provider
+
 **** 自动方式
+     1. 在starter项目中添加 ~spring-boot-configration-processor~ 依赖
+     2. 执行编译后，在 *target/classes/META-INF* 目录下会生成spring-configuration-metadata.json文件。
+     3. 属性的Javadoc信息会被填写到description属性中。
+     4. 然后将 *target/classes/META-INF/spring-configuration-metadata.json* 复制到 *src/main/resource/META-INF/* 即可。(若src目录下存在该文件，那么就会自动根据注解在target目录下生成该文件)
+
+*** TODO 内部原理浅析
+    spring-core包中定义的SpringFactoriesLoader类检查META-INF/spring.factories文件，并获取直接接口的配置功能：
+    - loadFactories 遍历整个ClassLoader中所有Jar包下的spring.factories文件，并根据接口类型获取其实现类的名称，返回对象列表。
+    - loadFactoryNames 遍历整个ClassLoader中所有Jar包下的spring.factories文件，并根据接口类型获取其实现类的名称，返回类名列表。
+
+    ClassLoader的用法？？
+    Enumeration<URL> urls = classLoader.getResources
+    Enumeration<URL> urls = classLoader.getSystemResources
 
 ** 参数配置
 
@@ -3522,7 +3650,7 @@ Spring Boot打包时可以内置Tomcat或Jetty。
     10. ~@Configuration~ 注解类上的 ~@PropertySource~
     11. 通过 ~SpringApplication.setDefaultProperties~ 指定的默认属性
 
-** 日志
+** TODO 日志
    Spring Boot内置Logback作为日志框架。
 
 * TODO QA
