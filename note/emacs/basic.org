@@ -1,3 +1,38 @@
+* How to Install Emacs 27.x
+1. Add PPA Repository ~sudo add-apt-repositry ppa:kelleyk/emacs~
+2. Install by APT
+   #+begin_src bash
+   sudo apt update
+   sudo apt install emacs27
+   #+end_src
+3. Uninstall
+   #+begin_src bash
+   sudo add-apt-repository --rmove ppa:kelleyk/emacs
+   sudo apt remove --autoremove emacs27
+   #+end_src
+
+** Issue: Unmet Dependencies
+   The *unmet dependencies* will be thrown whenever you run ~apt-get upgrade~ or ~apt-get install~, if there were broken before.
+   The solutions are:
+   1. Install the dependencies with ~--fix-broken~ option
+      #+begin_src bash
+      sudo apt --fix-broken install
+      sudo apt-get update
+      # If the above solution does not work, try the second one.
+      #+end_src
+   2. Remove the application which cause this problem.
+
+* What is PPA source?
+  PPA means Personal Package Archives as all are hosted on launchpad.net for Ubuntu users.
+  There are *daily*, *dev*, *stable* and *beta* version of each application that you can choose as you like.
+
+  #+begin_src bash
+  sudo add-apt-repository ppa:chromium-daily/stable # Add https://launchpad.net/~choromium-daily/+archive/daily to local apt source.
+  sudo apt-get update
+  sudo apt-get install chromium-daily
+  #+end_src
+
+
 * TODO 包仓库
   中国大陆镜像：http://elpa.emacs-china.org/
 
@@ -181,17 +216,36 @@ function kill-emacs(){
 ~ec~ 新建一个图形化窗口(frame)编辑，若连接不到X Server则打开一个新虚拟终端编辑
 ~e~ 在当前终端编辑
 ~kill-emacs~ 关闭后台服务
-* Ternimal Emulation
+* Shell and Ternimal Emulation
+** The Inferior Shell
+
+All external, interactive shells(e.g. ~M-x shell~ and ~M-x python-shell~) in Emacs are derived from *comint-mode*.
+~M-x shell~ runs a the *inferior shell* as is the wrapper around your default shell. It is governed by ~explicit-shell-file-name~, ~ESHELL~ environment variable or ~shell-file-name~, in that order.
+
+
+All *shell* does is redirect the input and output to Emacs, and that means interactive console(like top, ssh, etc.) won't work properly.
+
+** Terminal Emulator
 https://www.gnu.org/software/emacs/manual/html_node/emacs/Terminal-emulator.html#Terminal-emulator
 
-** eshell
-退出时会自动切换到最近一个buffer。
+The Emacs terminal emulator is exactly that: it emulates the VT100-style ANSI escape codes, just like *xterm* or *rxvt*.
+It isn't complete or perfect, but most things like ~top~ and ~ssh~ will work properly. To run the terminal emulator, type ~M-x term~ or ~M-x ansi-term~ (for full ANSI support).
 
-** ansi-term
-模拟终端功能比其他全面。
-https://www.emacswiki.org/emacs/AnsiTermHints
+*line mode* enabled by ~C-c C-j~, the terminal buffer will behave much like *shell mode* and normal Emacs buffers.
+*char mode* enabled by ~C-C C-k~, each character is sent directly to the underlying inferior shell without preprocessing by Emacsd.
 
-1) line-mode 可以像文本编辑一样移动光标
-   - 切换热键 ~C-c C-j~
-2) char-mode 终端模式
-   - 切换热键 ~C-c C-k~
+** The Emacs Shell (eshell)
+EShell is written entirely in EmacsLisp. To invoke it, run ~M-x eshell~.
+1. EShell is a feature-rich replacement for your standard-fare shells linke *bash* with the added bonus of working on any platform Emacs runs on.
+2. EShell has gone to some lengths to keep the syntax familiar with *bash*.
+3. EShell is clever enough to redirect certain commands that Emacs itself offers, such as ~man~, ~grep~ and so on.
+4. woefully underdocumented.
+* projectile
+  插件：counsel-projectile
+
+** 配置
+   #+begin_src elisp
+   (projectile-global-mode)
+   (setq projectile-enable-caching t)
+   (global-set-key (kbd "<f5>") 'projectile-find-file) ;; 通过文件名全项目范围内搜索文件
+   #+end_src

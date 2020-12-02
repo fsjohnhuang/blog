@@ -1,0 +1,17 @@
+* Java 8 VMOptions
+-X
+-XX:<[+-]<property>|<property>=<value>>
+-D<property>=<value>
+
+** ~-Xms<heap size>[g|m|k]~ and ~-Xmx[heap size>[g|m|k]~
+Specify the initial/minimum and maximum value for the JVM heap memory.
+For servers, both params should have the same value to avoid heap resizing during runtime.
+
+** ~-XX:MaxMetaspaceSize=<metaspace size>[g|m|k]~
+Java 8 has no *PermGen* (Permanent Generation) but requires additional *Metaspace* memory instead to store class meta data information.
+The default size is unlimited. There is a potential risk that the JVM hogs all memory of the server when the application goes wrong.
+
+** ~-server~ 
+JVM runs in server mode which is the default value for all 64-bits JVMs. 
+JVM will collect more data about the Java byte code during program execution and generate the most efficient machine code via JIT.
+

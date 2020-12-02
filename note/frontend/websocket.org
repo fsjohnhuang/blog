@@ -1,0 +1,330 @@
+WebSocket协议诞生于2008年，并于2011年成为标准。
+特点：
+1. 基于TCP协议, bi-direction, full-duplex, persistent connection；
+2. 与HTTP协议兼容性好，默认端口号为80和443，并且Handshake/Acknowledgement阶段采用HTTP协议，能通过各种HTTP代理服务器；
+3. 数据格式较清量，性能开销小，通信效率高；服务端到客户端的数据包头只有2到10字节，客户端到服务端则2到10字节另加4字节的掩码。而HTTP则必须携带完整的包头。
+4. 可以发送文本和二进制数据；
+5. 没有同源策略的限制；
+6. 协议标识符为 ~ws~ 和加密版本（即WS协议和TCP协议之间增加一层TLS协议）的 ~wss~ ，服务地址为URL。
+
+* 浏览器原生API
+  #+begin_src js
+  const ws = new WebSocket('ws://localhost:8080')
+
+  // 连接成功后的回调函数
+  ws.onopen = event => {
+
+    // 向服务端发送字符串
+    ws.send('Hello Server!')
+
+    // 向服务端发送Blob对象
+    ws.send(document.querySelector('input[type="file"]').files[0])
+
+    // 向服务器发送ArrayBuffer对象
+    let img = canvas_context.getImageData(0,0,400,300)
+    let binary = new Uint8Array(img.data.length)
+    for (let i = 0; i < img.data.length; i++){
+      binary[i] = img.data[i]
+    }
+    ws.send(binary.buffer)
+
+    // 只读属性，表示还剩下多少字节的二进制数据没有发送出去，从而判断发送是否结束。
+    if (ws.bufferedAmount === 0) {
+      // 关闭连接，参数签名为[code, [reason]]
+      // code, A numeric value indicating the status code explaining why the connection is being closed. 1005 as default value.(The permitted values: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent#Status_codes)
+      // reason, A human-readable string explaining why the connection is being closed. This string must be no longer than 123 bytes of UTF-8 text.
+      ws.close()
+    }
+  }
+
+
+  // 接收到服务器数据后的回调函数
+  ws.onmessage = event => {
+    // 根据接收到的数据类型，进行处理。
+
+    if (typeof event.data === String) {
+      // 接收到的是文本数据
+    }
+    if (typeof event.data === Blob || typeof event.data === ArrayBuffer) {
+      // 接收到的是二进制数据
+    }
+  }
+
+  // 将接收到的二进制数据转换为指定类型进行处理
+  ws.binaryType = "blob"
+  ws.onmessage = event => {
+    event.data.size
+  }
+
+  ws.binaryType = "arraybuffer"
+  ws.onmessage = event => {
+    event.data.byteLength
+  }
+
+
+  // 连接关闭后的回调函数
+  ws.onclose = event => {
+    const code = event.code
+    const reason = event.reason
+    const wasClean = event.wasClean
+  }
+
+  // 报错的回调函数
+  ws.onerror = event => {}
+
+  // 只读属性，表示连接状态
+  // 0 - 连接尚未建立
+  // 1 - 连接已经建立，可以进行通信
+  // 2 - 连接正在关闭
+  // 3 - 连接已经关闭或无法打开
+  ws.readyState
+
+
+  // 只读属性，表示服务端选择的子协议
+  ws.protocol
+  // 只读属性，表示WebSocket的绝对路径
+  ws.url
+  // 只读属性，表示服务端选择扩展组件
+  ws.extensions
+  #+end_src
+
+* 握手阶段的请求响应报文
+  1. 客户端HTTP请求报文
+     #+begin_src text
+     GET / HTTP/1.1
+     Upgrade: websocket # 表示希望连接升级为WebSocket协议
+     Connection: Upgrade # 表示客户端希望连接升级
+     Host: example.com
+     Origin: http://example.com
+     Sec-WebSocket-Key: sN9cxoing/xong== # 随机字符串，服务端将该值加上一个特殊字符串"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"，然后计算SHA-1摘要并进行BASE64后作为Sec-WebSocket-Accept响应头的值。
+     Sec-WebSocket-Version: 13 # 表示WebSocket的版本号，13及以上才是正式版本。
+     Sec-WebSocket-Protocol: chat, superchat # 自定义的子协议，表示客户端在相同的URL下请求的不同服务
+     #+end_src
+  2. 服务端HTTP响应报文
+     #+begin_src text
+     HTTP/1.1 101 Switching Protocols
+     Upgrade: WebSocket
+     Connection: Upgrade
+     Sec-WebSocket-Accept: fxoings123=
+     Sec-WebSocket-Location: ws://example.com/
+     Sec-WebSocket-Protocol: chat # 自定义的子协议，表示最终使用的子协议
+     #+end_src
+
+* TODO SocketIO
+  将WebSocket、AJAX和其它底层通信方式封装成统一的高层通信接口，提供基于事件的实时双向通信机制。
+
+  注意：
+  SocketIO的服务端和客户端必须配套使用，即
+  1. 前端无法通过原生WebSocket API与SocketIO服务端通信。
+  2. SocketIO前端必须配合SocketIO服务端才能通信。
+
+* TODO SockJS
+  WebSocket的兼容库，对于不支持WebSocket的浏览器则自动降级采用轮询方式通信。
+  项目下包含SockJS-client前端库和其他各语言和框架的服务端库。
+  注意：
+  1. SockJS的服务端和客户端必须配套使用。
+  2. 没有内置掉线重连功能，需要开发者自行解决。
+
+** SockJS-client API Reference
+   1. 模拟原生WebSocket的API
+   2. 但由于需要执行优雅降级，因此 ~new Sockjs(url: string)~ 中的url仅支持http和https协议，而不支持ws和wss协议的url。
+
+** Integrate with Spring
+   Spring 4提供基于Sockjs协议的透明回退选项。
+
+*** 广播
+**** Server Side
+     1. Configuration
+        #+begin_src java
+        @Configuration
+        @EnableWebSocketMessageBroker // 启动异步消息Broker配置
+        public class WebSocketMessageBrokerConfig extends AbstractWebSocketMessageBrokerConfigurer {
+            @Override
+            public void configureMessageBroker(MessageBrokerRegistry registry) {
+                // 设置以/topic和/notice为前缀的两个独立的异步消息Broker。
+                // SimpleBroker采用组播的消息转发机制，即订阅者均能收到消息。
+                registry.enableSimpleBroker("/topic", "/notice");
+                // 点对点使用的消息发送前缀，默认为/user
+                // 即仅有一个订阅者可以收到消息。
+                // registry.setUserDestinationPrefix("/user");
+
+                // 设置WebSocket客户端发送消息时的目标地址标识的前缀，即该 前缀+@MessageMapping参数 即为客户端发送消息的目标地址标识。
+                registry.setApplicationDestinationPrefixes("/app");
+
+                // TODO
+                // registry.setCacheLimit(int cacheLimit)
+                // registry.setPathMatcher(PathMatcher pathMatcher)
+                // registry.setPreservePublishOrder(boolean preservePublishOrder)
+                // registry.setUserRegistryOrder(int registryOrder)
+            }
+
+            @Override
+            public void registerStompEndpoints(StompEndpointRegistry registry) {
+                // 暴露STOMP服务端接入点，客户端必须通过接入点与服务端建立连接后，然后才能相互通信。
+                registry.addEndpoint("/endpoint1", "/endpoint2"); // 暴露两个原生WebSocket的STOMP接入点
+                registry.addEndpoint("/endpoint1", "/endpoint2").withSockJS(); // 暴露两个遵循SockJS协议的STOMP接入点
+                registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("http://example1.com", "http://example2.com"); // 暴露两个原生WebSocket的支持跨域访问的STOMP接入点
+                registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("*").withSockJS(); // 暴露两个遵循SockJS协议的支持跨域访问的STOMP接入点
+            }
+        }
+        #+end_src
+     2. Handler
+        #+begin_src java
+        @Controller
+        public class WebSocketController {
+
+            /* 客户端向destination为/app/chat发送的消息会被该Handler Method处理，并且其处理结果会被转发到/topic/messages的Broker中。
+             * 1. Handler Method的返回值经过序列化后再转发到Broker；
+             * 2. 消息会以组播形式发送给所有订阅/topic/messages的客户端。
+             */
+            @MessageMapping("/chat1")
+            @SendTo("/topic/messages")
+            public Message say(String message) {
+                return Message
+                         .type("normal")
+                         .content(message)
+                         .build();
+            }
+
+            @Autowired
+            private SimpMessagingTemplate messagingTemplate;
+
+            // 效果和say方法一样
+            @MessageMapping("/chat2")
+            public void say2(String message) {
+                Message msg = Message
+                                .type("normal")
+                                .content(message)
+                                .build();
+                messagingTemplate.convertAndSend(msg);
+            }
+
+            // 通过RESTful API暴露消息发送接口
+            @RequestMapping("/chat3")
+            @ResponseBody
+            public ResponseEntity say3(String message) {
+                Message msg = Message
+                                .type("normal")
+                                .content(message)
+                                .build();
+                messagingTemplate.convertAndSend(msg);
+                return ResponseEntity.ok().build();
+            }
+        }
+        #+end_src
+     3. Transfer Object
+        #+begin_src java
+        @builder
+        public class Message {
+            private String type;
+            private String content;
+        }
+        #+end_src
+
+**** Client Side
+     #+begin_src js
+     const Sockjs = require('sockjs-client')
+     const Stomp = require('stompjs')
+
+
+     class MQClient {
+         constructor(id, client, factory) {
+             this.id = id
+             this.client = client
+             this.factory = factory
+         }
+
+         send(destination, header, payload) {
+             this.client.send(destination, header || {}, payload)
+         }
+
+         subscribe(destination, handler) {
+             this.client.subscribe(destination, handler)
+         }
+
+         close() {
+             this.factory.__removeClientRef(this.id)
+         }
+     }
+
+     class MQClientFactory {
+         constructor() {
+             this.clientRefs = []
+             this.heartBeatRef = null
+         }
+
+         connect(header, url) {
+             const client = Stomp.over(new Sockjs(url))
+             return new Promise(resolve => {
+                 client.connect(header || {}
+                     , frame => {
+                         const id = (+new Date())
+                         this.clientRefs.push({
+                             id,
+                             client,
+                         })
+                         // Enable Heart Beat
+                         if (this.heartBeatRef === null) {
+                             this.heartBeatRef = setInterval(5000, () => {
+                                 this.clientRefs.forEach(clientRef => {
+                                     clientRef.client.send('Heart Beat')
+                                 })
+                             })
+                         }
+
+                         resolve(new MQClient(id, client, this))
+                 })
+         }
+
+         __removeClientRef(id) {
+             const index = this.clientRefs.findIndex(clientRef => clientRef.id === id)
+             if (index !== -1) {
+                 this.clientRefs.splice(index, 1)
+                 if (this.clientRefs.length === 0) {
+                     clearInterval(this.heartBeatRef)
+                     this.heartBeatRef = null
+                 }
+             }
+         }
+     }
+     const mqClientFactory = new MQClientFactory()
+
+     ;(async function()
+         const client = await mqClientFactory.connect({}, 'http://localhost:8080/chat')
+         client.subscribe('/topic/message', console.log)
+         client.send('/apps/chat', {}, 'hi')
+         setTimeout(10000, () => {
+             client.close()
+         })
+     })()
+     #+end_src
+
+*** TODO 单播
+
+* STOMP(Simple/Streaming Text-Orientated Messaging Protocol)
+  定义一套可交互操作的消息协议，允许STOMP客户端与任意STOMP消息代理（Broker）进行通信。
+  STOMP协议可以基于WebSocket和其他应用层协议之上。
+  如同HTTP是基于TCP/IP连接上添加请求-响应模型层一样，STOMP则在WebSocket上提供基于帧的线路格式曾，用于定义消息语义。
+
+** Web前端工具库STOMP.js(https://github.com/jmesnil/stomp-websocket)
+   1. 下载安装
+   2. 问题
+      1. 由于stompjs可用于浏览器和Nodejs服务端，因此通过Webpack作为模块加载器在浏览器中通过 ~require('stompjs')~ 引入将报 ~Module not found: Error: Can't resolve 'net'~ 的异常。可通过如下方式解决
+         1. 通过 ~require('stompjs/lib/stomp')~ 引入
+         2. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
+            #+begin_src js
+            resolve: {
+                 alias: {
+                     stompjs: path.join(__dirname, 'node_modules', 'stompjs', 'lib', 'stomp.js')
+                 }
+            }
+            #+end_src
+         3. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
+            #+begin_src js
+            node: {
+                net: 'empty'
+            }
+            #+end_src
+
+* TODO 问题
+  1. 掉线自动重连

@@ -1,0 +1,57 @@
+* 组成
+Subject: 应用程序操作Shiro的对象，底层操作全部是调用SecurityManager。
+Realm: 作为数据源并执行Authentication和Authrization。
+SessionManager: Shiro可用于Servlet、EJB和桌面程序，因此抽象SessionManager模块用于管理各类应用类型的Session。并且可实现跨Servlet、EJB等共享Session实现身份验证服务。
+SessionDAO: 为SessionManager提供持久化操作。
+CacheManager: 管理用户、角色、权限等的缓存信息。
+
+
+* Integrated with Spring Boot
+  In a web application, all Shiro-accessible web requests must go through a master *Shiro Filter*.
+  This filter allows for ad-hoc custom filter chains to be executed based on any URL path expression.
+
+* TODO Subject
+
+* Filter
+
+~authc~ is corresponding to ~org.apache.shiro.web.filter.authc.FormAuthenticationFilter~ inner implemention class.
+~anon~ is corresponding to ~org.apache.shiro.web.filter.authc.AnonymousFilter~ inner implemention class.
+
+** Customized Filter
+
+   #+begin_src java
+   public class CustomizedFilter extends AccessControlFilter {
+
+       @Override
+       protected boolean isAccessAllowed(ServletRequest request, ServletResponse response, Object o) throws Exception {
+           return false;
+       }
+
+       @Override
+       protected boolean onAccessDenied(ServletRequest request, ServletResponse response) throws Exception {
+           /**
+            * 返回true，则继续执行后续的过滤器。
+            * 返回false，表示过滤器责任链执行结束，不再执行后续的过滤器。
+            */
+           return false;
+       }
+   }
+   #+end_src
+
+* Realm
+
+** Multiple Realms
+
+* Exception
+  1. UnknownAccountException
+     作为AuthenticationException的子类，表示用于不存在。
+  2. ExcessiveAttemptsException
+     表示登录次数超过预设阈值。
+  3. IncorrectCredentialsException
+     表示密码不匹配。
+  4. LockedAccountException
+     表示用户已锁定。
+  5. ExpiredCredentialException
+     表示登录凭证已过期。
+  6. AuthenticationException
+     表示身份验证异常。

@@ -370,6 +370,9 @@ end
    3) 执行扩容 ~VBoxManage modifyhd 你的uuid --resize 40960~
    4) 重新添加到到对应虚拟机的SATA Contorller下即可
 
+** TODO VirtualBox
+
+
 * 监控
 
 *** 日志收集分析-ELK

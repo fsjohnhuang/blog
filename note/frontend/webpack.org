@@ -1,4 +1,6 @@
 * Webpack简介
+  由德国开发者Tobias Koppers开发的模块加载器。
+
   1) 一切皆模块
   2) 可以完成如下事宜
      1) 代码转换
@@ -11,7 +13,9 @@
 
 * 安装
   #+begin_example bash
-  npm install webpack webpack-cli --save-dev
+  npm install webpack-cli -g
+  npm install webpack webpack-dev-server --save-dev
+
 
   # 检查安装是否成功
   ./node_modules/.bin/webpack -v
@@ -25,6 +29,7 @@
    1) 单页面
       #+begin_example js
       const path = require("path")
+      const HtmlWebpackPlugin = require("html-webpack-plugin")
 
       module.exports = {
         mode: "prodcution",
@@ -40,7 +45,10 @@
           // 设置所有对打包资源URL的前缀
           // 如打包资源打包后路径为/img/main.css，那么页面引用时则变为http://www.cdn.com/img/main.css
           publicPath: "http://www.cdn.com"
-        }
+        },
+        plugins: [
+          new HtmlWebpackPlugin({title: 'Ouput Management})
+        ]
       }
       #+end_example
    2) 多页面
@@ -1488,3 +1496,19 @@
             }
             #+end_example
           - 默认为过滤 ~.git,node_modules,bower_components,.nyc_output,coverage,scss-cache~
+  2) Webpack5下执行 ~webpack-dev-server --open~ 或 ~npx webpack-dev-server~ 报 ~Error: Cannot find module 'webpack-cli/bin/config-yargs'~
+     - 原因: the version of Webpack, Webpack-cli and Webpack-dev-server must be match.
+     - 解决方法1: 将依赖修改为
+       1. 降级webpack-cli
+          #+begin_src js
+          "webpack": "^5.4.0",
+          "webpack-cli": "3.3.12",
+          "webpack-dev-server": "^3.11.0"
+          #+end_src
+       2. 降级webpack
+          #+begin_src js
+          "webpack": "^4.43.0"
+          "webpack-cli": "^3.3.12",
+          "webpack-dev-server": "^3.11.0"
+          #+end_src
+     - 解决方法2: 执行 ~npx webpack serve~
