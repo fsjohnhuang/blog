@@ -1,0 +1,292 @@
+* Web Worker注意点
+  1. 同源限制：分配给Worker运行的脚本文件，必须和主线程的脚本文件同源；
+     1. Worker所运行的脚本来源不能为本地文件（即协议为 ~file://~ ），即使主线程的脚本文件是本地文件.
+        - Firefox报 ~Security Error: Content at file://xxxx may not load data from file://yyyy.~
+        - 无法通过try/catch捕获
+  2. DOM限制：Worker线程运行的脚本文件，无法访问页面的DOM和大部分BOM元素 (document, window, parent等)，但可以访问navigator和location对象的部分属性和方法；（待细化可使用的属性和方法）
+     - 可访问的BOM属性和方法
+       1. XMLHttpRequest
+       2. fetch
+       3. setTimeout/clearTimeout
+       4. setInterval/clearInterval
+       5. location, 指向Worker线程创建时关联的WorkerLocation对象(非Location对象)，即使页面被多次重定向，location始终指向创建创建线程时的URL信息。
+          WorkerLocation相比Location缺少assign、reload和replace方法，并且所有属性均为只读属性。
+          - WorkerLocation的属性
+            - href
+            - protocol
+            - host
+            - hostname
+            - origin
+            - port
+            - pathname
+            - search
+            - hash
+          - WorkerLocation的方法
+            - toString()
+       6. navigator, 指向Worker线程创建时关联的WorkerNavigator(非Navigator对象)
+          - WorkerNavigator的属性
+  3. 通信限制：Worker线程和主线程明显不在同一个线程上下文，因此必须通过消息机制通信；
+
+* Dedicated Web Worker
+  专用线程随当前页面的关闭而结束，即专用线程仅能与创建它的主线程通信。
+
+** 基本使用
+         1. 主线程
+            #+begin_src js
+            const worker = new Worker('work.js') // 若下载失败如404，则会默默地失败不会抛异常，即无法通过try/catch捕获。
+            const workerWithName = new Worker('work.js', {name: 'worker2'}) // 为Worker线程命名，那么在Worker线程内的代码可通过 self.name 获取该名称。
+
+            worker.postMessage('Send message to worker.') // 发送文本消息
+            worker.postMessage({type: 'message', payload: ['hi']}) // 发送JavaScript对象，会先执行序列化为JSON文本消息再发送，然后在接收端自动反序列化为JavaScript对象。
+            const uInt8Array = new Uint8Array(new ArrayBuffer(10))
+            for (let i = 0; i < uint8array.length; ++i) {
+                uInt8Array[i] = i * 2
+            }
+            worker.postMessage(uInt8Array) // 以先序列化后反序列化的方式发送二进制数据，发送后主线程仍然能访问uInt8Array变量的数据，但会造成性能问题。
+            worker.postMessage(uInt8Array, [uInt8Array]) // 以Transferable Objets的方式发送二进制数据，发送后主线程无法访问uInt8Array变量的数据，但不会造成性能问题，适合用于影像、声音和3D等大文件运算。
+
+            // 接收worker线程向主线程发送的消息
+            worker.onmessage = event => {
+                console.log(event.data)
+            }
+            worker.addEventListener('message', event => {
+                console.log(event.data)
+            })
+
+            // 当发送的消息序列化失败时触发该事件。
+            worker.onmessageerror = error => console.error(error)
+
+            // 捕获Worker线程发生的异常
+            worker.onerror = error => {
+                console.error(error)
+            }
+
+            // 关闭worker线程
+            worker.terminate()
+            #+end_src
+         2. Worker线程
+            #+begin_src js
+            // Worker线程的全局对象为WorkerGlobalScrip，通过self或this引用。调用全局对象的属性和方法时可以省略全局对象。
+
+            // 接收主线程向worker线程发送的消息
+            self.addEventListener('message', event => {
+                console.log(event.data)
+            })
+            addEventListener('message', event => {
+                console.log(event.data)
+            })
+            this.onmessage = event => {
+                console.log(event.data)
+            }
+            // 当发送的消息序列化失败时触发该事件。
+            self.onmessageerror = error => console.error(error)
+
+
+            // 向主线程发送消息
+            self.postMessage('send text to main worker')
+
+            // 结束自身所在的Worker线程
+            self.close()
+
+            // 导入其他脚本到当前的Worker线程，不要求所引用的脚本必须同域。
+            self.importScripts('script1.js', 'script2.js')
+            #+end_src
+
+** Web Worker运行同页面脚本
+
+*** 通过Blob和URL.createObjectURL
+    主线程的URL不为 ~file://~ 时可通过 ~Blob~ 和 ~URL.createObjectURL~ 使用Web Worker运行同页面脚本。
+    #+begin_src js
+    const script = `addEventListener('message', event => {
+        console.log(event.data)
+        postMessage('echo')
+    }`
+
+
+    const blob = new Blob([script])
+    const url = URL.createObjectURL(blob)
+    const worker = new Worker(url)
+    worker.onmessage = event => console.log(event.data)
+    worker.postMessage('main thread')
+    setTimeout(()=>{
+        worker.terminate()
+        URL.revokeObjectURL(url) // 必须手动释放资源，否则需要刷新Browser Context时才会被释放。
+    }, 1000)
+    #+end_src
+
+*** 通过Data URL
+    主线程URL即使是 ~file://~ 也可以通过Data URL调用Web Worker运行同页面脚本
+    #+begin_src js
+    // 由于Data URL的内容为必须压缩为一行，因此JavaScript无法利用换行符达到分号的效果。
+    const script = `addEventListener('message', event => {
+        console.log(event.data);
+        postMessage('echo');
+    }`
+
+
+    const worker = new Worker(`data:,${script}`)
+    // 或 const worker = new Worker(`data:application/javascript,${script}`)
+    worker.onmessage = event => console.log(event.data)
+    worker.postMessage('main thread')
+    #+end_src
+
+* Shared Web Worker
+  共享线程可以和多个同域页面间通信，当所有相关页面都关闭时共享线程才会被释放。
+  这里的多个同域页面包括：
+  1. iframe之间
+  2. 浏览器标签页之间
+
+** 简单示例
+   UI主线程
+   #+begin_src js
+   const worker = new SharedWorker('./worker.js')
+   worker.port.addEventListener('message', e => {
+     console.log(e.data)
+   }, false)
+   worker.port.start()  // 连接worker线程
+   worker.port.postMessage('hi')
+
+   setTimeout(()=>{
+     worker.port.close() // 关闭连接
+   }, 10000)
+   #+end_src
+   Shared Web Worker线程
+   #+begin_src js
+   let conns = 0
+
+   // 当UI线程执行worker.port.start()时触发建立连接
+   self.addEventListener('connect', e => {
+     const port = e.ports[0]
+     conns+=1
+
+     port.addEventListener('message', e => {
+       console.log(e.data)  // 注意console对象指向第一个创建Worker线程的UI线程的console对象。即如果A先创建Worker线程，那么后续B、C等UI线程执行worker.port.postMessage时回显信心依然会发送给A页面。
+     })
+
+     // 建立双向连接，可相互通信
+     port.start()
+     port.postMessage('hey')
+   })
+   #+end_src
+
+** 示例——广播
+   UI主线程
+   #+begin_src js
+   const worker = new SharedWorker('./worker.js')
+   worker.port.addEventListener('message', e => {
+     console.log('SUM:', e.data)
+   }, false)
+   worker.port.start()  // 连接worker线程
+
+   const button = document.createElement('button')
+   button.textContent = 'Increment'
+   button.onclick = () => worker.port.postMessage(1)
+   document.body.appendChild(button)
+   #+end_src
+   Shared Web Worker线程
+   #+begin_src js
+   let sum = 0
+   const conns = []
+   self.addEventListener('connect', e => {
+     const port = e.ports[0]
+     conns.push(port)
+
+     port.addEventListener('message', e => {
+       sum += e.data
+       conns.forEach(conn => conn.postMessage(sum))
+     })
+
+     port.start()
+   })
+   #+end_src
+
+* 注意事项
+
+** 卡死浏览器有方
+   虽然Dedicated Web Worker和Shared Web Worker均是开启新线程执行代码，并通过消息机制与UI线程通信，从而达到不阻塞UI线程避免界面卡顿。
+   但实际上我们可以轻松卡死浏览器，那就是使用console。
+   UI线程在创建Worker线程时会将自身的console对象绑定给Worker线程，那么在Worker线程调用console对象时是采用同步阻塞操作，因此若打开Devtools工具那么卡死浏览器是分分钟的事情了。
+
+** Chrome特殊的跨域限制
+   即使服务端设置CORS头依然无法执行非同域的Web Worker脚本。必须使用Blob+URL.createObjectURL或Data URL处理。
+
+* 通过Webpack打包WebWorker代码
+  https://www.webpackjs.com/loaders/worker-loader/
+  通过worker-loader将代码内容转换为blob类型，并通过URL.createObjectURL引入当前页面，从而防止WebWorker代码运行时下载和不同源的问题出现。
+  1. 安装loader
+     #+begin_src bash
+     npm install worker-loader -D
+     #+end_src
+  2. 配置webpack.config.js
+     #+begin_src js
+     // 处理worker代码的loader必须位于js和ts之前
+     {
+       test: /\.worker\.ts$/,
+       use: {
+         loader: 'worker-loader',
+         options: {
+           name: '[name]:[hash:8].js', // 打包后的chunk的名称
+           inline: true // 开启内联模式，将chunk的内容转换为Blob对象内嵌到代码中。
+         }
+       }
+     }，
+     {
+       test: /\.js$/,
+       use: {
+         loader: 'babel-loader'
+       },
+       exclude: [path.resolve(__dirname, 'node_modules')]
+     },
+     {
+       test: /\.ts(x?)$/,
+       use: [
+         { loader: 'babel-loader' },
+         { loader: 'ts-loader' } // loader顺序从后往前执行
+       ],
+       exclude: [path.resolve(__dirname, 'node_modules')]
+     }
+     output: {
+       globalObject: 'this' // 防止报window is undefined的异常。
+     }
+     #+end_src
+  3. UI线程中使用
+     #+begin_src js
+     import MyWorker from './my.worker'
+
+     const worker = new MyWorker('');
+     worker.postMessage('hi')
+     worker.addEventListener('message', event => console.log(event.data))
+     #+end_src
+  4. Worker代码
+     #+begin_src js
+     cosnt worker: Worker = self as any
+     worker.addEventListener('message', event => console.log(event.data))
+
+     export default null as any // 标识当前为TS模块，避免报xxx.ts is not a module的异常
+     #+end_src
+
+  shared-worker-loader则是打包为Shared Web Worker代码。
+* RPC库——Comlink
+  1. UI线程
+     #+begin_src js
+     import * as Comlink from 'comlink'
+
+     async function init() {
+         const cl = Comlink.wrap(new Worker('worker.js'))
+         console.log(`Counter: ${await cl.counter}`)
+         await cl.inc()
+         console.log(`Counter: ${await cl.counter}`)
+     }
+     #+end_src
+  2. Worker线程
+     #+begin_src js
+     import * as Comlink from 'comlink'
+
+     const obj = {
+       counter: 0,
+       inc() {
+         this.counter+=1
+       }
+     }
+     Comlink.expose(obj)
+     #+end_src

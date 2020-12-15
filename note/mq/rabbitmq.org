@@ -1,0 +1,101 @@
+* 基础搭建
+
+** 通过RPM安装
+   #+begin_src bash
+   sudo yum install openssl openssl-devel
+   sudo yum install rabbitmq
+   #+end_src
+
+** 启动服务
+   #+begin_src bash
+   rabbitmq-server -detached
+   rabbit-plugins enable rabbitmq_management # 启动Web Management插件
+
+   rabbitmqctl add_user <user> <password> # 新增用户及密码
+   rabbitmqctl set_permissions -p <vhost> <user> ".*" ".*" ".*" # 添加权限，如rabbitmqctl set_permissions -p / john ".*" ".*" ".*"
+   rabbitmqctl set_user_tags <user> <role> # 修改用户角色，如rabbitmqctl set_user_tags john administrator
+   rabbitmqctl delete_user <user> # 删除用户
+   rabbitmqctl change_password <user> <password> # 修改密码
+   rabbitmqctl list_users # 查看用户列表
+   #+end_src
+
+** QA
+   1. 通过RPM安装RabbitMQ会自动创建rabbitmq用户，但不会创建 ~/home/rabbitmq~ 目录，需要自行创建；
+   2. 报 ~Too short cookie string~, 删除.erlang.cookie让RabbitMQ重新生成；
+   3. 报 ~Error: mnesia_unexpectedly_running~, 表示当前操作需要先关闭RabbitMQ Server实例(执行 ~rabbitmqctl stop_app~)；
+
+* 集群
+  RabbitMQ的集群是基于Erlang集群的，而Erlang集群需要节点间通过相同的magic cookie(.erlang.cookie内容)认证成功后方可正常通信。
+  所以像ActiveMQ、Kafka需要通过ZooKeeper实现HA方案和保存集群信息。
+
+** 配置各节点的本地域名解释配置
+   将集群各节点的域名记录配置到各节点的/etc/hosts
+   #+begin_src
+   192.168.70.129 rabbitmq1
+   192.168.70.130 rabbitmq2
+   192.168.70.131 rabbitmq3
+   #+end_src
+   Master和Slave节点间是双向通信，因此必须保证各节点都配置域名记录。
+
+** 为各节点配置相同的.erlang.cookie
+   1. 以某节点的.erlang.cookie作为集群各节点的.erlang.cookie
+      ~rabbitmq-server~, ~rabbitmq-server -detached~ 或 ~systemctl start rabbitmq-server~ 启动RabbitMQ Server，自动生成 ~/var/lib/rabbitmq/.erlang.cookie~
+   2. 将第1步的 ~/var/lib/rabbitmq/.erlang.cookie~ ，覆盖到其它节点的 ~/var/lib/rabbitmq/.erlang.cookie~
+
+   *注意：*
+   1. 覆盖前需要执行 ~rabbitmqctl stop~ 或 ~systemctl stop rabbitmqctl~ 关闭RabbitMQ Server；
+   2. 确保 ~/var/lib/rabbitmq/.erlang.cookie~ 的权限为400且owner和group均为rabbitmq，否则无法启动RabbitMQ Server。
+      #+begin_src
+      sudo chown rabbitmq:rabbitmq /var/lib/rabbitmq/.erlang.cookie
+      sudo chmod 400 /var/lib/rabbitmq/.erlang.cookie
+      #+end_src
+
+** 加入集群
+   1. 启动所有节点，执行 ~rabbitmq-server -detached~ 或 ~systemctl start rabbitmq-server~
+   2. 假设以rabbit1作为Master节点，查看rabbit1的集群名称，并且作为后续整体的集群名称。
+      #+begin_src bash
+      rabbitmqctl cluster_status
+      # 集群名称默认为 <NodeName>@<FQDN> (在节点上执行 hostname 即可获取本机的FQDN)，如 rabbit@rabbit1.xxx.org。
+      # Slave节点默认仅允许使用DN(在节点上执行 hostname -s 获取)加入集群，如 rabbit@rabbit1。因此在各节点的/etc/hosts上只需配置rabbit1等DN记录即可。
+
+      # 节点运行时可修改集群名称为 rabbit@new，那么/etc/hosts需要配置 <ip> new 的DN记录。
+      # rabbitmqctl set_cluster_name rabbit@new
+      #+end_src
+   3. 假设以rabbit1作为Master节点，那么在其它节点执行如下操作
+      #+begin_src bash
+      rabbitmqctl stop_app
+      rabbitmqctl reset
+      rabbitmqctl rabbit@rabbitmq1 # 为第2步中的集群名称
+      rabbitmqctl start_app
+
+      # 查看集群节点信息，若成功则在nodes和running_nodes中出现多个节点信息。
+      rabbitmqctl cluster_status
+      #+end_src
+
+** 镜像队列(Mirror Queue)
+   普通集群中节点间仅同步vhost、exchange、queue和binding的元数据，但不会同步queue消息数据。
+   queue metadata: name and properties of queue.
+   exchange metadate: name, type and properties of exchange.
+   binding metadata: records that describes how to transfer message to queue.
+   vhost metadata: namespace and security properties of a group of queues, exchanges and bindings.
+
+   当consumer连接节点2但访问的队列却位于节点1，那么节点2会转发请求到节点1并拉取消息返回给consumer.
+
+   #+begin_src bash
+   # 将以my开头的队列设置镜像队列
+   # ha-mode为同步模式：
+   # all 表示所有节点同步消息
+   # exactly 表示随机抽取通过ha-params指定节点数同步消息，如 "ha-params": 2
+   # nodes 表示根据ha-params指定节点同步消息，如 ["rabbit@rabbit1", "rabbit@rabbit2"]
+   rabbitmqctl set_policy ha-all "^my" '{"ha-mode": "all", "ha-sync-mode": "automatic"}'
+   #+end_src
+   首次声明Queue的节点作为该Queue的Master节点，当该节点Down后该Queue会自动切换到其它节点。
+
+* 配置文件及配置项目
+  环境变量配置文件位置：/etc/rabbitmq/rabbitmq-env.conf
+  配置文件位置：/etc/rabbitmq/rabbitmq.conf
+  #+begin_src bash
+  RABBITMQ_MNESIA_BASE=/path/to/mnesia # 设置数据存放位置(Database directory)，修改后原来的queue、user等数据都会被清空。
+  RABBITMQ_LOG_BASE=/path/to/log # 设置日志和SASL日志存放位置(Log file and SASL log file)
+  #+end_src
+  重启rabbitmq-server即启用最新配置。

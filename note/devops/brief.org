@@ -204,7 +204,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # NAT(Network Address Translation)端口转发，访问宿主机的8889端口将转发到虚拟机的80端口
   # 优点：外网可以访问虚拟机
   # 缺点：1. 配置麻烦
-  #       2. 不能使用宿主机小于1024的端口，如不能SSL的443端口进行HTTPS连接
+  #       2. 虚拟机可以访问外网，ping通宿主机，但宿主机不能访问虚拟机。
+  #       3. 不能使用宿主机小于1024的端口，如不能SSL的443端口进行HTTPS连接
   # 官网：https://www.vagrantup.com/docs/networking/forwarded_ports.html
   config.vm.network :forwarded_port, guest: 80, host: 8889
   # 默认只转发TCP包，若要转发UDP则需如下设置
@@ -371,7 +372,6 @@ end
    4) 重新添加到到对应虚拟机的SATA Contorller下即可
 
 ** TODO VirtualBox
-
 
 * 监控
 

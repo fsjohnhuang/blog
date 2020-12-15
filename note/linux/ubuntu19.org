@@ -1,6 +1,3 @@
-#+title: UBUNTU19
-#+startup: content
-
 * Y7000 2019
 ** wifi adapter not found
 1) 输入 ~sudo rfkill list all~ 查看所有无线设备驱动的信息
@@ -368,8 +365,6 @@ A # 在当前命名的基础上重命名
         #+end_example
 ** 百度网盘
 有提供rpm和dpk版本，直接下载安装使用即可。
-** vsdx
-https://www.edrawsoft.com/
 * 获取当前版本的代号(codename)
 Ubuntu 发布版本的官方名称是 Ubuntu X.YY ，其中 X 表示年份（减去2000），YY 表示发布的月份。
 Ubuntu 没有像其它软件一样有 1.0 版本，是因为其第一个版本是发布于 2004 年。所以Ubuntu的生日是10月20日。
@@ -393,3 +388,87 @@ lsb_release -a
      #+begin_src bash
      sudo apt-get autoremove linux-image-(version)
      #+end_src
+* Linux同步文件到Windows
+** Windows 作为服务端
+   1. 下载并安装cwRsync_server
+      安装引导界面会要求为cwRsync_server创建系统账号，用于运行cwRsync_server的Windows服务。可以采用默认值或自行修改，假设这里创建的用户为rsyncd。
+   2. 编辑安装目录下的rsyncd.conf配置文件(全路径可能为 ~c:\Program Files (x86)\ICW\rsyncd.conf~)
+      #+begin_src bash
+      use chroot = false
+      strict mode = false
+      hosts allow = * # 表示所有主机均可作为客户端访问服务端
+      log file = rsyncd.log
+      uid = 0 # 表示运行时不限定用户，否则客户端无法连接到Windows的服务端
+      gid = 0 # 表示运行时不限定用户组，否则客户端无法连接到Windows的服务端
+      port = 873 # 服务端口，默认为873
+
+      # Module definitions
+      # Remember cygwin naming conventions : c:\work becomes /cygwin/c/work
+      #
+      [www]
+      path = /cygdrive/c/path/to/sync # 配置同步操作的目标目录路径，该posix路径即为c:\path\to\sync
+      ignore errors
+      read only = false # yes或true时，表示只读本地文件无法同步服务端
+      list = false # yes或true时，表示客户端请求显示模块列表时，该模块是否显示出来
+      auth users = john # 登录用户名，和系统用户名毫无关系
+      secrets file = /cygdrive/c/path/to/rsyncd.password # 登录用户名密码对表，每行表示一位用户名密码对，格式为 用户名:密码
+      #+end_src
+   3. *鼠标右键/属性/安全* 为rsyncd系统账号授予path和secrets file所在目录的完全控制权限
+   4. 添加cwRsync_server使用的用户名密码(/cygdrive/c/path/to/rsyncd.password)
+      #+begin_src bash
+      # 注意：密码不要超过8位
+      apache:1234
+      #+end_src
+   5. 修改/cygdrive/c/path/to/rsyncd.password的文件权限
+      #+begin_src bash
+      cd c:\"Program File (x86)"\ICW\bin
+      chmod 600 /cygdrive/c/path/to/rsyncd.password
+      #+end_src
+      - 注意：在Windows下执行chmod后，再通过 ~ls -l~ 看不出变化，但实际已经生效了。
+   6. 启动cwRsync_server的Windows服务
+      #+begin_src bash
+      # 检查服务端是否启动成功
+      netstat -ano | findstr 873
+      #+end_src
+
+** Linux 作为客户端
+   1. 测试服务端是否可用
+      #+begin_src bash
+      telnet <server ip> 873
+      # 连通并输入回车后回显如下内容，即服务端可连通。
+      # @RSYNCD: 30.0
+      # @ERROR: protocol startup error
+      # Connection closed by foreign host.
+      #+end_src
+   2. 创建rsyncd.password并授权
+      #+begin_src bash
+      # 注意：当仅有一个用户时，客户端的rsyncd.password只需输入密码即可。
+      echo 1234 > rsyncd.password
+      chmod 600 rsyncd.password
+      #+end_src
+   3. 同步当前节点文件到服务端
+      #+begin_src bash
+      # 将当前目录的内容同步到服务端 www 模块的path目录下
+      rsync -avz --password-file=rsyncd.password ./ apache@<server ip>::www
+      #+end_src
+   4. 同步服务端文件到当前节点
+      #+begin_src bash
+      rsync -avz --password-file=rsyncd.password apache@<server ip>::www ./
+      #+end_src
+
+** rsync命令详解
+   #+begin_src bash
+   -a 归档模式，使用递归传输并保持文件属性
+   -z 压缩后传输
+   -v 显示传输过程中的详细信息
+   -P 显示文件传输的进度信息
+
+   --password-file <path> 指定登录用的密码文件的绝对路径
+   --exclude-from <path> 指定不需要同步的文件和目录路径的配置文件路径，文件内容中每行表示一个正则表达式。
+   --exclude <regex pattern> 指定正则表达式，匹配的文件和目录路径将不被同步，如.[a-z]*表示以.开头的后面跟a到z其中一个字符，最后跟0～N个字符的路径
+   --delete 在exclude/include规则生效后执行，若服务端文件比传入的多则删除，少则同步新增
+   #+end_src
+   实例：
+   #+begin_src bash
+   rsync -azv --password-file=rsyncd.password --exclude-from=./.gitignore --exclude=.git ./ apache@<server ip>::www | grep -e '\.js$'
+   #+end_src

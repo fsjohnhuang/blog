@@ -3309,7 +3309,6 @@ Boolean result = expr.getValue(ctx, rootObject, Boolean.class);
 
 ** TODO CORS
 
-
 * Spring Boot
   通过 [[https://start.spring.io/][Spring Initializr]] https://start.spring.io/ 初始化项目。
 
@@ -3450,7 +3449,9 @@ Spring Boot打包时可以内置Tomcat或Jetty。
            <plugin>
                <groupId>org.springframework.boot</groupId>
                <artifactId>spring-boot-maven-plugin</artifactId>
-               <configuration>true</configuration> <!-- 没有配置默认为false，则devtools不会生效 -->
+               <configuration>
+                 <fork>true</fork> <!-- 没有配置默认为false，则devtools不会生效 -->
+               </configuration>
            </plugin>
        </plugins>
     </build>
@@ -3473,10 +3474,6 @@ Spring Boot打包时可以内置Tomcat或Jetty。
          livereload:
            enabled: true # 是否启用LiveReload服务端
            port: 35729 # LiveReload服务端口
-       restart:
-         exclude: static/**, public/** # 指定某些默认配置路径下的文件变化，不触发重新加载
-         additional: assets/** # 除监听默认配置路径的文件变化外，其他指定路径的文件变化也会触发重新加载
-         additional-exclude: assets/public/** # 排除通过additional指定的部分文件变化，不触发重新加载
      #+end_src
 
 **** 浏览器配置
@@ -3498,6 +3495,9 @@ Spring Boot打包时可以内置Tomcat或Jetty。
           devtools:
             restart:
               enabled: true
+              exclude: static/**, public/** # 指定某些默认配置路径下的文件变化，不触发重新加载
+              additional: assets/** # 除监听默认配置路径的文件变化外，其他指定路径的文件变化也会触发重新加载
+              additional-exclude: assets/public/** # 排除通过additional指定的部分文件变化，不触发重新加载
         #+end_src
      2. 通过环境变量设置
         #+begin_src java
@@ -3781,7 +3781,6 @@ Spring Boot打包时可以内置Tomcat或Jetty。
     #+end_src
     redirect会导致请求重新经过DispatcherServlet的处理；
     forward不会导致请求重新经过DispatcherServlet的处理。
-
 
 ** TODO 日志
    Spring Boot内置Logback作为日志框架。

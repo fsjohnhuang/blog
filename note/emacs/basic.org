@@ -240,6 +240,38 @@ EShell is written entirely in EmacsLisp. To invoke it, run ~M-x eshell~.
 2. EShell has gone to some lengths to keep the syntax familiar with *bash*.
 3. EShell is clever enough to redirect certain commands that Emacs itself offers, such as ~man~, ~grep~ and so on.
 4. woefully underdocumented.
+
+** 在Elisp中调用shell
+   https://www.emacswiki.org/emacs/ExecuteExternalCommand
+
+   #+begin_src elisp
+   ;; call a shell command, wait for it to finish.
+   ;; The output is displayed in the minibuffer or in a separate buffer, depending on the output size.
+   ;; It's shortcut is `M-!`.
+   (shell-command "ls")
+
+   ;; call a shell command, wait for it to finish, and print its output in current cursor position.
+   ;; It's shortcut is `C-u M-!`
+   (shell-command-to-string "ls")
+
+   ;; To provide the region text to the shell command as input.
+   ;; The shortcut is `M-|`.
+   (shell-command-on-region
+
+   ;; The shortcut is `C-u M-|`.
+   (shell-command-on-region-to-string)
+
+   ;; runs a command with the wholel buffer as input:
+   (defun shell-command-on-buffer ()
+     (interactive)
+     (shell-command-on-region
+       (point-min) (point-max)
+       (read-shell-command "Shell command on buffer:")))
+
+   (global-set-key (kbd "M-\"") 'shell-command-on-buffer)
+   #+end_src
+
+
 * projectile
   插件：counsel-projectile
 
@@ -249,3 +281,52 @@ EShell is written entirely in EmacsLisp. To invoke it, run ~M-x eshell~.
    (setq projectile-enable-caching t)
    (global-set-key (kbd "<f5>") 'projectile-find-file) ;; 通过文件名全项目范围内搜索文件
    #+end_src
+* backup file, auto save file and temporary symlink
+** backup file and auto save file
+   Emacs backup file 的文件名模式为 *<filename>~*
+   Emacs auto save file 的文件名模式为 *#<filename>#*
+
+   1. Emacs auto save file
+      在编辑文件时Emacs实际是将文件内容拷贝到Eamcs的buffer上让我们编辑，那么每次在修改buffer内容时Eamcs会自动在同级目录下生成auto save file，当我们手动保存文件后Eamcs会自动删除auto save file。
+      - 未保存文件，再次编辑时可通过 auto save file 恢复到最近的一次编辑状态
+        #+begin_src
+        M-x recover-file <RET> <filename> <RET>
+        yes <RET>
+        #+end_src
+      - 禁用Emacs auto save file的功能
+        #+begin_src elisp
+        (setq auto-save-default nil) ;; 默认为true
+        #+end_src
+   2. Emacs backup file
+      编辑并保存文件时，先将原文件重命名为backup file，然后再将buffer内容保存替代原文件，原来指向原文件的连接被重建到新文件上。
+      - 采用复制而重命名方式生成backup file
+        #+begin_src elisp
+        (setq backup-by-copying t) ;; 默认为nil，采用重命名方式
+        #+end_src
+      - 修改backup file的保存路径
+        #+begin_src elisp
+        (setq backup-directory-alist (quote (("." . "~/.backups"))))
+        #+end_src
+      - 禁用Emacs backup file
+        #+begin_src elisp
+        (setq make-backup-files nil)
+        #+end_src
+
+** temporary symlink
+   Emacs temporary symlink 的文件名模式为 *.#<filename>*
+
+   编辑文件时Emacs自动生成，当保存文件或回退到编辑前的状态时，Emacs会自动删除temporary symlink。
+   该文件指向 *user@host.<Emacs PID>:<UUID>*, Emacs 24.3后提出的特性用于防止编辑冲突的。
+   禁用: ~(setq create-lockfiles nil)~
+* 获取当前buffer文件名称全路径
+  #+begin_src elisp
+  ;; 在mini buffer里获取buffer-file-name的值
+  M-x eval-expression RET buffer-file-name RET
+  ;; 或快捷方式 M-: buffer-file-name RET
+
+  ;; 自定义快捷键查看
+  (defun show-file-name ()
+    "Show the full path file name of curren buffer."
+    (interactive)
+    (message (buffer-file-name)))
+  #+end_src
