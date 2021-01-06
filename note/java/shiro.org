@@ -5,7 +5,6 @@ SessionManager: Shiro可用于Servlet、EJB和桌面程序，因此抽象Session
 SessionDAO: 为SessionManager提供持久化操作。
 CacheManager: 管理用户、角色、权限等的缓存信息。
 
-
 * Integrated with Spring Boot
   In a web application, all Shiro-accessible web requests must go through a master *Shiro Filter*.
   This filter allows for ad-hoc custom filter chains to be executed based on any URL path expression.
@@ -55,3 +54,156 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
      表示登录凭证已过期。
   6. AuthenticationException
      表示身份验证异常。
+* CORS
+** 设置CORS响应头
+   无论是HTTPS还是HTTP都需要设置CORS响应头。
+   #+begin_src java
+   @Component
+   public class CORSFilter extends OncePerRequestFilter {
+     /*
+     * 在ResponseBodyWrapHandler中已处理跨域问题
+     * 但是在shiro验证未通过跳转/unauth时, 因为redirect 重定向会丢失所有请求头，跨域问题重新出现
+     * */
+     @Override
+     protected void doFilterInternal(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws ServletException, IOException {
+         HttpServletResponse res = (HttpServletResponse) servletResponse;
+         res.setContentType("text/html;charset=UTF-8");
+         res.setHeader("Access-Control-Allow-Origin", "http://localhost:8081"); // 由于Access-Control-Allow-Credentials: true，因此Origin不能设置为*。
+         res.setHeader("Access-Control-Allow-Methods", "*");
+         res.setHeader("Access-Control-Max-Age", "0");
+         res.setHeader("Access-Control-Allow-Headers", "Origin, No-Cache, X-Requested-With, If-Modified-Since, Pragma, Last-Modified, Cache-Control, Expires, Content-Type, X-E4M-With,userId,token");
+         res.setHeader("Access-Control-Allow-Credentials", "true");
+         res.setHeader("XDomainRequestAllowed","1");
+         filterChain.doFilter(servletRequest, servletResponse);
+     }
+ }
+   #+end_src
+
+** HTTPS协议服务的CORS处理：Set-Cookie的SameSite特性
+   跨域Set-Cookie的问题：
+   1. Chrome80+对没有设置 ~SameSite~ 特性的 ~Set-Cookie~ 响应头会默认附加 ~SameSite:Lax~ ，若此为跨域请求则浏览器不会保存Cookie数据；
+   2. shiro-spring 1.5.2+开始默认附加 ~SameSite:Lax~ ；
+   3. SameSite设置为None时，必须附加secure特性，即请求的服务必须采用https协议。
+
+
+   注意：若目标服务不是通过HTTPS提供服务，则本方法无法实现跨域请求。
+
+   若要支持跨域保存Cookie数据，则需要自定义SessionManager的Cookie属性。
+   #+begin_src java
+   @Bean
+   public SessionManager sessionManager() {
+       DefaultWebSessionManager mgt = new DefaultWebSessionManager();
+       SimpleCookie cookie = new SimpleCookie(ShiroHttpSession.DEFAULT_SESSION_ID_NAME);
+       cookie.setSameSite(Cookie.SameSiteOptions.None);
+       cookie.setSecure(true);
+       mgt.setSessionIdCookie(cookie);
+
+       return mgt;
+   }
+   #+end_src
+
+*** SameSite特性详解
+    作用为用于限制第三方Cookie，从而减少安全风险。
+    可设置为3个值：
+    1. Strict，完全禁止第三方Cookie。
+       - 请求头Cookie：即跨站点发送请求时，任何情况下都不会发送目标域名的Cookie。
+         - 问题：集成单点登录的站点A和站点B，登录站点A后跳转到站点B仍然需要重新登录。
+       - 响应头Set-Cookie：不保存跨域的Cookie内容到浏览器。
+    2. Lax
+       - 请求头Cookie：仅通过部分GET方式发起跨站点发送请求被允许携带目标域名的Cookie。
+         | 请求类型                 | 示例                               | Lax    |
+         |--------------------------+------------------------------------+--------|
+         | 链接                     | <a href="..."></a>                 | 允许   |
+         | 预加载                   | <link rel="prerender" href="..."/> | 允许   |
+         | GET表单                  | <form method="GET" action"...">    | 允许   |
+         | POST表单/iframe/AJAX/img |                                    | 不允许 |
+       - 响应头Set-Cookie：不保存跨域的Cookie内容到浏览器。
+    3. None，不限制第三方Cookie。必须配置Secure特性，即目标域名通过HTTPS协议提供服务。
+
+**** 什么是第三方Cookie？
+     在站点B请求站点A且携带站点A的Cookie信息(Cookie请求头)，或保存站点A的Cookie信息(Set-Cookie响应头)。
+     使用示例：
+     1. 恶意站点通过Cookie中的登录信息，模拟用户登录银行等敏感站点。
+        #+begin_src html
+        <!-- 用户之前已经登录过银行站点，且相关存储登录凭证的Cookie有效，则会成功执行转账操作 -->
+        <form action="your-bank.com/transfer" method="POST">
+        </form>
+
+        <form action="your-bank.com/transfer" method="POST">
+          <!-- 防范CSRF攻击，通过随机token验证是否来自第三方站点发送的请求 -->
+          <input type="hidden" name="token" value="xo4r12xo"/>
+        </form>
+        #+end_src
+     2. 用户追踪：在第三方网站插入隐藏的图片向自己站点发送携带Cookie的请求，从而跟踪用户浏览过哪些网站。
+** 非HTTPS协议服务的CORS处理
+   思路：用户身份认证通过后，JSESSIONID在后续请求中以URL的path或queryString来承载，而不是Cookie。
+   1. 服务端的登录服务
+      #+begin_src java
+      public ResponseEntity login(@RequestParam String username, @RequestParam String passwd) {
+        if (StringUtils.isEmpty(username) || StringUtils.isEmpty(passwd)) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        Subject subject = SecurityUtils.getSubject();
+        UsernamePasswordToken token = new UsernamePasswordToken(username, passwd);
+        try {
+            subject.login(token);
+            return ResponseEntity.ok(subject.getSession().getId());
+        } catch (AuthenticationException | AuthorizationException e) {
+            log.warn(e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+      }
+      #+end_src
+   2. 客户端
+      1. 登录时
+         #+begin_src js
+         const data = new FormData()
+         data.append('username', 'xxx')
+         data.append('passwd', 'yyy')
+         axios.post('/login', data)
+           .then(res => {
+               this.jsessionid = res.data
+           })
+           .catch(err => {
+               if (err.response.status === 401) {
+                   this.$message.error('User name or password is wrong!')
+               }
+               else {
+                   this.$message.error(err.message)
+               }
+           })
+         #+end_src
+      2. 后续请求
+* SessionManager
+** 获取sessionId
+   Shiro的DefaultWebSessionManager通过getReferencedSessionId方法从ServletRequest中获取sessionId。
+   1. 调用 ~getSessionIdCookieValue~ 从请求头Cookie中获取JSESSIONID的值，若获取失败则执行第二步；
+      - Cookie格式为： ~JSESSIONID=axBxoi1223boxin~
+   2. 调用 ~getUriPathSegmentParamValue~ 从请求URI的path中获取JSESSIONID的值，，若获取失败则执行第三步；
+      - Path格式为： ~/path/to/destination;JSESSIONID=axBxoi1223boxin;~
+      - Spring MVC/Boot默认禁用带分号的URL，所以需要进行如下处理：
+        1. 配置Spring的Web Servlet，启用带分号的URL
+           #+begin_src java
+           @Configuration
+           public class SpringBootConfig implements WebMvcConfigurer {
+               @Override
+               public void configurePathMatch(PathMatchConfigurer configurer) {
+                   UrlPathHelper urlPathHelper = new UrlPathHelper();
+                   urlPathHelper.setRemoveSemicolonContent(false); // 默认为true
+                   configurer.setUrlPathHelper(urlPathHelper);
+               }
+           }
+           #+end_src
+        3. 在Handler入参中通过 ~@MatrixVariable~ 获取变量
+           #+begin_src java
+           // 匹配请求
+           // /info/name=root;pwd=123;
+           // /info/name=root;pwd=123;pwd=321;
+           // /info/name=root;pwd=123;pwd=;
+           // 得到的params都是[name=root,pwd=123]
+           @RestController
+           public class ApiController {
+               @RequestMapping("/info/{params}")
+               public void info(@MatrixVariable Map<String, Object> params) {}
+           }
+           #+end_src
+   3. 调用 ~request.getParamter~ 方法从请求URI的queryString中获取JSESSIONID的值。
+      - QueryString格式为： ~/path/to/destination?JSESSIONID=axBxoi1223boxin~

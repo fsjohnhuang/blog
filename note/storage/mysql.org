@@ -1,5 +1,273 @@
-* Q
+* TODO Q
 1) 索引常见实现方式有哪些,哪些区别
 2) 存储引擎有哪些,哪些区别
 3) InnoDB使用什么方式实现索引
 4) 聚簇索引和非聚簇索引的区别
+
+* 安装
+  #+begin_src bash
+  # 安装后会自动随机启动
+  sudo apt install mariadb-server
+  # 查看服务状态
+  sudo systemctl status mariadb
+  # MariaDB服务器附带一个mysql_secure_installation脚本，用于提高数据库服务器的安全性。
+  # 执行如下命令，然后按需选择Y即可
+  # Remove anonymous users?
+  # Disallow root login remotely?
+  # Remove test database and access to it?
+  # Reload privilege tables now?
+  sudo my_secure_installation
+
+  # 查看当前MariaDB版本
+  mysql --version
+  #+end_src
+
+* 账号管理
+  1. 在Ubuntu中默认采用auth_socket进行鉴权，而auth_socket会使用unix socket连接MariaDB，即不能以密码+root登录MariaDB。
+     #+begin_src bash
+     # 在服务器端以auth_socket方式登录MariaDB
+     sudo mysql # 或者 sudo mariadb
+     #+end_src
+  2. 若要远端访问MariaDB则可通过以下两种方式设置秘密
+     1. 将授权方式从auth_socket修改为mysql_native_password
+        #+begin_src bash
+        alter user 'root'@'localhost' identified with mysql_native_password by 'very_strong_password';
+        flush privileges;
+        #+end_src
+     2. 创建一个管理员账号(推荐)
+        #+begin_src bash
+        grant all privileges on *.* to 'john'@'localhost' identified by 'very_strong_password';
+        #+end_src
+  3. 命令行中通过账号密码登录MariaDB
+     #+begin_src bash
+     # 在prompt中输入密码登录到数据库，但不在任何一个数据库实例上。
+     mysql -u <user_name> -p
+     # 登录到指定数据库实例
+     mysql -u <user_name> -p -h <database_hostname> <database_name>
+     # 登录本地的指定数据库实例
+     mysql -u <user_name> -p <database_name>
+     #+end_src
+  4. 创建账号
+     #+begin_src bash
+     # 其中localhost表示该账号仅能从MariaDB服务端登录
+     # 若替换为IP则表示该账号可以从该IP远程登录MariaDB服务端
+     # 若替换为%通配符则表示该账号可以从任意的IP远程登录MariaDB服务端，但不支持localhost登录
+     create user '<user_name>'@'localhost' identified by '<very_strong_password>';
+     create user if not exists '<user_name>'@'localhost' identified by '<very_strong_password>';
+     #+end_src
+  5. 修改帐号密码
+     #+begin_src bash
+     # MariaDB10.1.20+或MySQL5.7.6+则使用如下命令
+     alter user '<user_name>'@'localhost' identified by '<very_strong_password>';
+     # 旧版本则使用
+     set password for '<user_name>'@'localhost' = password('<very_strong_password>');
+     #+end_src
+  6. 显示所有账号
+     #+begin_src bash
+     select user, host from mysql.user;;
+     #+end_src
+  7. 删除账号
+     #+begin_src bash
+     drop user '<user_name>'@'localhost';
+     drop user if exists '<user_name>'@'localhost';
+     #+end_src
+  8. 账号授权和取消
+     #+begin_src bash
+     # 授权
+     grant all privileges on <database_name>.* to '<user_name>'@'<host>';
+     grant select, insert, delete on <database_name>.* to '<user_name>'@'<host>';
+
+     # 取消权力
+     revoke all privileges on <database_name>.* to '<user_name>'@'<host>';
+
+     # 显示权力
+     show grants for '<user_name>'@'<host>';
+     #+end_src
+
+* 基本使用
+  #+begin_src bash
+  # 创建数据库
+  create database <database_name>;
+  create database if not exists <database_name>;
+
+  # 显示所有数据库
+  # 其中`information_schema`, `mysql`, `performance_schema` and `sys` databases are created at installation time and they are storing information about all other databases.
+  show databases;
+
+  # 删除数据库
+  drop database <database_name>;
+  drop database if exists <database_name>;
+
+  # 进入指定数据库
+  use <database_name>;
+
+  # 显示当前数据库实例中的表格对象
+  show tables;
+
+  # 显示表结构
+  describe <table_name>;
+  # 显示表定义的SQL
+  show create table <table_name>;
+
+  # 添加字段
+  alter table <table_name> add column <column_name> <data_type> [default <default_value>] [not null] [comment '<comment>'] [after <column_name>];
+  #+end_src
+
+* Primary Key
+  1. Because MySQL works faster with integers, the data type of primary key column should be the integer e.g., ~INT, BIGINT~.
+     1. Attach ~AUTO_INCREMENT~ attribute to generate a sequential integer value whenever you insert a new row into the table.
+  2. MySQL creates an index called *PRIMARY* automatically for a primary key column.
+  3. ~NULL~ is not allowed to insert or update as the value of primary key column.
+
+
+  #+begin_src sql
+  -- Define Primary Key constraint in Create Table
+  create table if not exists tbl_test1 (
+    id int primary key
+  );
+
+  create table if not exists tbl_test2 (
+    id int,
+    name varchar(100),
+    primary key(id, name)
+  );
+
+  -- Add Primary Key constraint using Alter Table
+  -- Make sure the existing data in the columns which will be included in the primary key, must be unique and not NULL.
+  alter table tbl_test1 add primary key(id);
+
+  -- Drop Primary Key constraint
+  alter table tbl_test1 drop primary key;
+  #+end_src
+
+** Primary Key, Unique Key and Key
+   1. ~KEY~ is the synonym for ~INDEX~.
+   2. A ~UNIQUE~ index ensures that values in a column must be unique but ~NULL~ is allowed. In addition, a table can have multiple ~UNIQUE~ indexes.
+      #+begin_src sql
+      alter table <table name> add unique index <index name> (<column name> <asc|desc>);
+      #+end_src
+
+* Foreign Key
+  Objects:
+  1. Parent/Referenced table
+  2. Child/Referencing table has the foreign key(s) which refers to the referenced table.
+  3. Self-referencing table
+
+** Create And Drop Syntax
+   #+begin_src sql
+   -- Define or Add Foreign Key
+   -- constraint_name - optional, value generated by MySQL as default.
+   -- foreign_key_name - optional, value generated by MySQL as default.
+   -- reference_option - determines action which MySQL will take when values in the parent key columns are deleted or updated.
+   --   CASCADE, if a row of parent table is deleted or updated, the values of the matching rows in the child table will be deleted or updated automatically.
+   --   SET NULL, if a row of parent table is deleted or updated, the values of the matching rows in the child table will be set  to NULL.
+   --   NO ACTION, is the same as RESTRICT
+   --   RESTRICT, if a row from the parent table has a matching row in the child table, MySQL rejects deleting or updating rows in the parent table.
+   --   SET DEFAULT, is recognized by the MySQL parser. However, this action is rejected by both InnoDB and NDB tables.
+   -- In fact, MySQL fully supports three actions: RESTRICT, CASCADE and SET NULL.
+   [ALTER TABLE <table_name>]
+   [CONSTRAINT constraint_name]
+   FOREIGN KEY [foreign_key_name] (column_name,...)
+   REFERENCES parent_table(column_name,...)
+   [ON DELETE reference_option]
+   [ON UPDATE reference_option]
+   ;
+
+   -- Drop Foreign Key
+   ALTER TABLE <table_name>
+   DROP FOREIGN KEY <constraint_name>;
+   #+end_src
+
+** Disabling Foreign Key Checks
+   It's useful to disable foreign key checks e.g., when you import data from a CSV file into tables.
+   #+begin_src sql
+   -- Disable
+   SET foreign_key_checks = 0;
+   -- Enable
+   SET foreign_key_checks = 1;
+   #+end_src
+
+* 表名称等大小写敏感
+  1. 查看
+     #+begin_src sql
+     -- lower_case_table_names为0则表示大小写敏感；1为大小写不敏感；2为存储区分大小写但查询时会先转换为小写。
+     -- lower_case_file_system为OFF表示大小写敏感；1为大小写不敏感。
+     show variables like 'lower%';
+     #+end_src
+  2. 数据库名称、表名、列名和别名的大小写规则
+     1. Linux下的MySQL默认大小写敏感；
+        1. 数据库名和表名大小写敏感；
+        2. 表的别名大小写敏感；
+        3. 列名和列的别名大小写不敏感；
+        4. 变量名大小写敏感。
+     2. Windows下的MySQL默认大小写不敏感；
+     3. MacOS下的MySQL默认大小写不敏感，但 ~lower_case_table_names~ 的值为2；
+  3. 修改为大小写不敏感，在my.cnf的 ~[mysqld]~ 后添加
+     #+begin_src sql
+     [mysqld]
+     lower_case_table_names=1
+     #+end_src
+  4. 注意：对于默认大小写不敏感的系统，无法通过在my.cnf中添加 ~lower_case_table_names=0~ 让其更新为大小写敏感。
+
+* 执行SQL文件
+  1. 在shell中执行
+     #+begin_src bash
+     mysql -u <username> -p <database_name> < /path/to/sql.txt
+     #+end_src
+  2. 在mysql客户端中执行
+     #+begin_src bash
+     source /path/to/sql.txt
+     #+end_src
+
+* 修改Root账号的密码
+  #+begin_src bash
+  # Stop the MySQL/MariaDB service.
+  sudo systemctl stop mysql
+
+  # Start the MySQL/MariaDB server without loading the grant tables.
+  # Anyone can connect to the database server without a password and with all privileges granted, when the `--skip-grant-tables` option is used.
+  sudo mysqld_safe --skip-grant-tables &
+
+  # Log in the MySQL/MariaDB shell.
+  mysql -u root
+
+  # Set a new password.
+  alter user 'root'@'localhost' indentified by 'very_strong_password';
+  flush privileges;
+  # If above command doesn't work for you, try to modify the user table directly.
+  update mysql.user set authentication_string = password('very_strong_password') where user = 'root' and host = 'localhost';
+  flush privileges;
+
+  # Stop and start the database server normally.
+  mysqladmin -u root -p shutdown
+  sudo systemctl start mariadb
+
+  # Verify the password.
+  mysql -u root -p
+  #+end_src
+
+* 在Spring Boot中使用
+  1. pom.xml依赖
+     #+begin_src xml
+     <dependency>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-jdbc</artifactId>
+     </dependency>
+     <dependency>
+         <groupId>mysql</groupId>
+         <artifactId>mysql-connector-java</artifactId>
+         <scope>runtime</scope>
+     </dependency>
+     #+end_src
+  2. application.yml配置
+     #+begin_src yaml
+     spring:
+       datasource:
+         username: john
+         password: john123
+         url: jdbc:mysql://localhost:3306/database_name
+         driver-class-name: com.mysql.cj.jdbc.Driver
+     #+end_src
+* 客户端
+** MySQL Workbench
+   官方出品的GUI客户端，依赖VS C++因此需要安装.

@@ -9,11 +9,16 @@
 ** 启动服务
    #+begin_src bash
    rabbitmq-server -detached
-   rabbit-plugins enable rabbitmq_management # 启动Web Management插件
+   rabbitmq-plugins enable rabbitmq_management # 启动Web Management插件, 默认端口号为15672
 
    rabbitmqctl add_user <user> <password> # 新增用户及密码
    rabbitmqctl set_permissions -p <vhost> <user> ".*" ".*" ".*" # 添加权限，如rabbitmqctl set_permissions -p / john ".*" ".*" ".*"
    rabbitmqctl set_user_tags <user> <role> # 修改用户角色，如rabbitmqctl set_user_tags john administrator
+   rabbitmqctl stop
+   systemctl enable rabbitmq-server
+   systemctl start rabbitmq-server
+
+
    rabbitmqctl delete_user <user> # 删除用户
    rabbitmqctl change_password <user> <password> # 修改密码
    rabbitmqctl list_users # 查看用户列表

@@ -1211,7 +1211,7 @@ column="{id=class_id, name=class_name}"
    上述事务B的提交结果因事务A的回滚而被擦除，产生数据不一致的场景被称为第一类丢失更新。
    现在的数据库均已解决第一类丢失更新，而隔离级别则是用于处理第二类丢失更新。
 
-** 第二类丢失更新   
+** 第二类丢失更新
    1. *脏读* 一个事务能读取另外一个事务未提交的数据
       | 时间轴 | 事务A           | 事务B           | 备注            |
       |--------+-----------------+-----------------+-----------------|
@@ -1234,7 +1234,7 @@ column="{id=class_id, name=class_name}"
       | T3     |                | 提交     |      |
       | T4     | 统计记录数为41 |          |      |
       | T5     | 提交           |          |      |
-      
+
 ** 事务的隔离级别
    | 事务隔离级别     | 脏读 | 不可重复读 | 幻读 | 解释                                                                                                                |
    |------------------+------+------------+------+---------------------------------------------------------------------------------------------------------------------|
@@ -1249,7 +1249,7 @@ column="{id=class_id, name=class_name}"
    - READ COMMITTED, ~set session transaction isolation level read committed~
    - REPEATABLE READ, ~set session transaction isolation level repeatable read~
    - SERIALIZABLE, ~set session transaction isolation level serializable~
-   
+
 ** 相关接口和实现类
 1. MyBatis把事务管理抽象为接口org.apache.ibatis.transaction.Transaction
    - 其实现类为
@@ -1798,8 +1798,8 @@ public SqlSessionFactory sqlSessionFactory(DataSource dataSource){
           conn.rollback();
 	}
 	#+end_src
-       
-**** XML配置方式       
+
+**** XML配置方式
     #+BEGIN_EXAMPLE xml
     <bean id="userDao" class="org.mybatis.spring.mapper.MapperFactoryBean">
       <!-- 指定UserDao接口作为Mapper接口 -->
@@ -1819,7 +1819,7 @@ public SqlSessionFactory sqlSessionFactory(DataSource dataSource){
     #+END_EXAMPLE
 *** 通过MapperScannerConfigurer自动扫描批量注册Mapper接口
 **** Java Config方式
-     #+begin_src 
+     #+begin_src
      @Bean
      public MapperScannerConfigurer mapperScannerConfig(){
        MapperScannerConfigurer config = new MapperScannerConfigurer();
@@ -2809,11 +2809,25 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
           - 解决方法:
             将slf4j-log4j12替换为log4j-slf4j-impl即可。
 * MyBatis-Plus
+** pom.xml
+   #+begin_src xml
+   <dependency>
+	<groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-jdbc</artifactId>
+   <dependency>
+   <dependency>
+        <groupId>com.baomidou</groupId>
+	<artifactId>mybatis-plus-boot-starter</artifactId>
+	<version>3.3.2</version>
+   </dependency>
+   #+end_src
+
 ** 单表通用CRUD
    优点：无需提供Mapper接口对应的SQL映射文件，以及CRUD方法和对应的SQL语句。
 
    1. Mapper接口继承BaseMapper<T>接口
       #+begin_src java
+      @Mapper
       public interface UserMapper extends BaseMapper<User> {}
       #+end_src
    2. 实体类
@@ -2825,11 +2839,11 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
            <!-- 开启Java端采用驼峰命名和DB端下划线命名映射，MP2.3+默认为true  -->
            <property name="dbColumnUnderline" value="true"></property>
            <!-- Java端首字母为大写 -->
-           <property name="isCapitalMode" value="true"></property>           
+           <property name="isCapitalMode" value="true"></property>
            <!-- 主键策略：0-AUTO, 1-INPUT, 2-ID_WORKER, 3-UUID -->
-           <property name="idType" value="0"></property>           
+           <property name="idType" value="0"></property>
            <!-- 表前缀配置, 那么就不用通过@TableName描述完整的表名 -->
-           <property name="tablePrefix" value="tbl_"></property>           	   
+           <property name="tablePrefix" value="tbl_"></property>
          </bean>
        */
 
@@ -2890,7 +2904,6 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
 
 ** 实体类
 
-
 *** 字段默认值
     实体字段在插入或更新时可以设置默认值。
     #+begin_src java
@@ -2900,10 +2913,10 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
         private String id;
         private String name;
 
-        // 插入记录时自动填充默认值	
-        @TableField(fill=FieldFill.INSERT) 
+        // 插入记录时若字段值为NULL，则自动填充默认值
+        @TableField(fill=FieldFill.INSERT)
         private Date createdDate;
-        // 更新记录时自动填充默认值	
+        // 更新记录时若字段值为NULL，自动填充默认值
         @TableField(fill=FieldFill.UPDATE)
         private Date modifiedDate;
     }
@@ -2926,6 +2939,8 @@ if (sql != null && sql.toLowerCase().trim().indexOf("select") == 0){
         }
     }
     #+end_src
+
+    *注意：实例类字段类型不能为primitive type，因为primitive type的字段必定会有默认值，因此无法通过NULL触发使用通过Mybatis-plus设置的默认值。如整数必须使用Integer而不是int。*
 
 ** QA
    1. ~selectList,selectOne~ 等方法返回的实体类中存在表不存在的字段时，报如 ~Cause: java.lang.IndexOutOfBoundsException: Index 8 out of bounds for length 8~ 的异常

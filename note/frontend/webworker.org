@@ -290,3 +290,14 @@
      }
      Comlink.expose(obj)
      #+end_src
+* Electron使用WebWorker
+  Electron中使用Web Worker的同源限制中开了个口——UI线程所属页面URL为本地文件时，所分配给Web Worker的脚本可为本地脚本。
+  其实Electron打包后读取的HTML页面、脚本等都是本地文件，如果不能分配本地脚本给Web Worker执行，那就进入死胡同了。
+
+  #+begin_src js
+  const path = window.require('path')
+
+  const worker = new Worker(path.resolve(__dirname, 'worker.js'))
+  #+end_src
+  上述代码仅表示Electron可以分配本地脚本给WebWorker线程执行，但实际开发阶段一般是通过 ~http(s)://~ 协议加载页面资源，而发布时才会打包为本地资源。
+  所以这里还要分为开发阶段用和发布用代码，还涉及资源的路径问题，所以还不如直接转换为Blob数据内嵌到UI线程的代码中更便捷。

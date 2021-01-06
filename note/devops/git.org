@@ -212,6 +212,8 @@
   #        由于git push实际是采用Fast-forward方式合并本地分支到远端分支，而Fast-forward方式仅使用于target_branch和base_branch的区别仅为target_branch比base_branch多几个提交。
   #        当target branch仅一人开发时可使用git push --force <remote_repos> <target_branch>，将本地分支的提交记录强行覆盖远端分支；
   #        当target branch多人开发时使用git push --force-with-lease <remote_repos> <target_branch>，当远端分支上存在其他人提交的commit时则覆盖失败。
+  #    执行过程中可以通过 git --abort/--continue终止操作
+  #    成功执行后可以通过 git reflog查看执行rebase前的本地commit记录，然后通过git reset --hard 0231234恢复到rebase前的状态。
   git rebase -i <base_branch>
   git push --force-with-lease <remote_repos> <target_branch>
   git checkout <base_branch>

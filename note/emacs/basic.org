@@ -271,7 +271,6 @@ EShell is written entirely in EmacsLisp. To invoke it, run ~M-x eshell~.
    (global-set-key (kbd "M-\"") 'shell-command-on-buffer)
    #+end_src
 
-
 * projectile
   插件：counsel-projectile
 

@@ -1,10 +1,13 @@
 WebSocket协议诞生于2008年，并于2011年成为标准。
 特点：
-1. 基于TCP协议, bi-direction, full-duplex, persistent connection；
+1. 基于TCP协议, bidirection, full-duplex, persistent connection；
 2. 与HTTP协议兼容性好，默认端口号为80和443，并且Handshake/Acknowledgement阶段采用HTTP协议，能通过各种HTTP代理服务器；
-3. 数据格式较清量，性能开销小，通信效率高；服务端到客户端的数据包头只有2到10字节，客户端到服务端则2到10字节另加4字节的掩码。而HTTP则必须携带完整的包头。
-4. 可以发送文本和二进制数据；
+3. 数据格式较清量，性能开销小，通信效率高。
+   1. 服务端到客户端的数据包头只有2到10字节，客户端到服务端则2到10字节另加4字节的掩码。
+   2. 一旦建立链接则不需要再传输头信息，而HTTP每次通信都必须携带完整的头信息。
+4. 可以发送文本和二进制数据，是以有序帧为传输单位。而HTTP是字符串传输；
 5. 没有同源策略的限制；
+   在Handshake/Acknowledgement阶段进行same-origin安全模型验证。
 6. 协议标识符为 ~ws~ 和加密版本（即WS协议和TCP协议之间增加一层TLS协议）的 ~wss~ ，服务地址为URL。
 
 * 浏览器原生API
@@ -88,7 +91,7 @@ WebSocket协议诞生于2008年，并于2011年成为标准。
   ws.extensions
   #+end_src
 
-* 握手阶段的请求响应报文
+* 握手(handshake)阶段的请求响应报文
   1. 客户端HTTP请求报文
      #+begin_src text
      GET / HTTP/1.1
@@ -130,201 +133,936 @@ WebSocket协议诞生于2008年，并于2011年成为标准。
    2. 但由于需要执行优雅降级，因此 ~new Sockjs(url: string)~ 中的url仅支持http和https协议，而不支持ws和wss协议的url。
 
 ** Integrate with Spring
-   Spring 4提供基于Sockjs协议的透明回退选项。
+   Spring 4.0为WebSocket通信提供支持，包含
+   1. 发送和接收消息的底层API；
+   2. 发送和接收消息的高级API；
+   3. 用于发送消息的支持STOMP服务端的模板。
 
-*** 广播
-**** Server Side
-     1. Configuration
+   上述API均支持基于Sockjs协议的透明回退方案。
+
+*** pom.xml
+    #+begin_src xml
+    <!-- WebSocket -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <!-- WebSocket消息发送时会调用spring-messaging的方法
+    如
+    ExecutorSubscribableChannel
+    SimpleBrokerMessageHandler
+    -->
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-messaging</artifactId>
+    </dependency>
+    #+end_src
+
+*** 底层API
+    注意：以下示例没有实现STOMP服务端，因此仅能进行WebSocket通信。
+
+**** 服务端
+     1. 继承 ~AbstractWebSocketHandler~ 的子消息处理类(~TextWebSocketHandler~)，并自定义 **建立连接**, **接收/发送消息** 和 **异常情况** 的处理。
+        #+begin_src java
+        @Slfj4
+        @Component
+        public class EchoWebSocketHandler extends TextWebSocketHandler {
+           @Override
+           public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+               logger.debug("Opened new session in instance {}", this);
+           }
+
+           @Override
+           public void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+               // store the process result of `message.getPayload()` to `resultMessage`.
+               session.sendMessage(new TextMessage(resultMessage));
+           }
+
+           @Override
+           public void handleTransportError(WebSocketSession session, Throwable exception) {
+               session.close(CloseStatus.SERVER_ERROR);
+           }
+        }
+        #+end_src
+     2. 继承 ~WebSocketConfigurer~ 实现WebSocket配置类
         #+begin_src java
         @Configuration
-        @EnableWebSocketMessageBroker // 启动异步消息Broker配置
-        public class WebSocketMessageBrokerConfig extends AbstractWebSocketMessageBrokerConfigurer {
-            @Override
-            public void configureMessageBroker(MessageBrokerRegistry registry) {
-                // 设置以/topic和/notice为前缀的两个独立的异步消息Broker。
-                // SimpleBroker采用组播的消息转发机制，即订阅者均能收到消息。
-                registry.enableSimpleBroker("/topic", "/notice");
-                // 点对点使用的消息发送前缀，默认为/user
-                // 即仅有一个订阅者可以收到消息。
-                // registry.setUserDestinationPrefix("/user");
-
-                // 设置WebSocket客户端发送消息时的目标地址标识的前缀，即该 前缀+@MessageMapping参数 即为客户端发送消息的目标地址标识。
-                registry.setApplicationDestinationPrefixes("/app");
-
-                // TODO
-                // registry.setCacheLimit(int cacheLimit)
-                // registry.setPathMatcher(PathMatcher pathMatcher)
-                // registry.setPreservePublishOrder(boolean preservePublishOrder)
-                // registry.setUserRegistryOrder(int registryOrder)
-            }
-
-            @Override
-            public void registerStompEndpoints(StompEndpointRegistry registry) {
-                // 暴露STOMP服务端接入点，客户端必须通过接入点与服务端建立连接后，然后才能相互通信。
-                registry.addEndpoint("/endpoint1", "/endpoint2"); // 暴露两个原生WebSocket的STOMP接入点
-                registry.addEndpoint("/endpoint1", "/endpoint2").withSockJS(); // 暴露两个遵循SockJS协议的STOMP接入点
-                registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("http://example1.com", "http://example2.com"); // 暴露两个原生WebSocket的支持跨域访问的STOMP接入点
-                registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("*").withSockJS(); // 暴露两个遵循SockJS协议的支持跨域访问的STOMP接入点
-            }
-        }
-        #+end_src
-     2. Handler
-        #+begin_src java
-        @Controller
-        public class WebSocketController {
-
-            /* 客户端向destination为/app/chat发送的消息会被该Handler Method处理，并且其处理结果会被转发到/topic/messages的Broker中。
-             * 1. Handler Method的返回值经过序列化后再转发到Broker；
-             * 2. 消息会以组播形式发送给所有订阅/topic/messages的客户端。
-             */
-            @MessageMapping("/chat1")
-            @SendTo("/topic/messages")
-            public Message say(String message) {
-                return Message
-                         .type("normal")
-                         .content(message)
-                         .build();
-            }
-
+        @EnableWebSocket
+        public class WebSocketConfig implement WebSocketConfigurer {
             @Autowired
-            private SimpMessagingTemplate messagingTemplate;
+            EchoWebSocketHandler echoWebSocketHandler;
 
-            // 效果和say方法一样
-            @MessageMapping("/chat2")
-            public void say2(String message) {
-                Message msg = Message
-                                .type("normal")
-                                .content(message)
-                                .build();
-                messagingTemplate.convertAndSend(msg);
-            }
-
-            // 通过RESTful API暴露消息发送接口
-            @RequestMapping("/chat3")
-            @ResponseBody
-            public ResponseEntity say3(String message) {
-                Message msg = Message
-                                .type("normal")
-                                .content(message)
-                                .build();
-                messagingTemplate.convertAndSend(msg);
-                return ResponseEntity.ok().build();
+            @Override
+            public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+                registry.addHandler(echoWebSocketHandler, "/echoMessage");
+                registry.addHandler(echoWebSocketHandler, "/echoMessage").withSockJS();
+                /*
+                registry.addHandler(echoWebSocketHandler, "/echoMessage")
+                  .addInterceptors() // 设置拦截器
+                  .setHandshakeHandler() // 设置连接建立阶段的处理器，也可以通过interceptor在beforeHandshake hook中处理
+                  .setAllowedOrigins() // 设置CORS的Access-Control-Allow-Origin
+                */
             }
         }
         #+end_src
-     3. Transfer Object
-        #+begin_src java
-        @builder
-        public class Message {
-            private String type;
-            private String content;
-        }
-        #+end_src
 
-**** Client Side
+**** 客户端
      #+begin_src js
-     const Sockjs = require('sockjs-client')
-     const Stomp = require('stompjs')
+     // Native WebSocket
+     const ws = new WebSocket('ws://localhost/echoMessage')
+     ws.onopen = () => console.log('opened')
+     ws.onmessage = event => console.log(event.data)
+     ws.onclose = () => console.log('closed')
+     ws.send('hi')
+
+     // SockJS
+     const ws = SockJS('http://localhost/echoMessage')
+     ws.onopen = () => console.log('opened')
+     ws.onmessage = event => console.log(event.data)
+     ws.onclose = () => console.log('closed')
+     ws.send('hi')
+     #+end_src
+
+*** 支持STOMP服务端的模板方式
+
+**** 广播
+***** TODO Server Side
+      1. Configuration
+         #+begin_src java
+         @Configuration
+         @EnableWebSocketMessageBroker // 启动异步消息Broker配置
+         public class WebSocketMessageBrokerConfig extends AbstractWebSocketMessageBrokerConfigurer {
+             @Override
+             public void configureMessageBroker(MessageBrokerRegistry registry) {
+                 // 设置以/topic和/notice为前缀的两个独立的异步消息Broker。
+                 // SimpleBroker采用组播的消息转发机制，即订阅者均能收到消息。
+                 registry.enableSimpleBroker("/topic", "/notice");
+
+                 // 设置WebSocket客户端发送消息时的目标地址标识的前缀，即该 前缀+@MessageMapping参数 即为客户端发送消息的目标地址标识。
+                 registry.setApplicationDestinationPrefixes("/app");
+                 // 设置WebSocket客户端订阅单播使用的消息发送前缀，默认为/user
+                 // 即仅有一个或多个同组订阅者可以收到消息。
+                 // registry.setUserDestinationPrefix("/user");
 
 
-     class MQClient {
-         constructor(id, client, factory) {
-             this.id = id
-             this.client = client
-             this.factory = factory
+                 // TODO
+                 // registry.setCacheLimit(int cacheLimit)
+                 // registry.setPathMatcher(PathMatcher pathMatcher)
+                 // registry.setPreservePublishOrder(boolean preservePublishOrder)
+                 // registry.setUserRegistryOrder(int registryOrder)
+             }
+
+             @Override
+             public void registerStompEndpoints(StompEndpointRegistry registry) {
+                 // 暴露STOMP服务端接入点，客户端必须通过接入点与服务端建立连接后，然后才能相互通信。
+                 registry.addEndpoint("/endpoint1", "/endpoint2"); // 暴露两个原生WebSocket的STOMP接入点
+                 registry.addEndpoint("/endpoint1", "/endpoint2").withSockJS(); // 暴露两个遵循SockJS协议的STOMP接入点
+                 registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("http://example1.com", "http://example2.com"); // 暴露两个原生WebSocket的支持跨域访问的STOMP接入点
+                 registry.addEndpoint("/ep1", "/ep2").setAllowedOrigins("*").withSockJS(); // 暴露两个遵循SockJS协议的支持跨域访问的STOMP接入点
+             }
+
+             // 仅用于记录断开连接时的事件，不必要。
+             @Override
+             public void configureClientInboundChannel(ChannelRegistration registration) {
+                 registration.interceptors(new MyChannelInterceptor());
+             }
          }
 
-         send(destination, header, payload) {
-             this.client.send(destination, header || {}, payload)
-         }
-
-         subscribe(destination, handler) {
-             this.client.subscribe(destination, handler)
-         }
-
-         close() {
-             this.factory.__removeClientRef(this.id)
-         }
-     }
-
-     class MQClientFactory {
-         constructor() {
-             this.clientRefs = []
-             this.heartBeatRef = null
-         }
-
-         connect(header, url) {
-             const client = Stomp.over(new Sockjs(url))
-             return new Promise(resolve => {
-                 client.connect(header || {}
-                     , frame => {
-                         const id = (+new Date())
-                         this.clientRefs.push({
-                             id,
-                             client,
-                         })
-                         // Enable Heart Beat
-                         if (this.heartBeatRef === null) {
-                             this.heartBeatRef = setInterval(5000, () => {
-                                 this.clientRefs.forEach(clientRef => {
-                                     clientRef.client.send('Heart Beat')
-                                 })
-                             })
-                         }
-
-                         resolve(new MQClient(id, client, this))
-                 })
-         }
-
-         __removeClientRef(id) {
-             const index = this.clientRefs.findIndex(clientRef => clientRef.id === id)
-             if (index !== -1) {
-                 this.clientRefs.splice(index, 1)
-                 if (this.clientRefs.length === 0) {
-                     clearInterval(this.heartBeatRef)
-                     this.heartBeatRef = null
+         @Component
+         public class MyChannelInterceptor implements ChannelInterceptor {
+             @Override
+             public void afterSendCompletion(Message<?> message, MessageChannel channel, boolean sent, Exception ex) {
+                 StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+                 StompCommand command = accessor.getCommand();
+                 if (StompCommand.DISCONNECT.equals(command)) {
+                     String user = "";
+                     Principal principal = accessor.getUser();
+                     if (principal != null && StringUtils.isNoneBlank(principal.getName())) {
+                         user = principal.getName();
+                     }
+                     else {
+                         user = accessor.getSessionId(); // 建立STOMP协议通信通道后，双方会持有simpSessionId的头信息。
+                     }
                  }
              }
          }
-     }
-     const mqClientFactory = new MQClientFactory()
+         #+end_src
+      2. Handler
+         #+begin_src java
+         @Controller
+         public class WebSocketController {
 
-     ;(async function()
-         const client = await mqClientFactory.connect({}, 'http://localhost:8080/chat')
-         client.subscribe('/topic/message', console.log)
-         client.send('/apps/chat', {}, 'hi')
-         setTimeout(10000, () => {
-             client.close()
+             /* 客户端向destination为/app/chat发送的消息会被该Handler Method处理，并且其处理结果会被转发到/topic/messages的Broker中。
+              * 1. Handler Method的返回值经过序列化后再转发到Broker；
+              * 2. 消息会以组播形式发送给所有订阅/topic/messages的客户端。
+              */
+             @MessageMapping("/chat1")
+             @SendTo("/topic/messages")
+             public Message say(String message) {
+                 return Message
+                          .type("normal")
+                          .content(message)
+                          .build();
+             }
+
+             @Autowired
+             private SimpMessagingTemplate messagingTemplate;
+
+             // 效果和say方法一样
+             @MessageMapping("/chat2")
+             public void say2(String message) {
+                 Message msg = Message
+                                 .type("normal")
+                                 .content(message)
+                                 .build();
+                 messagingTemplate.convertAndSend(msg);
+             }
+
+             // 通过RESTful API暴露消息发送接口
+             @RequestMapping("/chat3")
+             @ResponseBody
+             public ResponseEntity say3(String message) {
+                 Message msg = Message
+                                 .type("normal")
+                                 .content(message)
+                                 .build();
+                 messagingTemplate.convertAndSend(msg);
+                 return ResponseEntity.ok().build();
+             }
+         }
+         #+end_src
+      3. Transfer Object
+         #+begin_src java
+         @builder
+         public class Message {
+             private String type;
+             private String content;
+         }
+         #+end_src
+
+***** Client Side
+      #+begin_src js
+      const Sockjs = require('sockjs-client')
+      const Stomp = require('stompjs')
+
+
+      class MQClient {
+          constructor(id, client, factory) {
+              this.id = id
+              this.client = client
+              this.factory = factory
+          }
+
+          send(destination, header, payload) {
+              this.client.send(destination, header || {}, payload)
+          }
+
+          subscribe(destination, handler) {
+              this.client.subscribe(destination, handler)
+          }
+
+          close() {
+              this.factory.__removeClientRef(this.id)
+          }
+      }
+
+      class MQClientFactory {
+          constructor() {
+              this.clientRefs = []
+              this.heartBeatRef = null
+          }
+
+          connect(header, url) {
+              const client = Stomp.over(new Sockjs(url))
+              return new Promise(resolve => {
+                  client.connect(header || {}
+                      , frame => {
+                          const id = (+new Date())
+                          this.clientRefs.push({
+                              id,
+                              client,
+                          })
+                          // Enable Heart Beat
+                          if (this.heartBeatRef === null) {
+                              this.heartBeatRef = setInterval(5000, () => {
+                                  this.clientRefs.forEach(clientRef => {
+                                      clientRef.client.send('Heart Beat')
+                                  })
+                              })
+                          }
+
+                          resolve(new MQClient(id, client, this))
+                  })
+          }
+
+          __removeClientRef(id) {
+              const index = this.clientRefs.findIndex(clientRef => clientRef.id === id)
+              if (index !== -1) {
+                  this.clientRefs.splice(index, 1)
+                  if (this.clientRefs.length === 0) {
+                      clearInterval(this.heartBeatRef)
+                      this.heartBeatRef = null
+                  }
+              }
+          }
+      }
+      const mqClientFactory = new MQClientFactory()
+
+      ;(async function()
+          const client = await mqClientFactory.connect({}, 'http://localhost:8080/chat')
+          client.subscribe('/topic/message', console.log)
+          client.send('/apps/chat', {}, 'hi')
+          setTimeout(10000, () => {
+              client.close()
+          })
+      })()
+      #+end_src
+
+***** Spring源码分析
+      被 ~@MessageMapping~ 标注的方法，会在 ~AbstractMethodMessageHandler~ 的 ~handleMatch~ 方法被调用，并处理其返回值。
+      #+begin_src java
+      protected void handleMatch(T mapping, HandlerMethod handlerMethod, String lookupDestination, Message<?> message){
+          // ......
+          // invocable就是被 ~@MessageMapping~ 标注的方法
+          Object returnValue = invocable.invoke(message, new Object[0]);
+          // ......
+          // 处理返回值
+          this.returnValueHandlers.handlerReturnValue(returnValue, returnType, message);
+      }
+      #+end_src
+      ~SendToMethodReturnValueHandler~ 中判断是采用 ~SendTo~ 还是 ~SendToUser~ 方法转发消息，默认为 ~SendTo~.
+      若即没有写 ~@SendToUser~ 也没有写 ~@SendTo~, 那么会默认采用 ~@SendTo~, 且转发到destination为 ~/{defaultDestinationPrefix}/{value of @MessageMapping}/~ 的Borker中。
+      而defaultDestinationPrefix默认值为 ~"/topic"~ , 因此 ~@MessageMapping("/chat")~ 默认会转发到 ~"/topic/chat"~ 的Broker上。
+      #+begin_src java
+      if (sendTo != null || sendToUser == null) {
+          String[] destinations = this.getTargetDestinations(sendTo, message, this.defaultDestinationPrefix);
+          for (String destination : destinations) {
+              destination = destinationHelper.expandTemplateVars(destination);
+              this.messageTemplate.convertAndSend(destination, returnValue, this.createHeaders(sessionId, returnType));
+          }
+      }
+      #+end_src
+
+
+      1. ~@SendTo~ 的处理消息主要类为 ~SimpleBrokerMessageHandler~ ，当广播消息时则会调用其中的 ~void sendMessageToSubscribers(@Nullable String destination, Message<?> message)~ 方法，其中会将消息循环发送给所有订阅此Broker的所有客户端Session。
+         #+begin_src java
+         // 根据消息中的destination头信息筛选出订阅该destination的订阅者
+         // 1. 入参destination在整个方法中都没有被调用，因此设置为@Nullable。
+         // 2. 订阅者是按其所在会话分类的，因此subscriptions中的键名为sessionId,值是一个subscriptionId的List<String>
+         MultiValueMap<String, String> subscriptions = this.subscriptionRegistry.findSubscriptions(message);
+         // 遍历所有会话
+         subscriptions.forEach((sessionId, subscriptionIds) -> {
+             Iterator var6 = subscriptionIds.iterator();
+
+             // 遍历所有订阅者，通过SimpMessageHeaderAccessor创建消息和复制入参message的头信息，最后发送出去
+             Message reply = MessageBuilder.createMessage(payload, headerAccessor.getMessageHeaders());
+             this.getClientOutboundChannel().send(reply);
          })
-     })()
-     #+end_src
+         #+end_src
+      2. ~@SendToUser~ 的主要处理位于SendToMethodReturnValueHandler的handleReturnValue方法
+         #+begin_src java
+         if (sendToUser != null) {
+             boolean broadcast = sendToUser.broadcast();
+             String user = this.getUserName(message, headers);
+             if (user == null) {
+                 if (sessionId == null) {
+                     throws new MissingSessionUserException(message);
+                 }
 
-*** TODO 单播
+                 user = sessionId;
+                 broadcast = false;
+             }
+
+             // this.defaultUserDetinationPrefix默认为"/queue"
+             destinations = this.getTargetDestinations(sendToUser, message, this.defaultUserDestinationPrefix);
+             // ......
+             if (broadcast){
+                 this.messageTemplate.convertAndSendToUser(user, destination, returnValue, this.createHeaders((String)null, returnType));
+             }
+             else {
+                 this.messageTemplate.convertAndSendToUser(user, destination, returnValue, this.createHeaders(sessionId, returnType));
+             }
+         }
+         #+end_src
+         - ~this.messageTemplate~ 是 ~SimpMessagingTemplate~ 的实例
+           #+begin_src java
+           public void convertAndSendToUser(String user, String destination, Object payload, @Nullable Map<String, Object> headers, @Nullable MessagePostProcessor postProcessor) throws Messaging Exception {
+               Assert.notNull(user, "User must not be null");
+               Assert.isTrue(!user.contains("%2F"), "Invalid sequence \"%2F\" in user name: " + user);
+               user = StringUtils.replace(user, "/", "%2F");
+               destination = destination.startsWith("/") ? destination : "/" + destination;
+               // this.destinationPrefix 默认为 "/user/"
+               // 因此若@SendToUser的value值为/myqueue/hi，那么实际传送给SimpMessagingTemplate的convertAndSend方法的destination为/user/{sessionId}/myqueue/hi
+               // 若@SendToUser的value值为空字符串，那么实际传送给SimpMessagingTemplate的convertAndSend方法的destination为/user/{sessionId}/queue/{value of @MessageMapping}
+               // destination值如/user/h4k4uvk2/queue/chat
+               super.convertAndSend(this.destinationPrefix + user + destination, payload, header, postProcessor);
+           }
+           #+end_src
+         - ~SimpMessagingTemplate~ 的 ~send~ 方法
+           - 包含ChannelInterceptorChain，用于加入触发消息发送前后的逻辑，注意是触发消息发送，消息未必实时发送。
+             - 通过 ~applyPreSend~ 在触发消息发送前修改消息或执行其它任务
+             - 通过 ~applyPostSend~ 在触发消息发送后修改消息或执行其它任务
+             - 通过 ~triggerAfterSendCompletion~ 在消息发送后执行其它任务
+           - 源码片段
+             #+begin_src java
+             public final boolean send(Message<?> message, long timeout) {
+                 AbstractMessageChannel.ChannelInterceptorChain chain = new AbstractMessageChannel.ChannelInterceptorChain();
+                 boolean sent = false;
+
+                 try {
+                     messageToUse = chain.applyPreSend(messageToUse, this);
+                     if (messageToUse == null) {
+                         return false;
+                     }
+                     else {
+                         sent = this.sendInternal(messageToUser, timeout);
+                         chain.applyPostSend(messageToUser, this, sent);
+                         chain.triggerAfterSendCompletion(messageToUser, this, sent, (Exception)null);
+                         return sent;
+                     }
+                 }
+             }
+             #+end_src
+           - 内部调用 ~ExecutorSubscribableChannel.sendInternal~ 触发SimpleBrokerMessageHandler和UserDestinationMessageHandler来尝试发送消息。
+         - ~UserDestinationMessageHandler~ 的 ~handleMessage~ 中调用 ~this.destinationResolver.resolveDestination~
+           由于原来的destinaion为 ~/user/{sessionId}/queue/chat~ ，那么SimpleBrokerMessageHandler在 ~AbstractBrokerMessageHandler.checkDestinationPrefix~ 验证不通过。
+           而UserDestinationMessageHander会将 ~/user/{sessionId}/{destination of @SendToUser}~ 修改为 ~/{destination of @SendToUser}-user{sessionId}~ ，并且获取客户端要订阅的destination后将两者打包返回。
+           前者为targetDestination,而后者为subscribeDestination。且targetDestination在广播时不止一个。
+
+**** 单播
+     Spring提供两种方式：
+     1. 基于 ~#SendToUser~ 和 ~javax.security.Principal~ 参数。
+     2. 基于 ~SimpMessageSendingOperations~ 接口的 ~convertAndSendToUser~ 方法。
+
+***** 基于 ~@SendToUser~ 和 ~javax.security.Principal~ 参数
+      服务端最终的Destination是将 ~@SendToUser~ 的参数destination扩充为 ~/user/{destination in @SendToUser}-{username}~.
+      客户端订阅Destination为 ~/user/topic/greetings~ 会被Spring WebSocket转换为 ~/user/topic/greetings-xxx~, xxx为从Principal得到的信息。
+      而username获取方式逻辑为
+      1. 在建立WebSocket连接时从HttpRequest获取登录授权信息 ~javax.security.Principal~, 若存在则会序列化为STOMP的头信息simpUser值；
+      2. 单播转发消息和订阅时会先从STOMP头信息的simpUser获取认证信息，若存在则采用该信息；
+      3. 若没有则会采用simpSessionId的STOMP头信息值，该头信息是建立STOMP协议通信时自动创建的会话标识。
+
+****** 采用simpSessionId进行单播
+       配置类和广播的无区别，只有服务和客户端有差异。
+       1. 服务
+          #+begin_src java
+          @MessageMapping("/chat")
+          @SendToUser("/topic/messages")
+          public String hi() {
+              return "hi";
+          }
+          #+end_src
+       2. 客户端
+          #+begin_src js
+          const client = Stomp.over(new SockJS("http://localhost/chat"))
+          client.subscribe('/user/topic/messages', console.log)
+          client.send('/app/chat', 'hi')
+          #+end_src
+
+****** TODO 采用SendToUser的Principal进行单播
+       1. ~HandshakeInterceptor~ 在WebSocket握手前判断当前用户是否已经登录，若未登录则不允许使用WebSocket服务。
+       #+begin_src java
+          @Component
+          public class AuthHandshakeInterceptor implements HandshakeInterceptor {
+              // 抛出异常或返回false则中止WebSocket的连接建立过程。
+              @Override
+              public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Map<String, Object> attributes) throws Exception {
+                  HttpSession httpSession = this.getSession(request);
+                  String user = (String)httpSession.getAttribute("loginName");
+                  if (StringUtils.isEmpty(user)) {
+                    return false;
+                  }
+                  return true;
+              }
+
+              // 参考 HttpSessionHandshakeInterceptor
+              private HttpSession getSession(ServerHttpRequest request) {
+                  if (request instanceof ServletServerHttpRequest) {
+                    return ((ServletServerHttpRequest)request).getServletRequest().getSession(false);
+                  }
+                  return null;
+              }
+          }
+          #+end_src
+       2. ~DefaultHandshakeHandler~ 重写 ~determineUser~ 方法自定义Principal，默认的Principal是什么？
+          #+begin_src java
+          @Component
+          public class MyPrincipalHandshakeHandler extends DefaultHandshakeHandler {
+              @Override
+              protected Principal determineUser(ServerHttpRequest request, WebSocketHandler wsHandler, Map<String, Object> attributes) {
+                  HttpSession httpSession = getSession(request);
+                  String user = (String)httpSession.getAttribute("loginName");
+
+                  if (StringUtils.isEmpty(user)) {
+                    return null;
+                  }
+                  return new MyPrincipal(user);
+              }
+
+              // 参考 HttpSessionHandshakeInterceptor
+              private HttpSession getSession(ServerHttpRequest request) {
+                  if (request instanceof ServletServerHttpRequest) {
+                    return ((ServletServerHttpRequest)request).getServletRequest().getSession(false);
+                  }
+                  return null;
+              }
+          }
+
+          @Data
+          public class MyPrincipal implements Principal {
+              private loginName;
+              public MyPrincipal(String loginName){
+                this.loginName = loginName;
+              }
+          }
+          #+end_src
+       3. 针对单个接入点配置
+          WebSocket配置类注册服务端点时设置interceptor和handler。
+          #+begin_src java
+          @Override
+          public void registerStompEndpoints(StompEndpointRegistry registry) {
+            registry.addEndpoint("/ws/chat")
+              .addInterceptors(new AuthHandshakeInterceptor())
+              .setHandshakeHandler(new MyPrincipalHandshakeHandler())
+              .withSockJS();
+          }
+          #+end_src
+
+
+       注意： ~@SendToUser("/queue/notification")~ 会将消息推送给同一个用户标识的所有WebSocket Session，若要仅推送给单个WebSocket Session则需要写 ~@SendToUser("/queue/notification", broadcast=false)~.
 
 * STOMP(Simple/Streaming Text-Orientated Messaging Protocol)
+  由于WebSocket协议类似于TCP协议，并没有提供如HTTP等高级线路协议(wire protocol)，而STOMP则提供基于帧的线路格式(frame-based wire format)层来定义消息的语义。
   定义一套可交互操作的消息协议，允许STOMP客户端与任意STOMP消息代理（Broker）进行通信。
-  STOMP协议可以基于WebSocket和其他应用层协议之上。
+  STOMP协议可以基于WebSocket和其他应用层协议之上，因此对于支持STOMP协议但不支持WebSocket的STOMP Broker，客户端无法通过WebSocket与之通信。
   如同HTTP是基于TCP/IP连接上添加请求-响应模型层一样，STOMP则在WebSocket上提供基于帧的线路格式曾，用于定义消息语义。
+  现在存在两个版本的STOMP
+  1. STOMP 1.0
+  2. STOMP 1.1(including heart-beating)
 
-** Web前端工具库STOMP.js(https://github.com/jmesnil/stomp-websocket)
-   1. 下载安装
-   2. 问题
-      1. 由于stompjs可用于浏览器和Nodejs服务端，因此通过Webpack作为模块加载器在浏览器中通过 ~require('stompjs')~ 引入将报 ~Module not found: Error: Can't resolve 'net'~ 的异常。可通过如下方式解决
-         1. 通过 ~require('stompjs/lib/stomp')~ 引入
-         2. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
-            #+begin_src js
-            resolve: {
-                 alias: {
-                     stompjs: path.join(__dirname, 'node_modules', 'stompjs', 'lib', 'stomp.js')
-                 }
-            }
-            #+end_src
-         3. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
-            #+begin_src js
-            node: {
-                net: 'empty'
-            }
-            #+end_src
+** STOMP Frame
+   STOMP Frame由command, headers和body组成，其中command和headers为必填项，而body为可选项。
+   command包含CONNECT, SEND, SUBSCRIBE, UNSUBSCRIBE, BEGIN, COMMIT, ABORT, ACK, NACK, DISCONNECT, MESSAGE。
+   headers包含destination,ack,id,content-type,content-length,transaction等信息。
 
-* TODO 问题
-  1. 掉线自动重连
+   frame格式
+   #+begin_src
+   COMMAND
+   header1:value1
+   header2:value2
+
+   body^@
+   #+end_src
+   其中^@表示结束符。
+
+   1. 发送消息SEND
+      #+begin_src
+      SEND
+      destination:/queue/trade
+      content-type:application
+      content-length:44
+
+      {"type": "something", "payload": "hi"}^@
+      #+end_src
+   2. 订阅消息SUBSCRIBE
+      #+begin_src
+      SUBSCRIBE
+      id:sub-1
+      destination:/queue/trade
+      ^@
+      #+end_src
+   3. 服务器广播信息MESSAGE
+      #+begin_src
+      MESSAGE
+      message-id:nxahklf6-1
+      subscription:sub-1
+      destination:/queue/trade
+
+      {"type": "something", "payload": "hi"}^@
+      #+end_src
+
+** STOMP.js(https://github.com/jmesnil/stomp-websocket)
+
+*** 创建STOMP客户端
+    1. 基于浏览器原生WebSocket创建STOMP客户端
+       #+begin_src js
+       // 其中ws为WebSocket协议，而v10.stomp和v11.stomp为STOMP协议。
+       // 由于STOMP协议为信息协议，所以称为通信协议的子协议(subprotocol)。
+       // v10.stomp和v11.stomp表示客户端支持两种版本的STOMP协议，具体用哪个版本则由服务端决定。
+       // 第二参数不写则采用类库默认的STOMP协议版本。
+       const client = Stomp.client('ws://localhost:61614/stomp', ['v10.stomp', 'v11.stomp'])
+       #+end_src
+       - 注意：stomp.js默认为使用 ~const ws = new WebSocket(url)~ 来创建原生WebSocket对象，因此对于不提供该类的浏览器则会报错。
+    2. 基于Sockjs
+       #+begin_src js
+       // 这里可以用其它遵循WebSocket定义的类库来替换SockJS。
+       const ws = new SockJS('http://localhost/stomp')
+       const client = Stomp.over(ws)
+       #+end_src
+    3. Nodejs服务作为客户端
+       #+begin_src js
+       const Stomp = require('stompjs')
+       const clientOverTCP = Stomp.overTCP('localhost', 61613)
+       const clientOverWS = Stomp.overWS('ws://localhost:61614/stomp')
+       #+end_src
+
+*** Handshake/Acknowledgement阶段
+    #+begin_src js
+    // 利用WebSocket客户端向STOMP Broker发送CONNECT frame。
+    // connectCallback是连接成功并验证通过时执行
+    // errorCallback是连接失败或验证不通过时执行，STOMP Broker会向客户端发送ERROR frame。
+    client.connect(login: string, passcode: string, connectCallback?: Function, errorCallback?: Function, host: string): void
+
+    type Headers = {
+      login: string,
+      passcode: string,
+      host?: string,
+      [string]: string // 设置额外头信息
+    }
+    client.connect(headers: Headers, connnectCallback?: Function, errorCallback?: Function): void
+    var headers = {
+      login: 'myLogin',
+      passcode: 'mypasscode',
+      // additional header
+      'client-id': 'my-client-id'
+    }
+
+    const errorCallback = error => {
+        // 显示error的头信息中的message属性
+        console.log(error.headers.message)
+    }
+
+    // 断开连接
+    client.disconnect(diconnectCallback?: Function): void
+    #+end_src
+
+*** Heart-beating
+    如果STOMP Broker支持STOMP 1.1 frames，那么heart-beating功能默认启用。
+    #+begin_src js
+    client.heartbeat.outgoing = 20000 // 每20000毫秒发送一次心跳包，默认为10000毫秒。
+    client.heartbeat.incoming = 0 // 不接收STOMP Broker发送过来的心跳包，默认是每10000毫秒检测一次STOMP Broker是否有发送心跳包过来。
+    // 底层是通过setInterval实现心跳检查
+    #+end_src
+
+*** Send Message
+    #+begin_src js
+    // 向STOMP Broker发送STOMP SEND frame。
+    client.send(destination: string, headers?: object, body?: string): void
+    // 若要发送body而没有header，则必须赋予空对象{}
+    client.send(destination, {}, body)
+    #+end_src
+
+*** Subscribe and receive messages
+    #+begin_src js
+    type Message = {
+      body: string,
+      ack: (headers?: object) => void
+      nack: (headers?: object) => void // 在STOMP 1.1时可用于告知STOMP Broker客户端没有消费消息。
+    }
+    type Callback = (message: Message, headers?: object) => void
+    type Subscription = {
+      unsubscribe: {(): void}
+    }
+    // 发送STOMP SUBSCRIBE frame
+    // 当STOMP Broker发送message给客户端，那么就会发送一个STOMP Frame给客户端。
+    client.subscribe(destination: string, callback: Callback, additionalHeaders?: object): Subscription
+
+    // 取消订阅
+    subscription.unsubscribe()
+    #+end_src
+
+*** Acknowledgement
+    客户端订阅消息时默认会告知服务端在发送消息前先自动执行消息确认，然后再发送给客户端。
+    但可以通过发送 ~{ack: 'client'}~ 或 ~{ack: 'client-individual'}~ 告知服务端，由客户端手动处理消息确认。
+    #+begin_src js
+    client.subscribe('/queue/test', message => {
+      // do something with the message
+      // ......
+
+      message.ack()
+    }, {ack: 'client'})
+    #+end_src
+    可以结合事务，和要求服务端正常接收ACK STOMP frame时返回凭证
+    #+begin_src js
+    client.subscribe('/queue/test', message => {
+      const tx = client.begin()
+      // do something with the message
+      // ......
+
+      message.ack({transaction: tx.id, receipt: 'my-receipt'})
+      tx.commit()
+    }, {ack: 'client'})
+    #+end_src
+
+*** Transactions
+    #+begin_src js
+    type Transaction = {
+      id: string,
+      commit: () => void,
+      abort: () => void
+    }
+    const tx:Transaction = client.begin() // 可传递一个可选字符串入参(transaction)，标识事务名称。若没有则会自动生成一个。
+    // 发送一个位于事务当中的消息，即实际上没有发送消息到服务端
+    // 若没有添加头信息{transaction: tx.id}，那么发送的消息不属于事务，即马上发送给服务端。
+    client.send('/queue/test', {transaction: tx.id}, 'message in transaction')
+    // 提交事务，即马上发送消息到服务端。
+    tx.commit()
+    // 废弃事务，事务相关的未发送的消息将被丢弃。
+    tx.abort()
+    #+end_src
+
+*** Debug
+    #+begin_src js
+    client.debug = console.log // 显示所有发送和接收的信息，默认会打印到console上。
+
+
+    #+end_src
+
+*** 问题
+    1. 由于stompjs可用于浏览器和Nodejs服务端，因此通过Webpack作为模块加载器在浏览器中通过 ~require('stompjs')~ 引入将报 ~Module not found: Error: Can't resolve 'net'~ 的异常。可通过如下方式解决
+       1. 通过 ~require('stompjs/lib/stomp')~ 引入
+       2. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
+          #+begin_src js
+          resolve: {
+               alias: {
+                   stompjs: path.join(__dirname, 'node_modules', 'stompjs', 'lib', 'stomp.js')
+               }
+          }
+          #+end_src
+       3. 通过 ~require('stompjs')~ 引入，但在webpack.config.js中添加
+          #+begin_src js
+          node: {
+              net: 'empty'
+          }
+          #+end_src
+** Spring集成的STOMP Broker
+   根据消息destination的前缀分为3种类型
+    1. SimpAnnotationMethod MessageHandler(应用目的地址)，即前缀为 ~/app~ 的会被路由到 ~@MessageMapping~ 或 ~@SubscribeMapping~ 注解的方法上，然后经过应用自定义的处理后转发到STOMP Broker中。
+       1. ~@MessageMapping~
+          #+begin_src java
+          // 默认会将返回值转发到Broker中，而destination前缀为/topic（可通过@SendTo重写destination）
+          @MessageMapping("/hi")
+          public String hi(){
+            return "ccc";
+          }
+          #+end_src
+       2. ~@SubscribeMapping~
+          提供异步的请求-响应模型，而不是将消息转发到Broker中。
+          #+begin_src java
+          // 如果加上@SendTo则会发送给Broker。
+          @SubscribeMapping("/hi")
+          public String hi(){
+            return "ccc";
+          }
+          #+end_src
+    2. StompBrokerReply MessageHandler(非应用目的地址)，即前缀为 ~/topic~ 或 ~/queue~ 的会直接发送给STOMP Broker(Stomp代理)，而代理类型由开发者设置(如in-memory、RabbitMQ、ActiveMQ等)；
+       - 在 ~SendToMethodReturnValueHandler~ 中
+         1. ~defaultDestinationPrefix~ 是 ~"/topic"~
+         2. ~defaultUserDestinationPrefix~ 是 ~"/queue"~
+    3. UserDestination MessageHandler，即前缀为 ~user~ 的则被路由到某个用户独有的destination上。
+
+*** 消息从生产者发送到消费者接收的流程
+    1. Producer *SEND* a message to destination;
+    2. /Request channel/ of server receives the *SEND* command message;
+    3. Transfers the message to STOMP borker if the message destination is prefixed with ~/topic~ or ~/queue~, otherwise send it to the SimpAnnotationMethod MessageHandler;
+    4. Finally the broker compose *MESSEGE* command message according to the *SEND* command message, and push it to the /response channel/.
+
+*** Spring 4.0提供STOMP消息转换器
+    | 消息转换器                      | 描述                                                           |
+    |---------------------------------+----------------------------------------------------------------|
+    | ByteArrayMessageConverter       | 实现MIME类型为“application/octet-stream”的消息与byte[]间的转换 |
+    | MappingJackson2MessageConverter | 实现MIME类型为“appliction/json”的消息与Java对象间的转换        |
+    | StringMessageConverter          | 实现MIME类型为“text/plain”的消息与String间的转换               |
+
+    转换后的值会转发到 *消息代理(Broker)* 中，客户端必须通过订阅方式从 *消息代理* 获取这些值。
+    默认会转发到以 ~/topic~ 为前缀的destination，例如send的destination为 ~/app/hi~ ，那么默认转发的Broker destination为 ~/topic/hi~
+    可通过注解 ~@SendTo~ 指定Broker的destination。
+
+*** 异常处理
+    由于STOMP消息是异步的特点，因此需要将异常信息发送到特定的Destination，让感兴趣的用户订阅该Destination上的信息。
+    #+begin_src java
+    @MessageExceptionHandler(Exception.class)
+    @SendToUser("/queue/errors")
+    public Exception handleExceptions(Exception error) {
+        error.printStackTrace();
+        return error;
+    }
+    #+end_src
+* 示例——通过Spring底层API实现聊天室
+  不使用STOMP协议，而是自定义协议。
+
+** 功能
+   1. 加入某聊天室时
+      1. 输入 *称呼* 和 *房间号*, *点击加入* 即可进入房间
+      2. 进入房间后，页面出现 *欢迎xxx加入* ，并显示当前房间人数
+      3. 已在房间的其他用户，页面显示 *xxx加入房间*
+      4. 不同房间的用户不能互发消息
+   2. 实时聊天
+      1. 用户可向所有人发送消息，房间内所有人都会收到
+      2. 用户可向某个人发送悄悄话，悄悄话消息只能指定用户可见
+   3. 退出房间时
+      1. 用户点击退出当前房间，并在页面显示 *您已推出房间*
+      2. 房间内的其他用户可在页面上看到 *xxx已退出房间* 的提示。
+
+** 服务端
+   1. WebSocketConfigurer
+      #+begin_src java
+      @Configuration
+      @EnableWebSocket
+      public class WebSocketConfig implements WebSocketConfigurer {
+          @Override
+          public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+              // 路径中的{INFO}为Path Variable，用于在handshake/acknowlege阶段携带用户信息
+              // 若没有Path Variable(如仅有/ws)，那么WebSocket客户端可连接的WebSocket服务端端点URL仅能为/ws，而不能为/ws/hi、/ws/INFO={"a":1}等
+              registry.addHandler(new ChatRoomHandler(), "/ws/{INFO}")
+                .setAllowOrigins("*")
+                .addInterceptors(new ChatRoomInterceptor());
+          }
+      }
+      #+end_src
+   2. ChatRoomInterceptor
+      #+begin_src java
+      public class ChatRoomInterceptor implements HandshakeInterceptor {
+          @Override
+          public boolean beforeHandshake(ServerHttpRequest serverHttpRequest, ServerHttpResponse serverHttpResponse, WebSocketHandler webSocketHandler, Map<String, Object> map) throws Exception {
+              if (serverHttpRequest instanceof ServletServerHttpRequest) {
+                  String info = serverHttpRequest.getURI().getPath().split("INFO=")[1];
+                  if (info != null && info.length() > 0) {
+                      JSONObject jo = new JSONObject(info);
+                      String command = jo.getString("command");
+                      if (StringUtils.equals(command, "ENTER")) {
+                          // 将URL中的用户信息保存到HttpSession中，在本例子中作用不大。
+                          ServletServerHttpRequest request = (ServletServerHttpRequest) serverHttpRequest;
+                          HttpSession session = request.getServletRequest().getSession();
+                          session.put("ws_name", jo.getString("name"));
+                          session.put("ws_room_id", jo.getString("roomId"));
+                          return true;
+                      }
+                  }
+              }
+              return false;
+          }
+      }
+      #+end_src
+   3. ChatRoomHandler
+      #+begin_src java
+      public class ChatRoomHandler implements WebSocketHandler {
+          // 第一层key为roomId，第二层key为用户名，第二层值为用户对应的session
+          private static final Map<String, Map<String, WebSocketSession>> rooms = new HashMap<>(3);
+
+          // 进入房间时调用
+          // 注意：入参的session是WebSocketSession，而不是HttpSession。
+          @Override
+          public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+              String info = session.getUri().getPath().split("INFO=")[1];
+              if (!StringUtils.isEmpty(info)) {
+                  JSONObject jo = new JSONObject(info);
+                  String command = jo.getString("command");
+                  String roomId = jo.getString("roomId");
+                  String name = jo.getString("name");
+                  if (StringUtils.equals(command, "ENTER")) {
+                      Map<String, WebSocketSession> room = rooms.get(roomId);
+                      if (room == null) {
+                          room = new HashMap<>(3);
+                          rooms.put(roomId, room);
+                      }
+
+                      room.put(jo.getString("name"), session);
+                      session.sendMessage(new TextMessage("Current number of online users: " + room.size()));
+                  }
+              }
+          }
+
+          // 退出房间后连接被关闭后调用，此时已经不能和客户端通信，因此仅能用于回收服务端资源。
+          @Override
+          public void afterConnectionClosed(WebSocketSession webSocketSession, CloseStatus closeStatus) {
+              // ......从rooms中清理session等资源。
+          }
+
+          @Override
+          public void handleMessage(WebSocketSession webSocketSession, WebSocketMessage<?> webSocketMessage) {
+              JSONObject jo = new JSONObject(webSocketMessage.getPayload().toString());
+              switch (jo.getString("commmand")) {
+                  // 建立连接后会先执行afterConnectionEstablished，然后会继续执行handleMessage。
+                  // 而后续的消息发送则会直接执行handleMessage。
+                  case "ENTER":
+                      for(Entry<String, WebSocketSession> user : room.entrySet()) {
+                          if (user.getValue().isOpen()) {
+                              user.getValue().sendMessage("Welcome " + name);
+                          }
+                      }
+                      break;
+                  case "MESSAGE":
+                      // 根据是否为悄悄话，找到对应的WebSocketSession实例发送消息。
+                      break;
+                  case "LEAVE":
+                      for(Entry<String, WebSocketSession> user : room.entrySet()) {
+                          if (user.getValue().isOpen()) {
+                              user.getValue().sendMessage(name + " is leaving.");
+                          }
+                      }
+                      break;
+              }
+          }
+      }
+      #+end_src
+
+** 客户端
+   #+begin_src js
+   const ws = new WebSocket("ws://localhost:8080/ws/INFO={\"command\":\"ENTER\",\"user\":\"fsjohnhuang\",\"roomId\":123}")
+   ws.onmessage = event => {
+       console.log(event.data)
+   }
+   ws.send(JSON.stringify({command: 'MESSAGE', message: 'test'}))
+   #+end_src
+* Tomcat提供的WebSocket支持
+  Java EE7发布了JSR356规范，Tomcat7.0.47开始支持WebSocket接口。通过SpringBoot可以轻松使用Tomcat提供的WebSocket API。
+
+** 引入依赖
+   #+begin_src xml
+   <dependency>
+     <groupId>org.springframework.boot</groupId>
+     <artifactId>spring-boot-starter-websocket</artifactId>
+   </dependency>
+   #+end_src
+   spring-boot-starter-websocket中已经自动引入spring-boot-starter-web和spring-boot-starter。
+
+** 配置
+   #+begin_src java
+   @Configuration
+   public class WebSocketConfig {
+       @Bean
+       public ServerEndpointExporter serverEndpointExporter(){
+           return new ServerEndpointExporter();
+       }
+   }
+   #+end_src
+
+** 服务端
+   #+begin_src java
+   // 注意：WebSocket服务端是单例，但其能接受的WebSocketSession实例是多个的。
+   @ServerEndpoint("/ws/{roomId}")
+   @Component
+   public class WebSocketServer {
+       // 连接建立时被调用
+       @OnOpen
+       public void onOpen(Session session, EndpointConfig config, @PathParam("roomId") String roomId) {
+
+       }
+
+       // 文本消息则传入String类型参数或Reader类型参数
+       // 二进制消息则传入byte[]或InputStream类型参数
+       @OnMessage
+       public void onMessage(String message, Session session) {}
+
+
+       // 连接断开后被调用
+       @OnClose
+       public void onClose() {}
+
+
+       // 发送异常时被调用
+       @OnError
+       public void onError(Session session, Throwable error) {}
+   }
+   #+end_src

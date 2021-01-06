@@ -1,5 +1,118 @@
-tried adj. 经过验证的
-tried and tested networking solution.
+* Kitchen
+refrigerator /rɪˈfrɪdʒəreɪtər/ 冰箱
+fridge /frɪdʒ/ 冰箱
+freezer 冰箱
+dish rack 碗架
+counter 柜台
+sink 水槽
+wok 中式炒菜锅
+pan 平底锅
+frying pan 长柄平底煎锅
+turner/spatula /ˈspætʃələ/ 锅铲
+ladle 长柄勺
+gas stove 燃气灶
+ventilator /ˈventɪleɪtər/ 抽油烟机，换气扇
+apron 围裙
+cpuboard 碗柜
+cabinet 储物柜
+oven 烤箱
+oven glove 烘烤用手套
+measuring cup/spoon 量杯
+tongs /tɑːŋz/ 夹面包/牛肉等用的夹子
+microwave 微波炉
+thermos 保温瓶
+electric kettle 电热水壶
+medicine pot 药煲
+soup pot 汤煲
+blender 搅拌机，榨汁机
+grinder 磨豆机
+toaster 烤面包机
+cutting board 砧板
+water purifier 净水器
+knife 刀
+grater /ˈɡreɪtər/ 胡萝卜/青瓜的磨丝/碎器
+cheese shredder 奶酪磨碎器
+spoon 调羹
+porcelain spoon /ˈpɔːrsəlɪn/ 瓷调羹
+slotted spoon 漏勺
+chopsticks 筷子
+fork 叉
+roller pin 擀面杖
+bottle opener 开瓶器
+nutcracker 坚果钳
+scales 天平，称
+roaster/tray 烤盘
+steam rack 蒸架
+steamer 蒸锅
+clay pot 砂锅
+mutton in hot pot 羊肉火锅
+rice cooker 饭煲
+pressure cooker 高压锅
+non-stick pan 不粘锅
+funnel /ˈfʌnl/ 漏斗
+salt shaker 小盐瓶
+whisk /wɪsk/ 打蛋器
+bowl 碗
+soup bowl 汤碗
+rice bowl 饭碗
+doubler 大碗
+dishwasher 洗碗机
+freezer bag 保鲜袋
+trash/garbage bag 垃圾袋
+dustbin/trash can/refuse bin/gabage can 垃圾筒
+power strip 电源插排
+mop 拖把
+dustpan 簸箕
+broom 扫把
+plug/socket 插座
+wall plug 墙上的插座
+(deep) frying 炸
+pan frying 煎
+steaming 蒸
+smoked 熏
+decoct /diˈkɑːkt/ 熬,煎服
+roast/bake 烤
+grill /ɡrɪl/ 烤串
+dice 切丁
+chop 切块
+slice 切片
+cut into strips 切条
+stewing /'stjuɪŋ/ 炖
 
-sophisticated adj. 水平高的
-in leaps and bounds 跳跃式发展
+* Face
+head
+hair 头发
+temple 太阳穴
+forehead 额头
+eyebrow /ˈaɪbraʊ/ 眉毛
+eyelash 眼睫毛
+eye 眼睛
+iris /ˈaɪrɪs/ 虹膜
+ear 耳朵
+cheek 面颊
+nose 鼻子
+nostril /ˈnɑːstrəl/ 鼻孔
+jaw /dʒɔː/ 颚
+mouth 口
+lip 唇
+chin 下巴
+neck 脖子
+shoulder 肩膀
+arm 手臂
+elbow /ˈelboʊ/ 肘
+forearm 前臂
+wrist /rɪst/ 手腕
+hand 手
+armpit /ˈɑːrmpɪt/ 腋窝
+back 背部
+chest 胸部
+waist 腰部
+abdomen /ˈæbdəmən/ 腹部
+hip 臀部
+buttocks 臀部
+leg 腿
+thigh 大腿
+knee 膝盖
+calf /kæf/ 小腿
+foot 脚丫
+heel 脚跟
