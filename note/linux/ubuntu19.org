@@ -386,7 +386,7 @@ lsb_release -a
      #+end_src
   3. 删除旧内核文件
      #+begin_src bash
-     sudo apt-get autoremove linux-image-(version)
+     sudo apt-get remove linux-image-(version) --purge
      #+end_src
 * Linux同步文件到Windows
 ** Windows 作为服务端

@@ -271,3 +271,16 @@
 * 客户端
 ** MySQL Workbench
    官方出品的GUI客户端，依赖VS C++因此需要安装.
+* 导入CSV文件的数据
+  #+begin_src sql
+  load data infile '/path/to/data.csv'
+  into table <table_name>
+  fields terminated by ',' -- Fields are seperated by a comma.
+  enclosed by '"' -- Field is enclosed by double quotation marks.
+  lines terminated by '\n' -- Each line of the CSV file is terminated by a newline character.
+  ignore 1 rows -- The CSV file has the first line that contains the column headings, which should not be imported into the table maybe.
+  -- Specify the columns to be imported.
+  -- It's an optional clause if there is no SET clause followed, otherwise specifies the column which will be refered in SET clause by prefix the column name with @ mark.
+  (title, @expired_date, amount)
+  set expired_date = str_to_date(@expired_date, '%m/%d/%y'); -- Transform the data format.
+  #+end_src

@@ -50,7 +50,7 @@
 
 * 函数签名
 
-** 完整函数类型  
+** 完整函数类型
    #+begin_src js
    function add(x: number, y: number): number {
        return x + y
@@ -67,7 +67,7 @@
    function add1(x: number, y: number): number
 
    // 通过参数名称后紧跟?，标识该参数为可选项，并且可选参数必须在所有必填参数后面
-   function add2(x: number, y?: number): number   
+   function add2(x: number, y?: number): number
 
    // 通过参数名称后的=号为参数赋予默认值，并且参数类型由默认值推导得出，并且带默认参数可以放在其它参数前面
    function add3(x: number, y=1): number    // add3(3)
@@ -98,7 +98,7 @@
    card.read()
    #+end_src
 
-*** 通过箭头函数使用自由变量 ~this~ 
+*** 通过箭头函数使用自由变量 ~this~
     #+begin_src js
     class Handler {
         info: string;
@@ -124,7 +124,7 @@
        Yes // 默认值为1，但由于第一个枚举值被设置为1，因此第二个枚举值自动计算为2
    }
    #+end_src
-   
+
    注意：
    1. 数字枚举可以混入 *表达式和常量成员* ，但表达式成员后的其它成员必须定义初始化器，要么是表达式要么是常量。
       #+begin_src js
@@ -209,7 +209,7 @@
   结论：在表示“不知道什么类型”的场景时，使用 ~unknown~
   1. ~any~
      绕过TypeScript类型检查机制，可执行任何操作。
-  2. ~unknown~ 
+  2. ~unknown~
      1. 限制：该类型的变量仅能执行有限操作(~==,===,||,&&,?,!,typeof,instanceof~ 等等)；
      2. 突破限制：通过类型断言转换为其它类型后，才能执行其它类型相应的操作。
 
@@ -230,7 +230,7 @@
     #+begin_src js
     // 定义$作为函数时的类型声明
     declare function $(selector: string): HTMLElement
-   
+
     // 定义$其下成员的类型声明
     declare namespace $ {
 	function ajax(url: string, settings: any): void
@@ -270,7 +270,7 @@
        "./types/**/*",
    ]
    #+end_src
-   
+
 *** 示例 ~jQuery.d.ts~
     #+begin_src js
     declare function jQuery(selector: string): HTMLElement
@@ -282,9 +282,9 @@
     #+end_src
 
 *** 类型声明文件的查找优先级
-    1. 通过 ~reference~ type 
+    1. 通过 ~reference~ type
     2. 根据tsconfig.json配置文件的paths查找类型声明文件；
-       #+begin_src 
+       #+begin_src
        {
            "compilerOptions": {
                "baseUrl": "./", // 当设置paths字段时，必须设置该属性。用于解析相对路径。
@@ -335,7 +335,7 @@
     若确实没有什么可以export，那么可以采用如下样板代码
     #+begin_src js
     export {}
-    
+
     declare global {
         interface File {
 	additional: any;
@@ -345,7 +345,7 @@
 
 *** 扩展全局变量 ~./src/xxx.d.ts~
     在 ~./src/xxx.d.ts~ 类型声明文件仲定义全局对象的类型声明即可，建议文件名为 ~./src/global.d.ts~ 。
-    #+begin_src 
+    #+begin_src
     declare let globalVariable: string
     declare interface Window {
         myname: string
@@ -393,7 +393,7 @@
            "files": ["index.js", "*.d.ts"] // npm会根据files配置的规则决定发布哪些文件
        }
        #+end_src
-       
+
 *** 发布到@types组织
      规则：
      1. @types下的包是从DefinitelyTyped(https://github.com/DefinitelyTyped/DefinitelyTyped)通过DefinitelyTyped-tools(https://github.com/microsoft/DefinitelyTyped-tools/tree/master/packages/publisher)发布的；
@@ -414,7 +414,7 @@
      index.d.ts
      #+begin_src js
      import { User } from './user'
-     
+
      declare namespace Models {
          export type User = User
      }
@@ -508,7 +508,7 @@
     通常存在如下两种原因才考虑排除标准类型声明文件：
     1. You are running in a custom JavaScript environment that differs significantly from the standard browser based runtime environment.
     2. You like to have strict control over the globals available in your code. E.g. lib.d.ts defines ~item~ as a global variable and you don't want this to leak into your code.
-    
+
     使用 ~--noLib~ 需要注意的是：
     Once you are in noLib land, if you choose to share your project with others(e.g. others installs your project by npm or yarn), they will be forced into noLib land (or rather your lib land).
 
@@ -564,7 +564,7 @@
     interface TID extends CallableTID{
         [prop: string]: number
     }
-    
+
     var callableTID: CallableTID = (name: string): number => Number(name)
     export var TID: TID = callableTID as TID
     #+end_src
@@ -591,7 +591,7 @@
         Svng: number
         YsN: number
     }
-    
+
     var callableTID: CallableTID = (name: string): number => Number(name)
     export var TID: TID = callableTID as TID
     TID.Svng = TID('Svng')
@@ -606,12 +606,12 @@
         Svng: number
         YsN: number
     }
-    
+
     export var TID: TID = ((name: string): number => Number(name)) as TID
     TID.Svng = TID('Svng')
     TID['YsN'] = TID('YsN')
     #+end_src
-    
+
 * 类型保护
   用于对联合类型变量进行类型分支判断。
 
@@ -621,7 +621,7 @@
        switch (typeof x) {
            case 'number': return x
            case 'string': return x.length
-           default: return Number(boolean)	 
+           default: return Number(boolean)
        }
    }
    #+end_src
@@ -631,7 +631,7 @@
    class Fruit {}
    class Apple extends Fruit {}
    class Orange extends Fruit {}
-   
+
    function eat(fruit: Fruit): void {
        if (fruit instanceof Apple) {
            console.log('eat apple')
@@ -655,7 +655,7 @@
       const anthorLenOfStr2: number = (str2 || '').length
 
       // ?. 操作符，该操作符处于stage1阶段，需要安装插件才能使用
-      const theLastLenOfStr1: number | undefined  = str1?.length      
+      const theLastLenOfStr1: number | undefined  = str1?.length
       const theLastLenOfStr2: number | undefined  = str2?.length
    }
    #+end_src
@@ -682,7 +682,7 @@
        console.log('B')
    }
    #+end_src
-   
+
 * 接口
 
 ** 基础
@@ -690,7 +690,7 @@
    interface Point {
        readonly x: number; // 只读属性
        y?: number; // 可选属性
-       
+
        (start: number): string; // 方法签名
    }
    #+end_src
@@ -705,7 +705,7 @@
    a = ro // Error
    a = ro as number[] // OK
    #+end_src
-   
+
 ** readonly与const的区别
    变量适用const，类属性使用readonly。
 
@@ -740,7 +740,7 @@
    #+end_src
 
 * 泛型
-  
+
 ** 泛型函数
    #+begin_src js
    function identity<T>(arg: T): T {
@@ -756,8 +756,8 @@
    interface Identity<T> {
        (arg: T): T;
    }
-   
-   const myId1: Identity<number> = identity   
+
+   const myId1: Identity<number> = identity
    #+end_src
 
 ** 泛型类
@@ -805,13 +805,13 @@
 
       const p: Named = new Person()
       #+end_src
-  
+
 ** 函数的类型兼容
    兼容的条件：
    1. 形参列表个数小于等于目标函数类型的形参列表个数；
    2. 形参列表中形参类型的顺序与目标函数类型的形参列表的一致，或形参类型为目标函数对应位置的参数类型的子类型；
    3. 函数返回值必须为目标函数返回值的子类型。
-    
+
    #+begin_src js
    const add: (x: number, y: number) => number = (x, y) => x + y
    const increment(x: number) => number = x => x+1
@@ -821,7 +821,7 @@
 
    const handleEvent: (e: Event) => void;
    const handleMouseEvent: (e: MouseEvent) => void;
-   
+
    handleEvent = handleMouseEvent // 类型兼容
    handleMouseEvent = handleEvent // 类型不兼容
    #+end_src
@@ -970,11 +970,11 @@
   ES2015开始Symbol作为原生类型，用于表示不可变且唯一的值。
 
 ** 使用
-    #+begin_src js 
+    #+begin_src js
     let sym1 = Symbol()
     let sym2 = Symbol('Optional Name')
     let sym3 = Symbol()
-    
+
 
     sym1 === sym3 // 永远返回false
     let obj1 = {
@@ -1049,7 +1049,7 @@
     for (let pet of pets) {
         console.log(pet) // 'Cat', 'Dog'
     }
-    #+end_src    
+    #+end_src
 
 * 模块
   任何包含顶级 ~import~ 或 ~export~ 的文件都被当成一个模块，否则它的内容将是全局有效的。
@@ -1231,7 +1231,7 @@
    /// <amd-module name='Validator'/>
    #+end_src
 * 装饰器(Decorators)
-  该特性处于实验性阶段，因此需要在命令行或tsconfig.json中启用experimentalDecorators编译器选项。 
+  该特性处于实验性阶段，因此需要在命令行或tsconfig.json中启用experimentalDecorators编译器选项。
   - ~tsc --target ES5 --experimentalDecorators~
   - tsconfig.json
     #+begin_src js
@@ -1247,7 +1247,7 @@
    装饰器能被附加到 *类声明*, *方法*, *访问符*, *属性* 或 *参数* 上。
    语法为 ~@expression~ 且 expression的求值结果为一个函数，而该函数的入参就是修饰符所附加的对象。
 
-** 修饰器工厂 
+** 修饰器工厂
    用于传递额外信息给修饰器
    #+begin_src js
    function decoratorFactory(...extraData: any[]): (target: any, ...props: any[]) => any {
@@ -1270,7 +1270,7 @@
 ** 类装饰器
    应用于构造函数前，可用于监视、修改或替换类定义。
    注意：
-   1. 签名为两种形式 
+   1. 签名为两种形式
       1. ~(clazz: Function): void~
 	 #+begin_src js
 	 function sealed(ctor: Function): void {
@@ -1290,7 +1290,7 @@
 	         }
 	     }
 	 }
-              
+
 	 @enhance
               class P {
 	     text: string
@@ -1319,7 +1319,7 @@
    3. 也不用于任何外部上下文(~declare class~)
 
 ** 类访问器装饰器
-   应用于访问器的属性描述符上，可用于监视、修改或替换方法的定义。   
+   应用于访问器的属性描述符上，可用于监视、修改或替换方法的定义。
    注意：
    1. 签名 ~(target: Object, propertyKey: string | symbol, descriptor?: PropertyDescriptor): void~
       1. 若编译目标版本小于ES5，则descriptor将为undefined
@@ -1337,20 +1337,20 @@
       2. 实例方法target为原型对象
    2. 不能用于声明文件(.d.ts)中
    3. 也不用于任何外部上下文(~declare class~)
-   
+
 ** 参数装饰器
    仅能用于为指定位置的参数添加元数据，无法独立对实参进行校验的操作。必须与类方法装饰器配合才能实现实参校验的工作。
-   注意：   
+   注意：
    1. 签名 ~(target: Object, functionName: string | symbol, parameterIndex: number): void~
       1. 静态方法target为类的构造函数
       2. 实例方法target为原型对象
    2. 不能用于声明文件(.d.ts)中
    3. 也不用于任何外部上下文(~declare class~)
-* 工作流
+* TODO 工作流
   注意：tsc编译报TypeScript Error并不会阻止生成js代码。
 
 ** TODO gulp+typescript
-   
+
 * tsconfig.json文件说明
 ** ~files: string[]~ 属性
    默认情况下tsc会加载并编译tsconfig.json同级路径下的所有 ~.ts,.tsx,.d.ts~ 文件。
@@ -1358,7 +1358,7 @@
 
 ** ~compilerOptions/target~
    用于设置编译目标的ECMAScript版本。
-   可选值： ~'ES3' | 'ES5' | 'ES2015' | 'ES2016' | 'ES2017' | 'ES2018' | 'ES2019' | 'ES2020' | 'ESNEXT'~ 
+   可选值： ~'ES3' | 'ES5' | 'ES2015' | 'ES2016' | 'ES2017' | 'ES2018' | 'ES2019' | 'ES2020' | 'ESNEXT'~
    当选择ES5或以上版本时，生成的模块会添加如下信息：
    #+begin_src js
    "use strict";

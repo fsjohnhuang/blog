@@ -11,9 +11,14 @@
      6) 代码校验
      7) 自动发布
 
+
+  注意：
+  1. Webpack各个版本和相应的loader、插件都有差异。因此必须对照文档来使用。
+  2. Everything is module, even HTML and CSS files.
+
 * 安装
   #+begin_example bash
-  npm install webpack-cli -g
+  npm install webpack-cli --save-dev
   npm install webpack webpack-dev-server --save-dev
 
 
@@ -35,12 +40,12 @@
         mode: "prodcution",
         // 指定入口文件路径
         entry: {
-          path: path.resolve(__dirname, "src"),
+          path: path.join(__dirname, "src"),
           filename: "index.js"
         },
         output: {
           // 指定打包输出路径(path/filename)为./dist/bundle.js
-          path: path.resolve(__dirname, "dist"),
+          path: path.join(__dirname, "dist"),
           filename: "bundle.js",
           // 设置所有对打包资源URL的前缀
           // 如打包资源打包后路径为/img/main.css，那么页面引用时则变为http://www.cdn.com/img/main.css
@@ -64,7 +69,7 @@
         }
         output: {
           // 指定打包输出路径(path/filename)
-          path: path.resolve(__dirname, "dist"),
+          path: path.join(__dirname, "dist"),
           filename: "[name].js" // 通过占位符[name]来根据entry的键值对自动展开为多个输入路径，./dist/app.js和./dist/common.js
         },
         plugins: [
@@ -738,7 +743,7 @@
          #+end_example
       2) 配置
          #+begin_example js
-         const CleanWebpackPlugin = require("clean-webpack-plugin")
+         const {CleanWebpackPlugin} = require("clean-webpack-plugin")
 
          module.exports = {
            entry: "./src/index.js",
@@ -1512,3 +1517,60 @@
           "webpack-dev-server": "^3.11.0"
           #+end_src
      - 解决方法2: 执行 ~npx webpack serve~
+* 样式资源处理
+** Webpack4
+*** 样式资源打包为独立文件
+    通过css-loader默认情况下会将CSS资源转换为CommonJS对象，那么自然就内嵌到JS代码中。
+    1. webpack4需要使用 ~mini-css-extract-plugin~ 而不是 ~extract-text-webpack-plugin~ (不支持webpack4) 把非JS的代码打包为单个独立的资源文件。
+       - 效果和 ~file-loader!extract-loader!css-loader~ 是一致的。
+    2. CSS代码中存在 ~url()~ 和 ~@import()~ ，默认情况会解析，若找不到资源则会报错 ~Can't resolve 'path/to/resource' in 'path/to/css'~
+       可通过options设置为 ~{url: false, import: false}~ 修改为不解析。
+    3. 压缩CSS代码采用 ~optimize-css-assects-plugin~ 插件处理。
+
+
+    #+begin_src js
+    module.exports = {
+      mode: 'production',
+      entry: '/path/to/index.js',
+      output: '/path/to/dist/index.js',
+      module: {
+        rules: [
+          {
+            test: /\.css$/,
+            use: [
+                MiniCssExtractPlugin.loader,
+                {
+                  loader: 'css-loader',
+                  options: {
+                    import: false,
+                    url: false
+                  }
+                }
+            ]
+          }
+        ]
+      },
+      plugins: [
+        new MiniCssExtractPlugin({
+          filename: './index.css'
+        }),
+        new OptimizeCssAssetsPlugin()
+      ]
+    }
+    #+end_src
+* 暴露模块为全局变量
+** Webpack4
+   场景：
+   1. 默认情况下通过 ~require~ 或 ~import~ 方式引入依赖，模块内部将通过 *局部变量* 引用依赖的元素。
+   2. bootstrap的大量插件不支持CommonJS方式引入依赖，如仅允许通过全局变量的方式引用jQuery。
+      - 恰逢所引用的jQuery版本以UMD方式暴露给使用方，即不是硬编码为 ~window.jQuery~ 的方式暴露。
+
+
+   通过expose-loader可以通过 *全局变量* 引用依赖的元素。
+   1. 安装 ~npm i expose-loader --save-dev~
+   2. 使用方式
+      1. 在webpack.config.js中配置
+      2. 在 ~require~ 或 ~import~ 中以inline方式配置
+
+
+* TODO 依赖全局变量
