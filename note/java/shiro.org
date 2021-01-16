@@ -102,7 +102,7 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
    }
    #+end_src
 
-*** SameSite特性详解
+*** TODO SameSite特性详解
     作用为用于限制第三方Cookie，从而减少安全风险。
     可设置为3个值：
     1. Strict，完全禁止第三方Cookie。
@@ -119,6 +119,12 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
          | POST表单/iframe/AJAX/img |                                    | 不允许 |
        - 响应头Set-Cookie：不保存跨域的Cookie内容到浏览器。
     3. None，不限制第三方Cookie。必须配置Secure特性，即目标域名通过HTTPS协议提供服务。
+
+
+**** TODO SSO中AJAX请求的SameSite
+     步骤：
+     1. 登录xxx.abc.com获取domain为.abc.com的Cookie;
+     2. 跳转到yyy.abc.com，并向zzz.abc.com发送需要Cookie验证的数据请求。
 
 **** 什么是第三方Cookie？
      在站点B请求站点A且携带站点A的Cookie信息(Cookie请求头)，或保存站点A的Cookie信息(Set-Cookie响应头)。
@@ -172,6 +178,7 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
            })
          #+end_src
       2. 后续请求
+
 * SessionManager
 ** 获取sessionId
    Shiro的DefaultWebSessionManager通过getReferencedSessionId方法从ServletRequest中获取sessionId。

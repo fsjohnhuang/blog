@@ -798,9 +798,10 @@
 
          module.exports = {
            plugins: [
-             new CopyWebpackPlugin([
-               { from: "doc", to: "./dist"}
-             ])
+             new CopyWebpackPlugin(
+               // [{ from: "doc", to: "./dist"}] 旧版本中使用该入参格式
+               {patterns: [{ from: "doc", to: "./dist"}]} // 新版本中使用该入参格式
+             )
            ]
          }
          #+end_example
@@ -830,6 +831,19 @@
      2) NamedChunksPluign
      3) NamedModulesPlugin
   3) ~none~ 不启用任何内置优化项
+
+* 环境变量 ~process.env~ 的使用
+  1. NodeJS中的使用
+     #+begin_src js
+     // index.js
+     console.log(process.env.NODE_ENV)
+     console.log(process.env.NODE_PRE)
+     #+end_src
+  2. Windows中设置环境变量 ~set NODE_ENV=dev && set NODE_PRE=true && node index.js~
+  3. MacOS/Linux中设置环境变量 ~export NODE_ENV=dev && export NODE_PRE=true && node index.js~
+  4. 跨平台设置环境变量
+     1. 安装 ~npm i cross-env --save-dev~
+     2. 使用 ~cross-env NODE_END_dev NODE_PRE=true node index.js~
 
 * 文件指纹
 
@@ -1012,51 +1026,92 @@
       }
       #+end_example
 
-* 全局变量的引入
-  1) 通过內联expose-loader引入
-     #+begin_example js
-     import $ from "expose-loader?$!jquery"
+* 全局变量的引入和暴露
 
-     window.$.find(".my-class")
-     #+end_example
-  2) 通过在webpack.config.js中调用expose-loader
-     #+begin_example js
-     const path = require("path")
+** 全局变量的引入-Webpack4
+    1) 向每个模块注入
+       #+begin_example js
+       const webpack = require("webpack")
 
-     module.exports = {
-       module: {
-         rules: [
-           {
-             test: path.resolve("jquery"),
-             use: "expose-loader?$"
-           }
+       module.exports = {
+         plugins: [
+           new webpack.ProvidePlugin({
+             jquery: "$"
+           })
          ]
        }
-     }
-     #+end_example
-  3) 向每个模块注入
-     #+begin_example js
-     const webpack = require("webpack")
-
-     module.exports = {
-       plugins: [
-         new webpack.ProvidePlugin({
+       #+end_example
+       #+begin_example js
+       $.find(".my-class")
+       #+end_example
+    2) 已通过CDN引入，然后在模块中通过 ~import $ from "jquery"~ 引入使用
+       #+begin_example js
+       module.exports = {
+         externals: {
            jquery: "$"
-         })
-       ]
-     }
-     #+end_example
-     #+begin_example js
-     $.find(".my-class")
-     #+end_example
-  4) 已通过CDN引入，然后在模块中通过 ~import $ from "jquery"~ 引入使用
-     #+begin_example js
-     module.exports = {
-       externals: {
-         jquery: "$"
+         }
        }
-     }
-     #+end_example
+       #+end_example
+
+
+** 全局变量的暴露-Webpack4
+   默认情况下通过 ~require~ 或 ~import~ 方式引入依赖，模块内部将通过 *局部变量* 引用依赖的元素。
+   如bootstrap的大量插件不支持CommonJS方式引入依赖，仅允许通过全局变量的方式引用jQuery，而恰逢所使用的jQuery版本支持UMD从而无法触发以 ~window.jQuery~ 方式暴露元素。
+
+*** 模块使用CommonJS/AMD/ES Module方式暴露元素
+    通过expose-loader暴露 *全局变量*
+    1. 安装 ~npm i expose-loader --save-dev~
+    2. 将 *默认导出元素* 暴露为全局变量 (e.g. ~export default target_object~, ~module.exports = target_object~)
+       1. 在webpack.config.js中配置
+          #+begin_example js
+          const path = require("path")
+
+          module.exports = {
+            module: {
+              rules: [
+                {
+                  test: path.resolve("jquery"),
+                  use: [
+                    {
+                      loader: 'expose-loader',
+                      options: {
+                        'exposes': [
+                          '$',
+                          'jquery',
+                          'jQuery',
+                          'jq'
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+       #+end_example
+       2. 在 ~require~ 或 ~import~ 中以inline方式配置
+          #+begin_src js
+          # 仅用于暴露为全局变量$,jquery,jQuery,jq
+          import "expose-loader?{exposes:["$","jquery","jQuery","jq"]}!jquery"
+          # 在当前模块作为局部使用，且暴露为全局变量$,jquery,jQuery,jq
+          import $ from "expose-loader?{exposes:["$","jquery","jQuery","jq"]}!jquery"
+          #+end_src
+    3. 将 *模块成员* 暴露为全局变量 (e.g. ~export factor1~, ~module.exports.factor1 = factor1~)
+       1. 在 ~require~ 或 ~import~ 中以inline方式配置
+          #+begin_src js
+          // 将模块test的export var echo = message => message暴露名为hi的全局函数
+          import "expose-loader?{exposes:[{globalName: "hi", moduleLocalName: "echo"}]}!test"
+          #+end_src
+
+*** 模块使用 ~var/const/let~ 方式暴露全局变量
+    对于不是采用CommonJS、AMD和ES方式以模块式开发的代码而言，通过Webpack打包后通过 ~var/const/let~ 暴露的全局变量均将成为模块内的局部变量。
+    因此需要通过 ~exports-loader~ 将标记为模块向外暴露的元素，再通过 ~expose-loader~ 将其暴露为全局变量。
+    在 ~require~ 或 ~import~ 中以inline方式配置
+    #+begin_src js
+    // var echo = message => message
+    import 'expose-loader?{exposes:["say"]}!exports-loader?{exports:["echo"]}!test'
+    #+end_src
+    注意：若通过 ~echo = message => message~ 来声明和定义的变量，既不会暴露为全局对象(window)的属性(由于被识别为局部变量，那么会被重命名)，也无法通过exports-loader暴露为模块向外暴露的元素。
 
 * SourceMap
   #+begin_example js
@@ -1558,19 +1613,3 @@
       ]
     }
     #+end_src
-* 暴露模块为全局变量
-** Webpack4
-   场景：
-   1. 默认情况下通过 ~require~ 或 ~import~ 方式引入依赖，模块内部将通过 *局部变量* 引用依赖的元素。
-   2. bootstrap的大量插件不支持CommonJS方式引入依赖，如仅允许通过全局变量的方式引用jQuery。
-      - 恰逢所引用的jQuery版本以UMD方式暴露给使用方，即不是硬编码为 ~window.jQuery~ 的方式暴露。
-
-
-   通过expose-loader可以通过 *全局变量* 引用依赖的元素。
-   1. 安装 ~npm i expose-loader --save-dev~
-   2. 使用方式
-      1. 在webpack.config.js中配置
-      2. 在 ~require~ 或 ~import~ 中以inline方式配置
-
-
-* TODO 依赖全局变量

@@ -400,6 +400,125 @@
             public void index(@PathVariable String userId){}
             #+END_EXAMPLE
        3) ~@MatrixVariable~
+          RFC3986定义URI中可包含name-value，而Spring3.2后出现，默认禁用的。
+          - 属性：
+            - name 设置要获取路径中某个参数的参数名
+            - pathVar 设置要获取参数的路径段
+            - value 指定pathVar中的某参数名
+            - required，默认值false 是否为必要参数
+            - defaultValue 设置默认值
+          - 示例
+            #+begin_src java
+            /*
+             1. 获取单个路径片段中的参数
+             请求URI为 /Demo2/66;color=red;year=2020
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@PathVariable String id, @MatrixVariable String color, @MatrixVariable String year){}
+            /*
+             2. 获取单个路径片段中的参数
+             请求URI为 /Demo2/color=red;year=2020
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test2(@MatrixVariable String color, @MatrixVariable String year){}
+
+
+            /*
+             3. 获取不同路径片段中的参数
+             请求URI为 /Demo2/66;color=red;year=2020/pets/77;color=blue;year=2019
+            */
+            @RequestMapping(path="/Demo2/{id1}/pets/{id2}", method=RequestMethod.GET)
+            public String test3(@PathVariable String id1, @PathVariable String id2,
+              @MatrixVariable(name="color", pathVar="id1") String color1, @MatrixVariable(name="year", pathVar="id1") String year1,
+              @MatrixVariable(name="color", pathVar="id2") String color2, @MatrixVariable(name="year", pathVar="id2") String year2){}
+            /*
+             4. 获取不同路径片段中的参数
+             请求URI为 /Demo2/color=red;year=2020/pets/77;color=blue;year=2019
+            */
+            @RequestMapping(path="/Demo2/{id1}/pets/{id2}", method=RequestMethod.GET)
+            public String test4(@PathVariable String id2,
+              @MatrixVariable(name="color", pathVar="id1") String color1, @MatrixVariable(name="year", pathVar="id1") String year1,
+              @MatrixVariable(name="color", pathVar="id2") String color2, @MatrixVariable(name="year", pathVar="id2") String year2){}
+            /* 注意：不同路径片段中出现名称相同的参数，那么必须通过pathVar标识所有相同参数所属路径，否则URI匹配失败。
+               以下handler仅标识第二个参数的pathVar，而没有标识第一个，那么也是会匹配失败的。
+               @RequestMapping(path="/Demo2/{id1}/pets/{id2}", method=RequestMethod.GET)
+               public String test2(@MatrixVariable String color, @MatrixVariable(name="color", pathVar="id2") String color2){}
+            */
+
+            /*
+             5. 通过Map获取所有或指定路径下的所有参数
+            */
+            @RequestMapping(path="/Demo3/{id1}/pets/{id2}", method=RequestMethod.GET)
+            public String test5(@MatrixVariable Map<String, Object> all, @MatrixVariable(pathVar="id1") Map<String, Object> mapId1) {}
+            #+end_src
+          - 多值
+            #+begin_src java
+            /*
+             请求为/Demo1/color=123,321
+             那么color值为123,321
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable String color){}
+            /*
+             请求为/Demo1/color=123;color=321
+             那么color值为123,321
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable String color){}
+            /*
+             请求为/Demo1/color=123,321
+             那么color值为123,321
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable Integer[] color){}
+            /*
+             请求为/Demo1/color=123;color=321
+             那么color值为123,321
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable Integer[] color){}
+
+            /*
+             请求为/Demo1/color=123,321
+             那么color值为123
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable Map<String, Integer[]> color){}
+            #+end_src
+          - 参数值拼接与覆盖
+            #+begin_src java
+            /*
+             请求为/Demo1/color=123;color=321
+             那么color值为123,321
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable String color){}
+            /*
+             请求为/Demo1/color=123;color=321
+             那么color值为123
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable Integer color){}
+
+            /*
+             请求为/Demo1/color=123;color=321
+             那么map.get("color")值为123
+            */
+            @RequestMapping(path="/Demo1/{id}", method=RequestMethod.GET)
+            public String test1(@MatrixVariable Map<String, String> map){}
+            #+end_src
+          - 启用 ~@MatrixVariable~ 特性。默认Spring MVC禁用该特性，需要手动配置启动。
+            #+begin_src java
+            @Configuration
+            public class SpringBootConfig implements WebMvcConfigurer {
+                @Override
+                public void configurePathMatch(PathMatchConfigurer configurer) {
+                    UrlPathHelper urlPathHelper = new UrlPathHelper();
+                    urlPathHelper.setRemoveSemicolonContent(false);
+                    configurer.setUrlPathHelper(urlPathHelper);
+                }
+            }
+            #+end_src
        4) ~@RequestHeader~
           全限定类名org.springframework.web.bind.annotation.RequestHeader，用于将指定的请求头字段映射到Handle形参。
           - 参数

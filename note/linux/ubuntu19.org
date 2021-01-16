@@ -25,6 +25,14 @@
       exit 0
       #+end_example
       - 设置为可执行权限 ~sudo chmod +x /etc/rc.local~
+3) 更新wifi驱动
+   - 虽然wifi可以正常使用，但信号远比windows的要差且容易断开
+   - 因此需要更新wifi驱动
+     #+begin_src bash
+     sudo apt-get install git build-essential
+     git clone https://github.com/yebin254126/rtlwifi_new
+     cd rtlwifi_new && make && sudo make install && reboot
+     #+end_src
 
 ** nvidia安装
 1) 添加驱动源
@@ -57,12 +65,15 @@ Nouveau为Nvidia显卡的非官方支持的开源驱动
    4) 安装(简体/繁体)中文语言包作为输入源(input source)
       1) 搜索并进入 Region & Language
       2) 在Input Sources面板点击 ~+~ 后选择 ~Chinese~ ，然后在新的弹出窗选择 ~Chinese(Intelligent Pinyin)~
+         若没有显示 ~Chinese(Intelligent Pinyin)~ 则需要Logout后重新进入系统。
    5) 设置系统的输入法管理器
-      1) 搜索并进入 Input Method
-      2) 选择fcitx
-   6) 添加GoolgePinyin到输入发列表中
+      1) 搜索并进入 Input Method (或者在terminal中输入 ~im-config~)
+      2) 一路选择OK即可
+      3) 选择fcitx
+   6) 添加GoolgePinyin到输入发列表中，注意必须在第4步选择了 ~Chinese(Intelligent Pinyin)~ 才能看到GooglePinyin.
       1) 搜索并进入 Fcitx Configuration
-      2) 点击底部的 ~+~ 添加 GooglePinyin 即可
+      2) 取消Only show current language的复选框
+      3) 点击底部的 ~+~ 添加 GooglePinyin 即可
 
 * WPS
 ** WPS中文字体显示问题
@@ -388,6 +399,37 @@ lsb_release -a
      #+begin_src bash
      sudo apt-get remove linux-image-(version) --purge
      #+end_src
+* 禁止自动更新和锁定内核版本
+  由于很多软件不一定能及时跟进最新的Linux内核，因此Ubuntu自动更新软件和内核会为我们带来不必要的麻烦。
+  1. 禁止自动更新
+     1. 修改 ~/etc/apt/apt.conf.d/10periodic~ 为如下内容
+        #+begin_src bash
+        APT::Periodic:Update-Package-Lists "0";
+        APT::Periodic:Download-Upgradeable-Packages "0";
+        APT::Periodic:AutocleanInterval "0";
+        #+end_src
+     2. 修改 ~/etc/apt/apt.conf.d/20auto-upgrades~  为如下内容
+        #+begin_src bash
+        APT::Periodic:Update-Package-Lists "0";
+        APT::Periodic:Unattended-Upgrade "0";
+        #+end_src
+  2. 锁定当前内核版本
+     #+begin_src bash
+     sudo apt-mark hold linux-image-$(uname -r)
+     sudo apt-mark hold linux-headers-$(uname -r)
+     sudo apt-mark hold linux-modules-$(uname -r)
+     sudo apt-mark hold linux-modules-extra-$(uname -r)
+
+     # 查看是否生效
+     dpkg --get-selections | grep linux | grep hold
+
+     # 解除绑定
+     sudo apt-mark unhold linux-image-$(uname -r)
+     sudo apt-mark unhold linux-headers-$(uname -r)
+     sudo apt-mark unhold linux-modules-$(uname -r)
+     sudo apt-mark unhold linux-modules-extra-$(uname -r)
+     #+end_src
+
 * Linux同步文件到Windows
 ** Windows 作为服务端
    1. 下载并安装cwRsync_server
