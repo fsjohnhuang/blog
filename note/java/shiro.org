@@ -1,59 +1,451 @@
 * 组成
-Subject: 应用程序操作Shiro的对象，底层操作全部是调用SecurityManager。
+Subject: 主体，应用程序操作Shiro的对象，底层操作全部是调用SecurityManager。
 Realm: 作为数据源并执行Authentication和Authrization。
 SessionManager: Shiro可用于Servlet、EJB和桌面程序，因此抽象SessionManager模块用于管理各类应用类型的Session。并且可实现跨Servlet、EJB等共享Session实现身份验证服务。
 SessionDAO: 为SessionManager提供持久化操作。
 CacheManager: 管理用户、角色、权限等的缓存信息。
 
-* Integrated with Spring Boot
+* TODO Integrated with Spring Boot
   In a web application, all Shiro-accessible web requests must go through a master *Shiro Filter*.
   This filter allows for ad-hoc custom filter chains to be executed based on any URL path expression.
 
+** Shiro Config
+
+** Spring MVC
+
 * TODO Subject
+  1. SecurityManager的配置
+     #+begin_src java
+     // 由于Shiro的SecurityManager是线性安全的对象，而且整个应用只需一个对象即可，因此可以通过SecurityUtils将其绑定为全局对象，方便后续操作。
+     DefaultSecurityManager dsm = new DefaultSecurityManager();
+     // 设置Authenticator
+     ModularRealmAuthenticator authenticator = new ModularRealmAuthenticator();
+     authenticator.setAuthenticationStrategy(new AtLeastOneSuccessfulStrategy());
+     dsm.setAuthenticator(authenticator)
+     // 设置Authorizer
+     ModularRealmAuthorizer authorizer = new ModularRealmAuthorizer();
+     authorizer.setPermissionResolver(new WildcardPermissionResolver());
+     dsm.setAuthorizer(authorizer);
 
-* Filter
+     // 设置JDBC Realm
+     DruidDataSource ds = new DruidDataSource();
+     ds.setDriverClassName("com.mysql.jdbc.Driver");
+     ds.setUrl("jdbc:mysql://localhost:3306/shiroDemo");
+     ds.setUsername("root");
+     ds.setPassword("123456");
+     JdbcRealm jdbcRealm = new JdbcRealm();
+     jdbcRealm.setDataSource(ds);
+     jdbcRealm.setPermissionsLookupEnabled(true); // 默认为false，即不支持authorizer操作。
+     dsm.setRealms(Arrays.asList((Realm)jdbcRealm));
 
-~authc~ is corresponding to ~org.apache.shiro.web.filter.authc.FormAuthenticationFilter~ inner implemention class.
-~anon~ is corresponding to ~org.apache.shiro.web.filter.authc.AnonymousFilter~ inner implemention class.
+     SecurityUtils.setSecurityManager(dsm);
+     Subject subject = SecurityUtils.getSubject();
+     #+end_src
+  2. 使用Subject对象
+     #+begin_src java
+     // 通过帐号密码登录验证
+     UsernamePasswordToken token = new UsernamePasswordToken("zhang3", "123");
+     subject.login(token); // 若登录失败会抛出AuthenticationException或AuthroizationException异常
+     subject.logout(); // 登出
 
-** Customized Filter
+     subject.isAuthenticated(); // 表示是否验证通过，用于防止重复调用subect.login方法
 
+     subject.checkRole("admin"); // 表示当前帐号是否属于某角色，为假时抛出UnauthorizedException异常
+     subject.checkRoles("admin","root"); // 表示当前帐号是否属于某些角色，为假时抛出UnauthorizedException异常
+     subject.hasRole("admin"); // 表示当前帐号是否属于某角色，为假时返回false
+     subject.hasRoles(Arrays.asList("admin", "root")); // 表示当前帐号是否属于其中某些角色，为假时返回false
+     subject.hasAllRoles(Arrays.asList("admin", "root")); // 表示当前帐号是否属于列举的所有角色，为假时返回false
+
+     subject.checkPermission("user:delete"); // 表示当前帐号是否拥有某权限，为假时抛出UnauthorizedException异常
+     subject.checkPermissions("user:delete","user:create"); // 表示当前帐号是否拥列举的所有权限，为假时抛出UnauthorizedException异常
+     // 等价于：subject.checkPermissions("user:delete","create");
+     subject.isPermitted("user:delete"); //  表示当前帐号是否拥有某权限，为假时返回false
+     subject.isPermittedAll("user:delete"); // 表示当前帐号是否拥列举的所有权限，为假时返回false
+
+     // 身份信息获取
+     subject.getPrincipal();
+     subject.getPrincipals();
+     #+end_src
+
+** 身份验证
+ 在进行身份验证时需要向Shiro提供principals和credentials：
+ *Principals*, 身份，即主体(Subject)的 *标识属性* ，可以是用户名、邮箱等，只要保证全局唯一即可。一个主体(Subject)可以拥有多个principal，但只有一个primary principal，一般以用户名/密码/手机号作为primary principal。
+ *Credentials*, 凭证，即主体(Subject)的安全码，可以是密码、数字证书等。
+
+ 常见的Principal和Credential组合为用户名+密码。
+
+** 接口Subject, 实现类DelegatingSubject, 接口WebSubject和实现类WebDelegatingSubject
+   1. 接口Subject是其余三个接口和类型的祖先接口
+      - Subject中没有定义获取host的方法和字段
+   2. 实现类 ~DelegatingSubject implements Subject~
+      - 内部定义了获取host的方法和字段
+   3. 接口 ~WebSubject extends Subject, RequestPairSource~
+      - 声明获取Servlet请求和响应的方法
+        - ~ServletRequest getServletRequest()~
+        - ~ServletResponse getServletResponse()~
+   4. 实现类 ~WebDelegatingSubject extends DelegatingSubject implements WebSubject~
+      - 当将Shiro应用到Web应用时，通过 ~SecrityUtils.getSubject()~ 获取的就是 ~WebDelegatingSubject~ 实例。
+
+* TODO Filter
+
+** 拦截器基础类
+   使用Servlet的Filter接口进行扩展。Shiro的拦截器类关系图：
+   (I)Filter <- (C)AbstractFilter <- (C)NameableFilter <- (C)OncePerRequestFilter
+   (C)OncePerRequestFilter <- (C)AdviceFilter <- (C)PathMatchingFilter <- (C)AccessControlFilter
+   (C)OncePerRequestFilter <- (C)AbstractShiroFilter <- (C)ShiroFilter
+
+   - NameableFilter, 可命名的Filter，如内置的 ~org.apache.shiro.web.filter.authc.FormAuthenticationFilter~ 默认被命名为 *authc* 。那么在组装拦截器链时会根据这个名字寻找相应的拦截器实例。
+   - OncePerRequestFilter，用于防止单个请求多次执行Filter，即单个请求经过拦截器链时，链中的拦截器最多被执行一次。属性enable表示是否开启该拦截器，默认值为true表示开启，为false则该拦截器不生效。
+   - ShiroFilter，作为整个Shiro的入口点，用于拦截需要安全控制的请求。
+   - AdviceFilter，提供AOP风格如Spring MVC的interceptor
+     #+begin_src java
+     // 前置增强，若返回true则继续执行拦截器链，否则中断后续链中拦截器的执行直接返回。
+     // 用于预处理，如表单的身份验证、授权
+     boolean preHandle(ServletRequest request, ServletResponse response) throws Exception;
+     // 后置增强，在拦截器链执行完成后执行。发生异常则不执行。
+     // 用于后处理，如记录执行时间等。
+     void postHandle(ServletRequest request, ServletResponse response) throws Exception;
+     // 最终增强，不管是否发生异常，必定执行。
+     // 用于清理资源，如解除Subject和线程间的绑定等。
+     void afterCompletion(ServletRequest request, ServletResponse response) throws Exception;
+     #+end_src
+   - PathMatchingFilter，提供基于Ant风格的请求路径匹配功能和拦截器参数解析功能。
+     #+begin_src java
+     // 将path和request中的请求路径进行匹配，成功则返回true。
+     boolean pathsMatch(String path, ServletRequest request);
+     // preHandle方法中，若pathsMath返回true，那么会将路径绑定参数赋值给mappedValue并调用onPreHanle执行如角色授权等工作。
+     // 默认返回true，若返回false则会中断拦截器链后续拦截器的执行。
+     // 子类只需重写onPreHandle即可自定义验证功能，不必重写preHandle方法。
+     boolean onPreHandle(ServletRequest request, ServletResponse response, Object mappedValue) throws Exception;
+     #+end_src
+   - AccessControlFilter，提供访问控制的基础功能，如允许/拒绝访问时如何处理等。
+     #+begin_src java
+     // 表示是否允许访问
+     // mappedValue是ini文件中urls配置中拦截器参数部分
+     // 如果允许访问则返回true，否则返回false。
+     abstract boolean isAccessAllowed(ServletRequest request, ServletResponse response, Object mappedValue) throws Exception;
+     // 表示当访问拒绝时是否继续执行拦截器链后续的拦截器。true表示继续执行，false表示中断直接返回即可。
+     abstract boolean onAccessDenied(ServletRequest request, ServletResponse response, Object mappedValue) throws Exception;
+     #+end_src
+     - onPreHandle中会根据上述两个方法执行前置增强逻辑
+       #+begin_src java
+       boolean onPreHandle(ServletRequest request, ServletResponse response, Object mappedValue) throws Exception {
+           return isAccessAllowed(request, response, mappedValue) || onAccessDenied(request, response, mappedValue);
+       }
+       #+end_src
+     - 内部还提供如下方法处理基本表单登录成功后重定向到上一个请求
+       #+begin_src java
+       void setLoginUrl(String loginUrl); // 设置登录页面URL，默认为/login.jsp
+       String getLoginUrl();
+
+       Subject getSubject(ServletRequest request, ServletResponse response); // 获取Subject实例
+
+       boolean isLoginRequest(ServletRequest request, ServletResponse response); // 获取请求是否已登录
+
+       void saveRequest(ServletRequest request); // 保存请求，若登录成功则再重定向回来
+       void redirectToLogin(ServletRequest request, ServletResponse response); // 重定向到登录页面
+       void saveRequestAndRedirectToLogin(ServletRequest request, ServletResponse response) throws IOException; // saveRequest和redirectToLogin的结合。保存当前请求并重定向到登录页面
+       #+end_src
+
+** 拦截器链
+   Shiro通过ProxiedFilterChain对Servlet容器级的FilterChain进行代理，那么拦截器链的执行流程如下：
+   1. 先执行Shiro自定义的FilterChain；
+   2. 再执行Servlet容器级的FilterChain。
+
+
+   ProxiedFilterChain通过FilterChainResolver，根据配置文件中 ~[urls]~ 部分是否与请求的URL匹配得到具体的拦截器序列。
+   而FilterChainResolver默认使用其实现类PathMatchingFilterChainResolver，以Ant风格解析配置文件中的 ~[urls]~ 得到具体的URL模式与拦截器序列(拦截器链)的关系信息。
+   具体信息存储在内部的FilterChainManager(默认实现类DefaultFilterChainManager)中, *那么我们可以通过修改FilterChainManager的内容动态修改URL模式和拦截器链的关系* 。
+
+** 内置的拦截器
+   DefaultFilterChainManager默认会自动注册 ~org.apache.shiro.web.filter.mgt.DefaultFilter~ 中声明的拦截器。
    #+begin_src java
-   public class CustomizedFilter extends AccessControlFilter {
-
-       @Override
-       protected boolean isAccessAllowed(ServletRequest request, ServletResponse response, Object o) throws Exception {
-           return false;
-       }
-
-       @Override
-       protected boolean onAccessDenied(ServletRequest request, ServletResponse response) throws Exception {
-           /**
-            * 返回true，则继续执行后续的过滤器。
-            * 返回false，表示过滤器责任链执行结束，不再执行后续的过滤器。
-            */
-           return false;
-       }
+   public enum DefaultFilter {
+       anon(AnonymousFilter.class),
+       authc(FormAuthenticationFilter.class),
+       authcBasic(BasicHttpAuthenticationFilter.class),
+       logout(LogoutFilter.class),
+       noSessionCreation(NoSessionCreationFilter.class),
+       perms(PermissionsAuthorizationFilter.class),
+       port(PortFilter.class),
+       rest(HttpMethodPermissionFilter.class),
+       roles(RolesAuthorizationFilter.class),
+       ssl(SslFilter.class),
+       user(UserFilter.class);
    }
    #+end_src
 
-* Realm
+   1. 认证过滤器
+      - ~anon~ 对应 ~org.apache.shiro.web.filter.authc.AnonymousFilter extends PathMatchingFilter~ 表示不拦截，即匿名用户可访问。无入参。
+        - 就是 ~onPreHandle~ 方法永远返回true，即啥都不做直接放行。
+      - ~authc~ 对应 ~org.apache.shiro.web.filter.authc.FormAuthenticationFilter~ 表示采用表单认证。无入参。
+      - ~authcBasic~ 对应 ~org.apache.shiro.web.filter.authc.BasicHttpAuthenticationFilter~ 表示采用HTTP Basic认证。无入参。
+      - ~user~ 对应 ~org.apache.shiro.web.filter.authc.UserFilter~ 表示必须配置过记住我或认证通过才能访问。
+   2. 授权过滤器
+      - ~perms~ 对应 ~org.apache.shiro.web.filter.authz.PermissionsAuthrizationFilter~ 表示需要某些权限才能访问。单个参数 ~perms[user]~ ，多个参数 ~perms["user, admin"]~ 且所有参数都通过才能访问。
+      - ~roles~ 对应 ~org.apache.shiro.web.filter.authz.RolesAuthorizationFilter~ 表示需要某些角色才能访问。单个参数 ~roles[user]~ ，多个参数 ~roles["user, admin"]~ 且所有参数都通过才能访问。
+      - ~rest~ 对应 ~org.apache.shiro.web.filter.authz.HttpMethodPermissionFilter~ 表示根据请求方法，相当于 ~perms[user:<method>]~ 其中 ~<method>~ 为post, get, delete等。
+      - ~port~ 对应 ~org.apache.shiro.web.filter.authz.PortFilter~ 表示URL端口为指定端口时可以访问，如 ~port[8081]~
+      - ~ssl~ 对应 ~org.apache.shiro.web.filter.authz.SslFilter~ 表示https协议才可以访问。
+      - ~logout~ 对应 ~org.apache.shiro.web.filter.authz.LogoutFilter~ 表示触发注销操作，执行后会直接跳转到 ~shiroFilterFactoryBean.setLoginUrl()~ 的路径上。无入参
 
-** Multiple Realms
+   注意：必须通过认证过滤器后才会执行授权过滤器。
 
+** TODO 自定义拦截器
+** 注册拦截器
+   1. ini配置文件
+      - IniSecurityManagerFactory/WebIniSecurityManangerFactory在启动时会自动扫描ini配置文件中的[filters]和[main]部分的内容，并自动注册其中声明的拦截器到DefaultFilterChainmanager。
+      - 另外也会根据[urls]中的内容生成URL模式与拦截器链的关系信息。
+   2. 代码配置
+      - 静态配置
+      - 动态配置，返回自定义的FilterChainResolver即可
+        - 自定义Enviroment
+          #+begin_src java
+          public class DynamicIniWebEnvironment extends IniWebEnvironment {
+              // 返回自定义的FilterChainResolver，从而实现应用启动时从其它程序动态获取URL模式与拦截器链的关系信息。
+              @Override
+              protected FilterChainResolver createFilterChainResolver() {
+                  // 1. 创建FilterChainResolver
+                  PathMatchingFilterChainResolver filterChainResolver = new PathMatchingFilterChainResolver();
+                  // 2. 创建FilterChainManager
+                  DefaultFilterChainManager filterChainManager = new DefaultFilterChainManager();
+                  // 3. 注册默认的拦截器
+                  for (DefaultFilter filter : DefaultFilters.values()) {
+                      filterChainManager.addFilter(filter.name(), (Filter)ClassUtils.newInstance(filter.getFilterClass()));
+                  }
+                  // 4. 静态绑定URL模式与拦截器链的映射关系
+                  filterChainManager.addToChain("/login.jsp", "authc");
+                  filterChainManager.addToChain("/**", "authc");
+                  filterChainManager.addToChain("/unauthorized.jsp", "anon");
+                  filterChainManager.addToChain("/**", "roles", "admin"); // 先执行roles拦截器，再执行admin拦截器。
+                  // 5. 静态设置拦截器的属性
+                  FormAuthenticationFilter authcFilter = (FormAuthenticationFilter)filterChainManager.getFilter("authc");
+                  authcFilter.setLoginUrl("/login.jsp");
+                  RolesAuthenticationFilter rolesFilter = (RolesAuthenticationFilter)filterChainManager.getFilter("roles");
+                  rolesFilter.setUnauthorizedUrl("/unauthorized.jsp");
+
+                  // 6. 动态绑定URL模式与拦截器链的映射关系和设置拦截器的属性
+                  // .......
+
+                  filterChainResolver.setFilterChainManager(filterChainManager);
+                  return filterChainResolver;
+              }
+          }
+          #+end_src
+        - 配置启用DynamciIniWebEnviroment，在web.xml中配置
+          #+begin_src java
+          <context-param>
+            <param-name>shiroEnvironmentClass</param-name>
+            <param-value>io.fsjohnhuang.web.env.DynamicIniWebEnvironment</param-value>
+          </context-param>
+          #+end_src
+
+** 授权
+   也称为访问控制，即在应用中控制谁能访问哪些资源（如页面、操作等）。
+   涉及的关键对象：主体(Subject)、资源(Resource)、权限(Permission)和角色(Role)。
+   Permission支持粗粒度——主体的所有权限，细粒度——主体的某个权限。
+
+*** TODO 授权方式
+    3种授权方式：
+    1. 编程方式(通过 ~if/else~ 授权代码完成)
+       #+begin_src java
+       Subject subject = SecurityUtils.getSubject();
+       if (subject.hasRole("admin")) {
+           // permit to do something
+       }
+       else {
+          // disallow to do
+       }
+       #+end_src
+    2. 注解方式
+       #+begin_src java
+       @RequiresRoles("admin")
+       public void index(){}
+       #+end_src
+       - ~@RequiresRoles~ 要求当前用户属于
+       - ~@RequiresUser~
+       - ~@RequiresGuest~
+       - ~@RequiresPermissions~
+       - ~@RequiresAuthentication~
+    3. JSP/GSP标签方式
+       #+begin_src xml
+       <shiro:hasRole name="admin">
+         <!-- permit to do something -->
+       </shiro:hasRole>
+       #+end_src
+
+* TODO Realm
+  作用：作为数据源并执行Authentication和Authrization。
+
+** 实体及关系
+   *用户* - *角色* 多对多。
+   *角色* - *权限* 多对多。
+   *用户* - *权限* 通过 *角色* 建立关系。
+   *权限* 对应资源(URL、页面按钮等)。
+   *角色* 为 *权限* 的集合，在实际验证时是通过 *权限* 进行验证。
+
+** IniRealm
+   以INI文件作为数据源。
+   1. INI文件(路径为 ~src/main/resources/shiro.ini~)
+      #+begin_src ini
+      [users]
+      zhang3=123,admin # 规则为 `用户名=密码,角色1,角色2[,角色n]`
+      li4=321,admin
+
+      [roles]
+      admin=*
+      role1=user:create,user:delete
+      # 规则为 `角色=权限1,权限2[,权限3]`
+      # 权限的规则方式为 `资源标识符[:操作[:实例]]`
+      # 缺省值为*，即匹配所有操作或实例
+      # 单个资源所有操作：user或user:*，可通过subject.checkPermissions("user:*")或subject.checkPermission("user")进行授权验证
+      # 所有资源的某个权限：*:update等
+      # 单个资源单个实例的所有操作：user:*:1
+      # 所有资源所有操作某个实例：*:*:1
+
+      [urls] # 配置URL和相应的拦截器间的关系
+      /admin/** = authc, roles[admin], perms[permission1] # 格式：url=拦截器[参数],拦截器[参数],......
+      #+end_src
+   2. Java配置
+      #+begin_src java
+      @Bean
+      public SecurityManager securityManager(SessionManager sessionManager) {
+          IniRealm iniRealm = new IniRealm("classpath:shiro.ini");
+
+          DefaultWebSecurityManager mgt = new DefaultWebSecurityManager();
+          mgt.setRealm(iniRealm);
+          mgt.setSessionManager(sessionManager);
+          return mgt;
+      }
+      #+end_src
+
+** JDBCRealm
+   以关系型数据库作为数据源。
+
+*** Java配置
+    #+begin_src java
+    @Bean
+    public SecurityManager securityManager(DataSource ds, SessionManager sessionManager) {
+        JdbcRealm jdbcRealm = new JdbcRealm();
+        jdbcRealm.setDataSource(ds);
+        // 开启权限查找,否则无法查找角色对应的权限,导致subject.isPermit永远返回false.
+        jdbcRealm.setPermissionsLookupEnabled(true);
+        // 使用Shiro默认的表结构
+        jdbcRealm.setAuthenticationQuery("select password from user where username=?");
+        jdbcRealm.setSaltedAuthenticationQuery("select password, password_salt from user where username=?");
+        jdbcRealm.setUserRolesQuery("select role_name from user_roles where username=?");
+        jdbcRealm.setPermissionsQuery("select permission from roles_permissions where role_name=?");
+        DefaultWebSecurityManager mgt = new DefaultWebSecurityManager();
+        mgt.setRealm(iniRealm);
+        mgt.setSessionManager(sessionManager);
+        return mgt;
+    }
+    #+end_src
+
+*** DDL for MySQL
+    1. user表
+       #+begin_src sql
+       CREATE TABLE `users` (
+         `id` bigint(20) NOT NULL AUTO_INCREMENT,
+         `username` varchar(100) DEFAULT NULL,
+         `password` varchar(100) DEFAULT NULL,
+         `password_salt` varchar(100) DEFAULT NULL,
+         PRIMARY KEY (`id`),
+         UNIQUE KEY `idx_users_username` (`username`)
+       ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8;
+       #+end_src
+    2. user_roles表
+       #+begin_src sql
+       CREATE TABLE `user_roles` (
+         `id` bigint(20) NOT NULL AUTO_INCREMENT,
+         `username` varchar(100) DEFAULT NULL,
+         `role_name` varchar(100) DEFAULT NULL,
+         PRIMARY KEY (`id`),
+         UNIQUE KEY `idx_user_roles` (`username`,`role_name`)
+       ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8;
+       #+end_src
+    3. roles_permissions表
+       #+begin_src sql
+       CREATE TABLE `roles_permissions` (
+         `id` bigint(20) NOT NULL AUTO_INCREMENT,
+         `role_name` varchar(100) DEFAULT NULL,
+         `permission` varchar(100) DEFAULT NULL,
+         PRIMARY KEY (`id`),
+         UNIQUE KEY `idx_roles_permissions` (`role_name`,`permission`)
+       ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8;
+       #+end_src
+       - 其中permission字段值可以是
+         - 资源名: ~video~
+         - 资源名+操作: ~video:add~
+         - 通配符: ~*~
+         - 通配符+操作: ~*:add~
+
+** TODO LDAP Realm
+   Shiro内置的 ~org.apache.shior.realm.ldap.JndiLdapRealm~ LDAP Realm已经被废弃，且默认不支持Authorizer。
+   示例：
+   #+begin_src java
+   JndiLdapRealm realm = new JndiLdapRealm();
+   realm.setUserDnTemplate = "cn={0},dc=example,dc=com";
+   realm.contextFactory.url = "ldap://localhost:389";
+   #+end_src
+   注意：
+   1. 当执行 ~subject.login(tokon)~ 失败是抛出的是 ~AuthenticationException~ 而不是 ~UnknownAccountException~ 或 ~IncorrectCredentialsException~ ，因为LDAP认证是无法区分错误情况的。
+   2. 通过上述代码无法实现登录验证。
+
+*** TODO 自定义LDAP Realm
+    #+begin_src java
+    public class LdapRealm extends AuthorizingRealm {
+        @Override
+        public String getName() {
+            return "LdapRealm";
+        }
+
+        @Override
+        protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+            return null;
+        }
+
+        @Override
+        protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
+            UsernamepasswordToken token = (UsernamepasswordToken)authenticationToken;
+            String username = token.getUsername();
+            SimpleAuthenticationInfo info = new SimpleAuthenticationInfo(username, "123", this.getName());
+            return info;
+        }
+    }
+    #+end_src
+
+** TODO Multiple Realms
+** 授权流程
+   1. SecurityManager委托给Authorizer给处理，而Authorizer通过PermissionResolver(默认采用WildcardPermissionResolver)将形如user:view的字符串转换为Permission实例(WildcardPermission)。
+   2. Authorizer从Realm获取角色/权限判断，成功则返回true，失败则返回false。
+      - 若采用多个Realm则会委托ModularRealmAuthorizer进行循环判断，成功则返回true，失败则返回false。
+        - ModularRealmAuthorizer进行多个Realm匹配流程
+          1. 遍历Realm并筛选出实现Authorizer接口(继承AuthorizingRealm)的Realm，调用对应user:view等对应的方法进行匹配；
+          2. 若有一个Realm返回true则整体为true，否则为false。
+   3. 类作用
+      1. Authorizer接口授权工作的核心接口，SecurityManager实现了Authorizer。
+         - 属性
+           - permissionResolver
+           - rolePermissionResolver
+      2. PermissionResolver用于解析权限字符串为Permission实例。
+      3. RolePermissionResolver用于根据角色字符串解析相应的权限集合。
 * Exception
-  1. UnknownAccountException
-     作为AuthenticationException的子类，表示用于不存在。
-  2. ExcessiveAttemptsException
-     表示登录次数超过预设阈值。
-  3. IncorrectCredentialsException
-     表示密码不匹配。
-  4. LockedAccountException
-     表示用户已锁定。
-  5. ExpiredCredentialException
-     表示登录凭证已过期。
-  6. AuthenticationException
-     表示身份验证异常。
+  1. AuthenticationException 表示身份验证异常,其子类如下
+     1. CredentialsException
+        - IncorrectCredentialsException 不正确的凭证
+        - ExpiredCrendentialsException 表示登录凭证已过期。
+     2. AccountException
+        1. UnknownAccountException 表示用于不存在。
+        2. ExcessiveAttemptsException 表示登录次数超过预设阈值。
+        3. LockedAccountException 表示用户已锁定。
+        4. ConcurrentAccessException 并发访问异常(多个用户同时登录时抛出)
+        5. DisableAccountException 禁用帐号
+        6. UnsupportedTokenException 使用不支持的Token
+  2. AuthorizationException 授权异常
+     1. UnauthorizedException 表示请求的操作对请求的资源的访问是允许的
+     2. UnauthenticatedException 未完成验证就尝试执行授权操作时抛出
+
 * CORS
 ** 设置CORS响应头
    无论是HTTPS还是HTTP都需要设置CORS响应头。
@@ -179,7 +571,7 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
          #+end_src
       2. 后续请求
 
-* SessionManager
+* TODO SessionManager
 ** 获取sessionId
    Shiro的DefaultWebSessionManager通过getReferencedSessionId方法从ServletRequest中获取sessionId。
    1. 调用 ~getSessionIdCookieValue~ 从请求头Cookie中获取JSESSIONID的值，若获取失败则执行第二步；
@@ -214,3 +606,230 @@ CacheManager: 管理用户、角色、权限等的缓存信息。
            #+end_src
    3. 调用 ~request.getParamter~ 方法从请求URI的queryString中获取JSESSIONID的值。
       - QueryString格式为： ~/path/to/destination?JSESSIONID=axBxoi1223boxin~
+
+** Web项目和SpringBoot项目必须使用DefaultWebSessionManager
+   若误用DefaultSessionManager，那么通过 ~ShiroFilterFactoryBean#setLoginUrl()~ 设置的登录用URL，实际末尾会追加 ~;JSESSIONID=xxxx~ 导致Spring Boot即使启用 ~@MatrixVariable~ 都无法识别。
+
+** TODO 结合Redis
+* 加密与解密
+  对于密码我们需要对其进行加密或生成不可逆的摘要后再存储。
+
+** Base64和16进制字符串编码/解码
+   Shiro提供base64和16进制字符串编码、解码的API，其内部的部分数据也是采用base64或16进制字符串编码来存储。
+   #+begin_src java
+   String normalStr = "hi";
+   // Base64字符串编码/解码
+   String base64Encoded = Base64.encodeToString(normalStr.getBytes());
+   String base64Decoded = Base64.decodeToString(base64Encoded);
+
+   // 16进制字符串编码/解码
+   String 16Encoded = Hex.encodeToString(normalStr.getBytes());
+   String 16Decoded = new String(Hex.decode(16Encoded.getBytes()));
+   #+end_src
+
+** 散列算法
+   散列算法：一般用于生成数据的摘要信息，是一种不可逆的算法，一般适合存储密码之类的数据，常见的算法有MD5、SHA等。
+   对于常见的信息可以通过暴力枚举的方式从摘要信息反向得到原来的信息，如散列值"21232f297a57a5a743894a0e4a801fc3"对应的明文信息为"admin"，那么则需要在明文信息前后添加盐(salt)从而增加破解的难度。
+   盐(salt)：只有系统本身知道的，添加到明文信息前后，一起经过散列算法处理的干扰信息。
+
+   1. MD5
+      #+begin_src java
+      String text = "hi";
+      String salt = "oh";
+      int hashIterations = 2; // 迭代执行2次MD5散列处理
+
+      String hashed = new Md5Hash(text, salt, hashIterations).toString();
+      #+end_src
+   2. SHA
+      #+begin_src java
+      String text = "hi";
+      String salt = "oh";
+      int hashIterations = 2; // 迭代执行2次MD5散列处理
+
+      String hashed = new Sha256Hash(text, salt, hashIterations).toString();
+      #+end_src
+   3. 通过的散列算法
+      #+begin_src java
+      String text = "hi";
+      String salt = "oh";
+      int hashIterations = 2; // 迭代执行2次MD5散列处理
+
+      // 内部使用Java的MessageDigest实现
+      String hashed = new SimpleHash("SHA-1", text, salt, hashIterations).toString();
+      #+end_src
+   4. HashService
+      #+begin_src java
+      // 默认算法SHA-512
+      DefaultHashService hashService = new DefaultHashService();
+      hashService.setHashAlgorithmName("SHA-512");
+      // 私盐。默认无
+      // 私盐：各个请求实例自行设置的盐，若没有则采用这里的设置。
+      hashService.setPrivateSalt(new SimpleByteSource("123"));
+      // 公盐：所有散列运算都使用的盐
+      // 是否生成公盐。默认false
+      hashService.setGeneratePublicSalt(true);
+      // 设置生成公盐的生成器。默认如下
+      // SecureRandomNumberGenerator gen = new SecureRandomNumberGenerator();
+      // gen.setSeed("123".getBytes());
+      // String hex = gen.nextBytes().toHex();
+      hashService.setRandomNumberGenerator(new SecureRandomNumberGenerator());
+      // 生成Hash值的迭代次数
+      hashService.setHashIterations(1);
+
+      // 使用如下
+      HashRequest request = new HashRequest.Builder()
+        .setAlgorithmName("MD5").setSource(ByteSource.Util.bytes("hi"))
+        .setSalt(ByteSource.Util.bytes("123")).setIterations(2).build();
+      String hex = hashService.computeHash(request).toHex();
+      #+end_src
+** 对称加密和解密
+   1. AES算法
+      #+begin_src java
+      AesCipherService service = new AesCipherService();
+      service.setKeySize(20);
+      Key key = service.generateNewKey();
+
+      String text = "hi";
+      // 加密
+      String encrypted = service.encrypt(text.getBytes(), key.getEncoded()).toHex();
+      // 解密
+      String text2 = new String(service.decrypt(Hex.decode(encrypted), key.getEncoded()).getBytes());
+      #+end_src
+   2. PasswordService和CredentialsMatcher用于提供加密密码和验证密码服务
+      #+begin_src java
+      public interface PasswordService {
+          // 输入明文密码得到密文密码
+          String encryptPassword(Object var1) throws IllegalArgumentException;
+          // 匹配明文密码和密文密码
+          boolean passwordsMatch(Object var1, String var2);
+      }
+
+      public interface CredentialsMatcher {
+          // 匹配用户输入的明文token和系统提供的密文凭证
+          boolean doCredentialsMatch(AuthenticationToken var1, AuthenticationInfo var2);
+      }
+      #+end_src
+* 核心对象
+** AuthorizationInfo
+   用于聚合授权信息
+   #+begin_src java
+   public interface AuthorizationInfo extends Serialiable {
+       Collection<String> getRoles(); // 获取角色字符串信息
+       Collection<String> getStringPermission(); // 获取权限字符串信息
+       Collection<Permission> getObjectPermission(); // 获取Permission对象信息
+   }
+   #+end_src
+
+   AuthorizationInfo的子接口Account，以及Account的实现类SimpleAccount用于SimpleAccountRealm的实现类，提供动态角色/权限维护。
+   AuthorizationInfo的实现类SimpleAuthorizationInfo，一般采用这个。
+
+   对于AuthorizingRealm的实现类，若身份验证成功，在进行授权时则是通过doGetAuthorizationInfo方法来获取角色/权限信息用于授权验证。
+
+** AuthenticationInfo
+   作用：
+   1. 若Realm为AuthenticationRealm子类(AuthorizingRealm为AuthenticationRealm的子类)，则用于提供给其内部的CredentialsMatcher进行凭证验证；\
+      - AuthenticatingRealm的assertCredentialsMatch为验证的入口
+        #+begin_src java
+        protected void assertCredentialsMatch(AuthenticationToken token, AuthenticationInfo info) throws AuthenticationException {
+            CredentialsMatcher cm = this.getCredentialsMatcher(); // 返回的是SimpleCredentialsMatcher实例
+            if (cm != null) {
+                if (!cm.doCredentialsMatch(token, info)){
+                    throw new IncorrectCredentialsException("......");
+                }
+            }
+            else {
+                throw new AuthenticationException("......");
+            }
+        }
+        #+end_Src
+      - SimpleCredentialsMatcher的doCredentialsMatch方法
+        #+begin_src java
+        public boolean doCredentialsMatch(AuthenticationToken token, AuthenticationInfo info) {
+            Object tokenCredentials = this.getCredentials(token); // 获取密码
+            Object accountCredentials = this.getCredentials(info); // 获取密码
+            return this.equals(tokenCredentials, accountCredentials); // 内部通过MessageDigest.equals比较两者的字节，相同则验证成功。
+        }
+        #+end_src
+      - 若没有继承AuthenticationRealm则需要自行实现验证功能。
+   2. 提供给SecurityManger来创建Subject。
+
+   AuthenticationInfo的子接口Account，相当于User。
+   AuthenticationInfo的子接口MergableAuthenticationInfo，用于提供在多Realm时合并AuthenticationInfo的功能，主要合并Principal，而其他信息如credentialsSalt则会采取后者覆盖前者的做法。
+   AuthenticationInfo的子接口SaltedAuthenticationInfo，对于HashedCredentialsMatcher会先验证是否为SaltedAuthenticationInfo，再来获取salt信息。
+
+   实现类SimpleAccount实现了Account,MergableAuthenticationInfo和SaltedAuthenticationInfo接口。
+   在InitRealm、PropertiesRealm这种静态创建帐号信息的场景中使用，这些Realm继承了SimpleAccountRealm(实现了AuthorizingRealm)，而SimpleAccountRealm提供一组API动态CRUD SimpleAccount信息，实现动态CRUD 角色/权限信息。
+   SimpleAccount内部包含SimpleAuthenticationInfo和SimpleAuthroizationInfo类型的字段，并且其很多方法如getPrincipals等都是调用内部的SimpleAuthenticationInfo类型字段的方法。
+
+   实现类SimpleAuthentincationInfo实现了MergableAuthenticationInfo和SaltedAuthenticationInfo接口。一般情况使用这个。
+   #+begin_src java
+   String username = ((UsernamePasswordToken)token).getUsername();
+   String storedPassword = "123"; // 保存在数据库其它位置的密码，后续代码会将给密码和token传入的密码进行比较来验证身份。
+   String nameOfRealm = getName(); // 当前realm的名称
+   SimpleAuthenticationInfo info = new SimpleAuthenticationInfo(username, storedPassword, nameOfRealm);
+   #+end_src
+
+*** 根据AuthenticationToken生成AuthenticationInfo
+    1. 在IniRealm中
+       #+begin_src java
+       // SimpleAccountRealm
+       protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
+           UsernamePasswordToken upToken = (UsernamePasswordToken)token;
+           SimpleAccount account = this.getUser(upToken.getUsername());
+           if (account != null) {
+               if (account.isLocked()) {
+                   throw new LockedAccountException("......");
+               }
+
+                if (account.isCredentialsExpired()) {
+                   throw new ExpiredCredentialsException("......");
+                }
+           }
+
+           return account;
+       }
+       #+end_src
+
+** AuthenticationToken
+   用于收集用户提交的身份(Principal)和凭证(Credentials)
+   #+begin_src java
+   public interface AuthenticationToken extends Serializable {
+       Object getPrincipal();
+       Object getCredentials();
+   }
+   #+end_src
+   ~AuthenticationToken~ 的子接口 ~HostAuthenticationToken~ 提供 ~String getHost()~ 方法用于获取用户主机信息；
+   ~AuthenticationToken~ 的子接口 ~RememberMeAuthenticationToken~ 提供 ~boolean isRememberMe()~ 方法用于提供"记住我"的功能；
+   而实现类 ~UsernamePasswordToken~ 则实现 ~HostAuthenticationToken~ 和 ~RememberMeAuthenticationToken~ 两个接口。
+
+*** 自定义AuthenticationToken实现类
+    若要自定义AuthenticationToken的实现类，可以通过继承 ~UsernamePasswordToken~ 的方式处理。
+    #+begin_src java
+    @Data
+    public class MyToken extends UsernamePasswordToken {
+        private String tokenType;
+        public MyToken(String username, String password, String tokenType) {
+            super(username, password);
+            this.tokenType = tokenType;
+        }
+    }
+    #+end_src
+    注意：需要自定义Realm来读取自定义Token的额外信息。
+* REF
+  https://www.iteye.com/blog/jinnianshilongnian-2018936
+* 漏洞
+** CVE-2020-02957 权限绕过漏洞
+   1. 问题描述：设置 ~/user*~ 为 ~autch~ 无法拦截 ~/user/~ 的请求，而Servlet侧 ~/user~ 和 ~/user/~ 对应的相同的资源。
+      - 原因：ShiroFilter通过pathMatches函数进行路径匹配，而其最终会调用shiro.util.AntPathMatcher类的doMatch函数对Ant格式的patchPattern和requestURI进行匹配。而该方法无法通过通配符 ~*~ 无法匹配路径分隔副 ~/~ 。
+      - 解决方法：升级Shiro到1.5.0
+   2. 问题描述：Shiro 1.5.0 设置 ~/hello/1*~ 为 ~autch~ 无法拦截 ~/xxx;/../hello/1/~
+      - 原因：ShiroFilter的AntPathMatcher类的doMatch会对路径进行截取，得到 ~/xxx~ 再进行身份验证。
+      - 解决方法：
+        1. 升级Shrio到1.5.2；
+        2. 尽量避免使用 ~*~ 通配符。
+
+** RememberMe 反序列化漏洞（Shiro-550和Shiro-721）
+   问题描述：启用RememberMe功能后，将可执行的Java程序序列化+AES-128-CBC加密+base64编码后作为RememberMe Cookie值，发送给服务端则可执行Java程序将被执行。
+   原因：启用RememberMe功能后，服务端会对rememberMe Cookie值先base64解码，然后AES解密后在反序列化。
+   影响版本：Shiro < 1.4.2
+   解决方法：升级Shiro至1.4.2

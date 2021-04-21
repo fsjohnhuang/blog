@@ -1,4 +1,15 @@
-9
+20
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-ascii-0
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-cns11643-1
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-cns11643-2
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-cns11643-3
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-gb18030.2000-0
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-gb2312.1980-0
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-iso10646-1
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-iso8859-1
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-jisx0208.1983-0
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-jisx0208.1990-0
+SIMSUN.TTC -misc-simsun-medium-r-normal--0-0-0-0-p-0-koi8-r
 WEBDINGS.TTF -microsoft-webdings-medium-r-normal--0-0-0-0-p-0-iso8859-1
 WEBDINGS.TTF -microsoft-webdings-medium-r-normal--0-0-0-0-p-0-microsoft-symbol
 WINGDNG2.ttf -microsoft-wingdings 2-medium-r-normal--0-0-0-0-p-0-microsoft-symbol

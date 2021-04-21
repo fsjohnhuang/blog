@@ -147,7 +147,7 @@ NIO是ORACLE发明的
         - 上下文：http,server,location
       - ~client_body_timeout 60s~
         - 作用：读取请求包体超时，返回408错误
-        - 上下文：http,server,location        
+        - 上下文：http,server,location
       - ~proxy_buffering on | off~
         - 作用：缓存从应用服务返回的内容，然后再统一返回给客户端。返回的内容会暂存到由 ~proxy_buffers~ 和 ~proxy_buffer_size~ 指定的内存缓冲区中，若内存缓冲区已满则写入磁盘上。
         - 默认值： ~proxy_buffering on;~
@@ -177,7 +177,7 @@ NIO是ORACLE发明的
         ~proxy_temp_path path [level1 [level2 [level3]]]~
         - 作用：设置临时文件的目录
         - 默认值: ~proxy_temp_path proxy_temp~
-        - 上下文：http,server,location        
+        - 上下文：http,server,location
         ~proxy_temp_file_write_size 8k|16k~
         - 作用：每次写入临时文件的大小
         - 上下文：http,server,location
@@ -210,7 +210,7 @@ NIO是ORACLE发明的
      #+begin_example bash
      listen 80;
      server_name myproxy.com;
-     
+
      # 下面两种设置是等价的
      location /one/ {
          proxy_pass http://upstream:port/john/;
@@ -436,7 +436,7 @@ NIO是ORACLE发明的
    - 上下文：http, server, location
 
 ** WebSocket反向代理
-   
+
 *** WebSocket协议说明
     1. 建立连接
        1. 客户端请求报文
@@ -448,7 +448,7 @@ NIO是ORACLE发明的
           Upgrade: websocket
           .......
           #+end_src
-       2. 服务端响应报文 
+       2. 服务端响应报文
           #+begin_src
           HTTP/1.1 101 Web Socket Protocol Handshake
           Connection: upgrade
@@ -459,7 +459,7 @@ NIO是ORACLE发明的
           Access-Control-Allow-Headers: x-websocket-version
           Access-Control-Allow-Headers: x-websocket-protocol
           Access-Control-Allow-Origin: ....
-          Sec-WebSocket-Accept: yA9xgosg.... 
+          Sec-WebSocket-Accept: yA9xgosg....
           Upgrade: websocket
           #+end_src
     2. 特性
@@ -488,7 +488,7 @@ NIO是ORACLE发明的
     1. 断点续传：当客户端下载文件时，若发生网络中断，必须重新向服务端发起HTTP请求，此时由于客户端已经有了文件的一部分，只需要请求剩余部分即可，那么只需在请求头中加入 ~Range: bytes=1024-2047~ 即可
        即客户端请求资源的地1025到2048个字节的内容，若服务端支持则响应时则返回206 HTTP响应状态码(表示返回的是资源的一部分)。若服务端不支持则返回200和整个资源文件。
     2. 并行下载：将资源分解成多个请求并行下载，客户端重整为完整的资源。
-       
+
 *** Nginx配置
    - ~slice size~
      - 编译: ~--with-http_slice_module~
@@ -501,7 +501,7 @@ NIO是ORACLE发明的
      - 上下文：http, server, locaiton
    - ~$slice_range~ 变量
      其值为当前需要向上游服务请求的分片信息，如果 ~slice 1m;~ 那么最开始的变量值为 ~bytes=0-1048575~ 。
-     
+
 **** 示例
      1. 配置
         #+begin_src
@@ -542,7 +542,7 @@ NIO是ORACLE发明的
 
 ** open_file_cache
    由于Nginx的Proxy Cache会将上游服务HTTP响应缓存到磁盘中，然后再通过磁盘IO操作返回给下游客户端。因此open_file_cache对日志、静态资源和HTTP反向代理缓存都有效果。
-   
+
 *** 缓存的元信息
     1. 文件描述符
        缓存文件描述符(fd)，那么后续读取时就不用重复执行open/close系统调用，直接通过sendfile内核发送文件内容即可。通过 ~strace -p <pid>~ 可以检测进程内部调用系统调用信息。
@@ -559,7 +559,7 @@ NIO是ORACLE发明的
       - inactive 设置缓存记录多久没有被访问则淘汰
       - 上下文：http, server, location
     - ~open_file_cache_errors off | on~
-      - 作用：是否缓存访问错误的信息 
+      - 作用：是否缓存访问错误的信息
       - 上下文：http, server, location
     - ~open_file_cache_min_uses 1~
       - 作用：资源至少访问指定次数才被缓存
@@ -567,6 +567,14 @@ NIO是ORACLE发明的
     - ~open_file_cache_valid 60s~
       - 作用：定期检查缓存是否失效
       - 上下文：http, server, location
+
+** 下载文件比较大时报下载失败
+   #+begin_src bash
+   proxy_max_temp_file_size 4096m; # 若不限制则设置为0
+   # 由于反向代理和应用服务器一般位于同一个内网，而反向代理和客户端处于不同的网段。因此可能存在反向代理和客户端通信时间长导致反向代理和应用服务器通信超时。
+   proxy_send_timeout 120s; # 代理发送超时
+   proxy_read_timeout 120s; # 代理接收超时
+   #+end_src
 
 * 4层反向代理
 
@@ -692,7 +700,7 @@ NIO是ORACLE发明的
    - ~proxy_next_upstream_timeout~
    - ~proxy_next_upstream_retries~
    - ~proxy_timeout~ 发送请求和读取响应的超时时间
-   - ~proxy_socket_keepalive~ 
+   - ~proxy_socket_keepalive~
 
 ** UDP反向代理
    - ~proxy_requests 0~
@@ -703,8 +711,8 @@ NIO是ORACLE发明的
      - 上下文：stream, server
    - ~proxy_responses number~
      - 作用：指定对应一个请求报文，上游应用返回多少个响应报文。与proxy_timeout结合使用，判定上游服务是否不可用。
-     - 上下文：stream, server     
-   
+     - 上下文：stream, server
+
 * if in location
 空字符和0为false，其他字符为true。
 
@@ -831,7 +839,7 @@ http {
      server a;
      server b;
   }
-  
+
   # 上述的负载均衡都是针对单个Worker进程进行
   # 通过zone name [size]可以针对所有Worker进程进行
   upstream balance5 {
@@ -1081,7 +1089,7 @@ client <-TCP/IP-> nginx <-TCP/IP-> web app
        - stale-while-revalidate 缓存内容过期后，定义一段时间且在期间内updating设置有效，否则转发请求到上游服务
          - 例如： ~Cache-Control: max-age=600, stale-while-revalidate=30~
        - stale-if-error 缓存内容过期后，定义一段时间且在期间内上游服务出错则使用缓存，否则转发请求到上游服务。stale-while-revalidate包含stale-if-error。
-         - 例如： ~Cache-Control: max-age=600, stale-if-error=30~         
+         - 例如： ~Cache-Control: max-age=600, stale-if-error=30~
    - ~proxy_cache_background_update off | on~
      - 作用：当proxy_cache_use_stale允许使用过期响应时，将同步生成一个仔请求，访问上游服务获取最新缓存
      - 上下文：http,server,location
@@ -1145,7 +1153,7 @@ client <-TCP/IP-> nginx <-TCP/IP-> web app
   location / {
     proxy_pass http://192.168.56.192;
     if ( $request_method = "PUT" ) {
-      proxy_pass http://192.168.56.191;      
+      proxy_pass http://192.168.56.191;
     }
   }
   #+end_src
@@ -1173,11 +1181,11 @@ useradd -r -g nginx -M nginx
   --conf-path=/etc/nginx/nginx.conf \ # 主配置路径
   --error-path=/var/log/nginx/error.log \ # 错误日志
   --http-log-path=/var/log/nginx/access.log \ # 访问日志
-  --pid-path=/var/run/nginx/nginx.pid \ 
+  --pid-path=/var/run/nginx/nginx.pid \
   --lock-path=/var/lock/nginx.lock \
   --user=nginx \
   --group=nginx \
-  --add-module=../nginx-sticky-module \ 
+  --add-module=../nginx-sticky-module \
   --with-http_ssl_module \
   --with-http_flv_module \
   --with-http_stub_status_module \ # 提供显示Nginx进程状态的http页面
@@ -1319,7 +1327,7 @@ useradd -r -g nginx -M nginx
             2. 方式二
                1. 立刻停止新Nginx所有进程，旧Nginx主进程会自动拉起worker进程和恢复pid文件
                   #+begin_src bash
-                  kill -TERM $(cat /path/to/nginx.pid)               
+                  kill -TERM $(cat /path/to/nginx.pid)
                   #+end_src
                2. 恢复旧Nginx二进制可执行文件
                   #+begin_src bash
@@ -1563,7 +1571,7 @@ useradd -r -g nginx -M nginx
          #+begin_src
          http {
            default_type application/octet-stream;
-   
+
            server {
              # 响应头包含两个Content-Type
              # 1. Content-Type: application/octet-stream
@@ -1574,7 +1582,7 @@ useradd -r -g nginx -M nginx
 
              location /normal {
                default_type ""; # 清理默认Content-Type
-               add_header Content-Type "text/html; charset=utf-8"; 
+               add_header Content-Type "text/html; charset=utf-8";
              }
            }
          }
@@ -1662,7 +1670,7 @@ useradd -r -g nginx -M nginx
       - ~secure_link_expires~ 时间戳的值
     - 示例
       #+begin_src
-      
+
       #+end_src
 25) ~return code [text | url]~ 或 ~return url~
     - text 可以为普通字符串、json或使用变量，它将作为响应体
@@ -1848,7 +1856,7 @@ useradd -r -g nginx -M nginx
 4) 事件驱动的配置
 
 ** 指令冲突处理
-   
+
 *** 指令合并
     1. 值指令(存储配置项的值)——可以合并
        - 继承规则——向上覆盖
@@ -1985,7 +1993,7 @@ http {
   # This is useful for prepending headers before calling sendfile, or for  throughput optimization.
   tcp_nopush on;
 
-  # 对于小数据报文则及时发送，而不采用Nagle算法缓存数据。  
+  # 对于小数据报文则及时发送，而不采用Nagle算法缓存数据。
   # don't buffer data-sends(disable Nagle algorithm). Good for sending frequent small bursts of data in real time.
   tcp_nodelay on;
 
@@ -2026,7 +2034,7 @@ http {
   # 默认值：60秒
   # 上下文: http, server, locaiton
   send_timeout 60;
-  # 
+  #
   # 默认值：off
   # 上下文: http, server, locaiton
   reset_timeout_connection on;
@@ -2081,7 +2089,7 @@ http {
       root html;
       autoindex on; # 显示目录结构
       autoindex_exact_size on; # 显示文件大小
-      autoindex_localtime off; # 以当前操作系统的时区显示文件的修改时间 
+      autoindex_localtime off; # 以当前操作系统的时区显示文件的修改时间
     }
 
     error_page 401 /401.html; # 相对于nginx的安装目录
@@ -2129,7 +2137,7 @@ http {
 
     # 响应静态文件p
     location ~^/(images|javascript|js|css|flash|media|static)/ {
-      root /var/www/virtual/htdocs; 
+      root /var/www/virtual/htdocs;
       expires 30d; # 缓存30天
 
       # 静态资源禁止记录访问日志
@@ -2183,7 +2191,7 @@ http {
   server {
     listen 443;
     server_name ssl_server;
-    
+
     ssl on; # 启用ssl
     ssl_certificate cert.pem; # 证书
     ssl_certificate_key cert.key; # 密钥
@@ -2339,7 +2347,7 @@ location / {
      return 404; # 由于rewrite采用break，因此这个指令不会被执行。直接返回 $NGINX_HOME/html/abc/a/index.html 的内容。
 
      # 效果与上面的指令一样
-     rewrite ^/abc/(.*)$ /abc/$1/index.html;         
+     rewrite ^/abc/(.*)$ /abc/$1/index.html;
      break;
      return 404; # 由于rewrite采用break，因此这个指令不会被执行。直接返回 $NGINX_HOME/html/abc/a/index.html 的内容。
    }
@@ -2590,7 +2598,7 @@ shared memory
            - 语法： ~limit_req zone=name [burst=number] [nodelay];~
              - zone=name 为 ~limit_req_zone~ 中的name
              - burst=number 请求队列的长度(默认为0)，清空最大时间为 ~burst/rate~. 超过这个缓冲区的请求直接报503并返回.
-             - nodelay 
+             - nodelay
                - 默认延期时，采用rate的速率处理请求，超出部分缓存到burst的队列中，然后按rate的速率处理burst队列中的请求。若burst满了则后续请求均返回503
                  - 例如：rate=5r/s, burst=5, 那么并发11个请求，前5个请求处于处理中，后5个请求入队列，最后的1个请求返回503。最终2秒处理10个请求。
                - 禁用延期时，则采用rate+burst的速率处理请求，超出部分返回503。
@@ -2767,10 +2775,10 @@ shared memory
              default_type "";
              add_header Content-Type "text/html; charset=utf-8";
              root /path/to/root/of/index;
-            
+
              add_before_body /header.html;
              add_after_body /footer.html;
- 
+
              # Nginx 0.7.9开始支持
              # 指定需要被插入header和footer内容的响应报文的MIME类型，可以设置多个，空格分隔。
              # 默认为text/html
@@ -2953,7 +2961,7 @@ shared memory
          geo $country {
            # 优先最长匹配
            # 通过IP和子网掩码的方式，定义IP范围，当IP地址在范围内时新变量使用对应的参数值
-           # default 指定默认值 
+           # default 指定默认值
            # proxy 指定下游可信地址及开启realip功能，此时$remote_addr的值为X-Forwarded-For头部值的最后一个IP地址
            # proxy_recursive 允许循环地址搜索
            # delete 删除指定网络
@@ -2964,7 +2972,7 @@ shared memory
 
            127.0.0.0/24 US; # 127.0.0.2 能命中
            127.0.0.1/32 RU; # 仅127.0.0.1能命中
-           192.168.2.0/24 UK;     
+           192.168.2.0/24 UK;
          }
          #+end_src
    19) geoip
@@ -3146,7 +3154,7 @@ shared memory
     3. 协商缓存，协商缓存命中则返回304 Not Modified，失败则返回200
        1. 获取本地缓存中所请求的找资源的Etag（基于文件内容和修改时间等信息生成的文件指纹。）响应头部，并作为If-None-Match请求头部发送给服务端，若命中则返回304 Not Modified。
        2. 若没有Etag获取Last-Modified响应头部，并作为If-Modified-Since请求头部发送给服务端，并与服务端资源的最后修改时间对比，若服务端资源的修改时间早于If-Modified-Since则返回304 Not Modified。
-          其中 ~Last-Modified: Fri, 22 Jul 2016 01:47:00 GMT~ 
+          其中 ~Last-Modified: Fri, 22 Jul 2016 01:47:00 GMT~
           - 缺点：
             1. 由于Last-Modified最小单位是秒，若服务端中在一秒内对资源进行多次修改，但还是会被认为命中缓存，则不会返回最新的内容。
             2. 若在服务端打开资源文件，即使没有修改其中内容也会更新该资源的最后修改时间，造成缓存失效。
@@ -3187,7 +3195,7 @@ shared memory
    2. LocalDNS缓存，本地DNS提供商的缓存
    3. DNS缓存服务器，专用的DNS缓存服务器
    4. 浏览器DNS缓存，FireFox默认60秒
-  
+
 ** CDN
    1. 反向代理缓存，基于Squid、Varnish、Nginx、ATS等一级或多级
 
@@ -3211,7 +3219,7 @@ shared memory
 
 ** 硬件
    1. Raid Cache，磁盘阵列缓存
-   
+
 * 最佳实践
   1) root定义在server下，而不是在location中
      #+begin_example bash
@@ -3345,7 +3353,7 @@ shared memory
 
 * Nginx进程结构
   开发模式下可以以单进程结构启动Nginx，但生产环境下必须以多进程结构启动Nginx。
-  
+
 ** 多进程结构
    1. 父进程-Master进程
       - 作用：负责监控所有Worker进程、Cache进程，配置加载、热部署等。
@@ -3392,12 +3400,12 @@ shared memory
                  ngx.say("Stored")
                }
              }
- 
+
              location /get {
                content_by_lua_block {
                  local dogs = ngx.shared.dogs
                  ngx.say(dogs:get("Jim"))
-               } 
+               }
              }
            }
            #+end_src
@@ -3421,7 +3429,7 @@ shared memory
    2. 自旋锁
       因为采用自旋锁，因此必须尽快释放锁否则会严重影响Nginx性能。
    3. Slab内存管理器
-      
+
 * TODO Nginx网络事件
 
   传输层的数据部分单元为MSS
@@ -3535,7 +3543,7 @@ shared memory
       - 默认值 75s
       - 作用：若多少秒还没有新的HTTP请求，则关闭TCP链接。设置header_timeout会生成响应头 ~Keep-Alive: timeout=$header_timeout~
 
-*** Nginx上游HTTP Keep-Alive配置 
+*** Nginx上游HTTP Keep-Alive配置
     模块：ngx_http_upstream_keepalive_module，默认已编译进Nginx
     作用：降低Nginx与上游服务器建立、关闭连接的消耗，提升吞吐量的同时降低延时。
     使用：
@@ -3551,7 +3559,7 @@ shared memory
       keepalive_requests 100;
 
       # keepalive_timeout timeout
-      # 最长多少秒没有请求则关闭该TCP链接 
+      # 最长多少秒没有请求则关闭该TCP链接
       # 默认60s
       keepalive_timeout 60s;
 
@@ -3635,7 +3643,7 @@ shared memory
       #+end_src
 
 ** 滑动窗口/通告窗口
-   
+
 *** 滑动窗口的功能
     1. 通过接收方的接收窗口，限制点对点连接的网速，解决报文乱序和可靠传输问题
     2. Nginx中limit_rate等限速指令都依赖滑动窗口
@@ -3649,7 +3657,7 @@ shared memory
     4. Server 接收 140 bytes 的内容并缓冲到接收窗口，这时接收窗口剩余 60 bytes 可用
     5. Server响应的报文 ACK, Seq=141(响应的Seq值=请求的Seq+已接收数据的字节数), Window=60(接收窗口的可用空间)
     6. Client 还有100 bytes的数据要发送，但得知服务端的接收窗口剩下60bytes的可用空间，因此仅向发送窗口缓冲60bytes的数据。此时发送窗口剩余160 bytes的可用空间。
-   
+
 *** 发送TCP消息流程
     1. Nginx调用send系统调用发送在Content阶段构建的HTTP响应内容；
     2. send系统调用内调用tcp_sendmsg系统调用，然后会分配将位于用户态的HTTP响应内容复制到内核态并分别构造为MSS分组；
@@ -3694,7 +3702,7 @@ shared memory
 ** 慢启动和拥塞窗口
    拥塞窗口：发送方主动限制流量，先让处于飞行状态的报文为4个MSS报文，当接收到4个ACK后再让处于飞行状态的报文为8个MSS报文，然后逐渐提升。
    因此实际发送的流量为滑动窗口和拥塞窗口中的最小值。
-  
+
    MSS：每个TCP报文的最大值。
 
 *** 慢启动
@@ -3790,7 +3798,7 @@ shared memory
 *** jemalloc
 
 ** TODO 降权启用Nginx
-   
+
 ** TCP/IP栈优化配置
    优化思路：
    1. 并发建立更多的TCP连接
@@ -3832,7 +3840,7 @@ shared memory
         #+begin_src
         net.ipv4.tcp_syncookies=1
         #+end_src
-       
+
 *** 并发建立更多的TCP连接
     1. 调整文件描述符总数上限
        1. 操作系统全局
@@ -3859,7 +3867,7 @@ shared memory
           #+begin_src
           # SYN_RCVD状态连接的最大个数。那么需要保证该队列长度足够大。
           net.ipv4.tcp_max_syn_backlog = 262144
- 
+
           # ACCEPT队列存储的是已完成3次握手的连接
           # 系统级别的最大长度
           net.core.somaxconn = 262144
@@ -3884,7 +3892,7 @@ shared memory
        net.ipv4.tcp_retries2 = 15
 
       # 建立连接时的本地端口可用范围
-      net.ipv4.ip_local_port_range = 32768 60999 
+      net.ipv4.ip_local_port_range = 32768 60999
       #+end_src
    2. SYN_RCVD状态，也称为半连接状态(服务器端配置)
       #+begin_src
@@ -3911,7 +3919,7 @@ shared memory
        4. 服务端 - HTTP响应报文 -> 客户端
     3. 启用Fast Open TCP的建立过程
        - 首次建立连接
-         1. 客户端 - SYN -> 服务端      
+         1. 客户端 - SYN -> 服务端
          2. 服务端 - SYN+ACK+Cookie -> 客户端  （Cookie有时效性）
          3. 客户端 - ACK+HTTP GET/POST/...... -> 服务端
          4. 服务端 - HTTP响应报文 -> 客户端
@@ -4010,7 +4018,7 @@ shared memory
                location /path/to/index {
                  autoindex on;
                  root /path/to/root;
-                 add_after_body /index_fix_href.html;                                 
+                 add_after_body /index_fix_href.html;
                }
 
                location =/index_fix_href.html {
@@ -4046,5 +4054,3 @@ shared memory
              # --notest 表示对原文件进行修改
              convmv -f GBK -t UTF8 -r --notest /path/to/file
              #+end_src
-            
-       

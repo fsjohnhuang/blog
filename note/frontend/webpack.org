@@ -635,6 +635,7 @@
 
 ** 配置使用
    1) 基本配置方式
+      - Webpack4需要使用HtmlWebpackPlugin4.x.x版本
       #+begin_example js
       const HtmlWebpackPlugin = require("html-webpack-plugin")
 
@@ -691,8 +692,11 @@
                  port: 3000, // 设置端口
                  progress: true, // 显示进度条
                  compress: true, // 启用GZIP压缩
-                 contentBase: "./dist", // 设置网站内容的根目录
+                 // 设置网站内容的根目录
+                 // 通过CopyWebpackPlugin复制静态资源时，目标目录必须为contentBase所在的目录，否则无法显示静态资源。(如图片等)
+                 contentBase: "./dist",
                  hot: true, // 是否开启热更新
+                 open: true, // 运行时启动启动浏览器
                  // 设置日志输出级别
                  // errors-only 只在发生错误时输出
                  // minimal 只在发生错误或有新的编译时输出
@@ -788,11 +792,12 @@
          }
          #+end_example
    6) 复制文件到打包目录中
-      1) 安装依赖
+      1) Webpack4需要安装CopyWebpackPlugin6.x.x
+      2) 安装依赖
          #+begin_example bash
          npm install copy-webpack-plugin --save-dev
          #+end_example
-      2) 配置
+      3) 配置
          #+begin_example js
          const CopyWebpackPlugin = require("copy-webpack-plugin")
 
@@ -800,7 +805,7 @@
            plugins: [
              new CopyWebpackPlugin(
                // [{ from: "doc", to: "./dist"}] 旧版本中使用该入参格式
-               {patterns: [{ from: "doc", to: "./dist"}]} // 新版本中使用该入参格式
+               {patterns: [{ from: "doc", to: "./dist"}]} // 6.x.x以上本中使用该入参格式
              )
            ]
          }
@@ -1053,6 +1058,62 @@
        }
        #+end_example
 
+*** externals属性详解
+    作用：以指定模块系统规范引入第三方模块，并且不会被编译打包时不会被包含在发布包中，而是运行时由运行环境提供，即运行时不从发布包中引入依赖。
+
+    - 模块系统的 *导入* 规范， ~externals~ 使用 ：
+      1. ~global~ Default value for Webpack which to import by global variable: ~Library~
+      2. ~commonjs/commonjs2~ Import by require fuction: ~require("Library")~
+      3. ~amd~
+    - 模块系统的 *导出* 规范， ~libararyTarget~ 使用：
+      1. ~var~ Export by setting a variable: ~var Libarary = xxx~
+      2. ~this~ Export by setting a property of this: ~this["Library"] = xxx~
+      3. ~commonjs~ Export by setting a property of exports: ~exports["Library"] = xxx~
+      4. ~commonjs2~ Default value. Export by setting module.exports: ~module.exports = xxx~
+      5. ~amd~ Export to AMD(optionally named - set the name via the library option)
+      6. ~umd~ Export to AMD, CommonJS2 or as property in root(e.g. window, process)
+
+
+    libraryTarget 用于以哪种模块系统导出方式暴露Library，若不设置则表示不暴露相当于一个自执行函数。
+    注意：libraryTarget的暴露方式和externals引入方式是对应的。如：
+    1. 浏览器
+       - libraryTarget一般不设置；
+       - externals采用默认global即可，不能用commonjs。
+    2. Node/Electron环境
+       - libraryTarget一般不设置；
+       - externals要设置为commonjs或commonjs2。
+         #+begin_src js
+         externals: {
+             sqlite3: 'commonjs2 sqlite3'
+         }
+         #+end_src
+
+
+
+    值类型和示例：支持 ~string, array, object, function, regex~
+    #+begin_src js
+    module.exports = {
+      // ...
+      externals: [ // array形式
+        { // object形式
+          './a', 'a', // string形式
+          jquery: 'jQuery',
+          vue: 'Vue'，
+        },
+        function(context, request, callback) { // function形式
+          if(request.substr(0, 1) !== '.') callback(null, 'commonjs ' + request)
+          callback()
+        },
+        /^[a-z\-0-9]+$/, // regex形式
+      ]
+    }
+
+    // 除了function形式，必须在array形式中，其他形式，都可以提升，直接作为externals属性使用。比如string形式：
+    externals: {
+        './a': 'a',
+        jquery: 'jQuery'
+    }
+    #+end_src
 
 ** 全局变量的暴露-Webpack4
    默认情况下通过 ~require~ 或 ~import~ 方式引入依赖，模块内部将通过 *局部变量* 引用依赖的元素。
@@ -1301,7 +1362,7 @@
     watchOptions: {
       poll: 1000,            // 每秒轮询1000次
       aggregateTimeout: 500, // 防抖，停止输入500毫秒后触发监控
-      ignore: /node_modules/ // 不监控
+      ignored: /node_modules/ // 不监控
     }
   }
   #+end_example
@@ -1371,12 +1432,16 @@
      #+begin_example js
      const webpack = require("webpack")
 
+     // 注意：不能使用ENV、FLAG和EXPRESSION作为全局变量名。必须使用<prefix>.<variable>的形式。
+     // Webpack does all of its AST walking and transforming together on an AST, and it does so while performing static analysis,
+     // so if it recognizes that it can't get into one side of an if, it won't run any transforms in that part. DefinePlugin hooks into that transform/traversal so it won't bother substituting stuff into the if(false){ side of the if.
+     // REF: https://github.com/webpack/webpack/issues/868
      module.exports = {
        plugins: [
          new webpack.DefinePlugin({
-           ENV: JSON.stringify("production"), // string类型的"production"
-           FLAG: "true", // boolean类型的true
-           EXPRESSION: "1+1" // number类型的2
+           predefined.ENV: JSON.stringify("production"), // string类型的"production", 字符串类型必须通过该方式设置。如字符串2.0.0，若以"2.0.0"设置则会作为number类型处理从而报错。
+           process.env.FLAG: "true", // boolean类型的true
+           global.EXPRESSION: "1+1" // number类型的2
          })
        ]
      }
@@ -1384,9 +1449,9 @@
   2) JS代码中使用
      #+begin_example js
 
-     console.log(ENV)
-     console.log(FLAG)
-     console.log(EXPRESSION)
+     console.log(predefined.ENV)
+     console.log(process.env.FLAG)
+     console.log(global.EXPRESSION)
      #+end_example
 * 环境专属的webpack.config.js
   1) 安装依赖
@@ -1613,3 +1678,11 @@
       ]
     }
     #+end_src
+* TODO PostCSS
+https://www.cnblogs.com/gyjWEB/p/5047607.html
+** 作用
+   1. 把CSS解析为JavaScript可操作的抽象语法树(AST)；
+   2. 调用插件处理AST。
+
+
+   因此PostCSS必须配合插件使用。

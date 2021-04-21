@@ -1,7 +1,26 @@
+* 组成
+  - 类加载器(ClassLoader)
+  - 运行时数据区(Runtime Data Area)
+    - 组成
+      - 程序计数器(Program Counter Register)
+        - 线程隔离
+      - 虚拟机栈(VM Stack)
+        - 线程隔离
+      - 本地方法栈(Native Method Stack)
+        - 线程隔离
+      - 堆(Heap)
+        - 所有线程共享
+      - 方法区(Method Area)
+        - 所有线程共享
+  - 执行引擎(Execution Engine)
+    - 作用:将字节码翻译为底层系统指令,并调用本地库接口完成程序执行.
+  - 本地库接口(Native Interface)
+
 * Java 8 VMOptions
--X
--XX:<[+-]<property>|<property>=<value>>
--D<property>=<value>
+~-<property>~ 标准参数,如 ~-version, -help, -server, -client, -cp~
+~-X<property>~ 非标准参数,各JDK版本可能不同,但变动相对较小.
+~-XX:<[+-]<property>|<property>=<value>>~ 非标准参数,各JDK版本可能不同,但变动相对较大.主要用于JVM调优或Debug
+~-D<property>=<value>~ 指定系统属性
 
 ** ~-Xms<heap size>[g|m|k]~ and ~-Xmx[heap size>[g|m|k]~
 Specify the initial/minimum and maximum value for the JVM heap memory.
@@ -11,7 +30,6 @@ For servers, both params should have the same value to avoid heap resizing durin
 Java 8 has no *PermGen* (Permanent Generation) but requires additional *Metaspace* memory instead to store class meta data information.
 The default size is unlimited. There is a potential risk that the JVM hogs all memory of the server when the application goes wrong.
 
-** ~-server~ 
-JVM runs in server mode which is the default value for all 64-bits JVMs. 
+** ~-server~
+JVM runs in server mode which is the default value for all 64-bits JVMs.
 JVM will collect more data about the Java byte code during program execution and generate the most efficient machine code via JIT.
-

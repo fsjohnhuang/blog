@@ -20,6 +20,13 @@
 
   # 查看当前MariaDB版本
   mysql --version
+  mysqladmin --version
+  #+end_src
+
+  安装后MySQL会自动创建mysql系统用户和用户组。
+  #+begin_src bash
+  cat /etc/passwd | grep mysql
+  cat /etc/group | grep mysql
   #+end_src
 
 * 账号管理
@@ -31,7 +38,7 @@
   2. 若要远端访问MariaDB则可通过以下两种方式设置秘密
      1. 将授权方式从auth_socket修改为mysql_native_password
         #+begin_src bash
-        alter user 'root'@'localhost' identified with mysql_native_password by 'very_strong_password';
+        alter user 'root'@'localhost' identified by 'very_strong_password';
         flush privileges;
         #+end_src
      2. 创建一个管理员账号(推荐)
@@ -64,7 +71,7 @@
      #+end_src
   6. 显示所有账号
      #+begin_src bash
-     select user, host from mysql.user;;
+     select user, host from mysql.user;
      #+end_src
   7. 删除账号
      #+begin_src bash
@@ -84,10 +91,106 @@
      show grants for '<user_name>'@'<host>';
      #+end_src
 
+* TODO 配置文件
+
+  | 路径                            | 描述                      | 备注                                                  |
+  |---------------------------------+---------------------------+-------------------------------------------------------|
+  | /var/lib/mysql/                 | mysql数据库文件的存放路径 | /var/lib/mysql/atguigu.cloud.pid                      |
+  | /usr/share/mysql/               | 配置文件模板目录          | mysql.server命令及配置文件                            |
+  | /usr/bin/                       | 相关命令目录              | mysqladmin.mysqldump等命令                            |
+  | /etc/init.d/mysql               | 启停脚本                  | /etc/init.d/mysql stop 和 service mysql stop 效果一样 |
+  | /etc/mysql/                     | 配置文件目录              |                                                       |
+  | /var/log/mysql/mysql-bin.log    | 二进制日志文件log-bin     | 默认关闭，主要用于主从复制                            |
+  | /var/log/mysql/error.log        | 错误日志log-error         | 默认开启                                              |
+  | /var/log/mysql/mariadb-slow.log | 慢查询日志log             | 默认关闭，记录慢查询的SQL语句。                        |
+
+  启动数据库程序时可以指定数据库文件的存放路径
+  #+begin_src bash
+  /usr/bin/mysql_safe --datadir=/var/lib/mysql
+  #+end_src
+
+** 配置文件 ~/etc/mysql/my.cnf~
+   Windows下的配置文件为my.ini文件。配置文件分类及作用：
+   1. ~/etc/mysql/mariadb.cnf~ to set global defaults.
+   2. ~/etc/mysql/conf.d/~ to set global options.
+   3. ~/etc/mysql/mariadb.conf.d/*.cnf~ to set MariaDB-only options.
+      若我们要配置MariaDB的配置，则修改该目录下的文件。该目录下的配置文件：
+      - 50-client.cnf
+      - 50-mysql-client.cnf
+      - 50-mysqld_safe.cnf
+      - 50-server.cnf 最重要的配置文件
+   4. ~~/.my.cnf~ to set user-specific options.
+
+** 修改字符集
+   #+begin_src bash
+   # 查看当前字符集
+   show variables like 'character%';
+   #+end_src
+   默认是Latin1，若要支持非英语字符则需求修改为utf8mb4(即full utf8 4-byte character set)
+   - 50-server.cnf 修改 ~character-set-server = utf8mb4~ 和 ~collation-server = utf8mb4_general_ci~
+   - 50-client.cnf 修改 ~default-character-set = utf8mb4~
+   - 50-mysql-clients.cnf 修改 ~default-character-set = utf8mb4~
+
+
+   重启MySQL服务让配置生效。
+
+** 数据文件
+   - FRM文件，存放表结构
+   - MYD文件，存放表数据
+   - MYI文件，存放表索引
+
+* 逻辑结构
+  1. Connection Pool
+     - Authentication, Thread Reuse, Connection Limits, Check Memory, Caches
+  2. Management Services & Utilities
+     - Backup & Recovery, Security, Replicaton, Cluster, Administration, Configuration, Migration & Metadata
+  3. SQL Interface, Parser, Optimizer, Caches & Buffers
+     - Global and Engine Specific Caches & Buffers
+  4. Pluggable Storage Engines(Memory, Index & Storage Management)
+     - MyISAM
+     - InnoDB
+     - NDB
+     - Archive
+     - Federated
+     - Memory
+     - Merge
+     - Partner
+     - Community
+     - Custom
+  5. File System(NTFS, ufs, ext2/3, NFS, SAN, NAS), Files & Logs(Redo, Undo, Data, Index, Binary, Error, Query and Slow)
+
+* 存储引擎(Pluggable Storage Engine)
+  查看当前使用的存储引擎
+  #+begin_src sql
+  -- 查看当前MySQL版本提供哪些存储引擎
+  show engines;
+
+  -- 查看当前使用的存储引擎
+  show variables like '%storage_engine%';
+  #+end_src
+
+** MyISAM 和 InnoDB 的区别
+   |          | MyISAM                                                   | InnoDB                                                       |
+   |----------+----------------------------------------------------------+--------------------------------------------------------------|
+   | 主外键   | 不支持                                                   | 支持                                                         |
+   | 事务     | 不支持                                                   | 支持                                                         |
+   | 行表锁   | 表锁，即使操作一条记录也会锁住整张表，不适合高并发的操作 | 行锁，操作时只锁定对应的行，不影响其他行。适合高并发的操作。 |
+   | 缓存     | 只缓存索引，不缓存真实数据                               | 缓存索引和数据，因此内存大小对性能有影响。                   |
+   | 表空间   | 小                                                       | 大                                                           |
+   | 关注点   | 查询高性能                                               | 事务                                                         |
+   | 默认安装 | 是                                                       | 是                                                           |
+
+* 基于MySQL的其他数据库产品
+  | 产品           | 价格 | 目标                                  | 主要功能 |
+  |----------------+------+---------------------------------------+----------|
+  | Percona Server | free | 提供XtrDB存储引擎和其他分析工具       | XtrDB    |
+  | MariaDB        | free | 扩展MySQL让其包含XtrDB和其他性能改进  | XtrDB    |
+  | Drizzle        | free | 提供比MySQL更强大的可扩展性和性能改进 | 高可用性 |
+
 * 基本使用
   #+begin_src bash
   # 创建数据库
-  create database <database_name>;
+  create database <database_name> character set 'utf8' collate 'utf8_general_ci';
   create database if not exists <database_name>;
 
   # 显示所有数据库
@@ -109,8 +212,23 @@
   # 显示表定义的SQL
   show create table <table_name>;
 
+
+  # ??
+  create table <table_name>(
+    `id` bigint(20) not null comment 'id',
+    `price` decimal(10, 2) not null comment '价格',
+    primary key (`id`) using btree
+  )
+  engine = innodb
+  character set = 'utf8' collate = utf8_general_ci
+  row_format = dynamic;
+
+  # 删除列
+  alter table <table_name> drop column <column_name>;
   # 添加字段
   alter table <table_name> add column <column_name> <data_type> [default <default_value>] [not null] [comment '<comment>'] [after <column_name>];
+  # 修改字段
+  alter table <table_name> change column <original_column_name> <new_column_name> <data_type> [default <default_value>] [not null] [comment '<comment>'] [after <column_name>];
   #+end_src
 
 * Primary Key
@@ -284,3 +402,15 @@
   (title, @expired_date, amount)
   set expired_date = str_to_date(@expired_date, '%m/%d/%y'); -- Transform the data format.
   #+end_src
+* SQL的加载执行顺序
+  1. FROM <left_table>
+  2. ON <join_condition>
+  3. <join_type> JOIN <right_table>
+  4. WHERE <where_condition>
+  5. GROUP BY <group_by_list>
+  6. HAVING <having_condition>
+  7. SELECT
+  8. DISTINCT <select_list>
+  9. ORDER BY <order_by_condition>
+  10. LIMIT <limit_number>
+* TODO 索引

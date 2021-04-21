@@ -1,0 +1,27 @@
+#    -*- mode: org -*-
+
+
+Archived entries from file /home/john/sda/john/repos/blog/note/vbs.org
+
+
+* ~CreateObject(ProgID)~ 函数的逻辑
+  :PROPERTIES:
+  :ARCHIVE_TIME: 2021-02-24 Wed 10:58
+  :ARCHIVE_FILE: ~/sda/john/repos/blog/note/vbs.org
+  :ARCHIVE_CATEGORY: vbs
+  :END:
+  1. 调用CLSIDFromProgIDEx从ProgID获取对应CLSID，若找不到则报“ActiveX部件不能创建对象”；
+     1. 通过 ~HKEY_CLASSES_ROOT\{ProdID}~ 的子键 ~CLSID~ 默认值，获取 ~CLSID~ 形如 ~{72C24DD5-D70A-438B-8A42-98424B88AFB8}~ 。若不存在 ~CLSID~ 则通过子键 ~CurVer~ 默认值，获取最新版本的LastestProgID；
+     2. 通过 ~HKEY_CLASSES_ROOT\{LastestProdID}~ 的子键 ~CLSID~ 默认值，获取 ~CLSID~ 形如 ~{72C24DD5-D70A-438B-8A42-98424B88AFB8}~ 。
+  2. 调用CoGetClassObject函数获取IClassFactory接口的指针，若找不到则报“ActiveX部件不能创建对象”或“类不支持Automation操作”，也可能是其他错误信息；
+  3. 调用IClassFactory接口的CreateInstance方法获取IUnknown接口指针，所有COM都必须支持IUnknown接口；
+  4. 调用IUnknown接口的QueryInterface方法查询该COM是非支持IDispatch接口，只有支持IDispatch接口的COM类才能使用CreateObject对象。若成功则给VARIANT赋值，否则报“类不支持Automation操作”或其他错误信息。
+     1. 通过 ~HKEY_CLASSES_ROOT\CLSID\{CLSID}~ 的子键
+        - ~InProcServer32~
+        - ~LocalServer32~ 是程序的启动命令（如/path/to/xxx.exe）
+        - ~Control~ 说明该组件是一个ActiveX控件
+        - ~Programmable~ 说明该组件支持自动化，即实现IDispatch接口
+          - 另外有两个方式确认该组件是否支持自动化
+            1. ~HKEY_CLASSES_ROOT\CLSID\{CLSID}\Implemented Categories\{ID}~
+            2. ~HKEY_CLASSES_ROOT\Component Categories\{ID}~
+        - ~Insertable~ 说明该组件可以被嵌入到一个OLE文档容器中

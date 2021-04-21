@@ -373,6 +373,28 @@ end
 
 ** TODO VirtualBox
 
+** VMWare Workstation
+
+*** 在Ubuntu安装Workstation
+    1. 到官网下载安装文件：https://www.vmware.com/products/workstation-pro/workstation-pro-evaluation.html
+    2. 添加执行权限 ~sudo chmod +x xxxx.bundle~
+    3. 执行安装文件 ~sudo ./xxx.bundle~
+    4. 若安装过程中出现Failed to load module "canberra-gtk-module"则执行 ~sudo apt-get install libcanberra-gtk-module~
+    5. 查看版本 ~vmware-installer -l~
+    6. 卸载 ~sudo vmware-installer --uninstall-product vmware-workstation~
+
+*** How to install VMWare tools if the option is grayed out
+    REF: https://www.ghacks.net/2019/11/08/how-to-install-vmware-tools-if-the-option-is-grayed-out/
+    Steps:
+    1. Shut down the virtual machine.
+    2. Open the "Settings" option from context menu opened by right-click on the VM to edit the hardware settings.
+    3. Remove CD/Driver and Floppy Driver.
+    4. Add CD/Driver by clicking the "Add button", and the right pane should have now have the option "Use Physical Drive > Auto Detect" enabled.
+    5. Start the VM, and the "Install VMWare Tools" option should be available now.
+
+
+    If this doesn't work, you can try to manually download the VMWare Tools ISO(https://my.vmware.com/web/vmware/downloads/details?downloadGroup=VMTOOLS1100&productId=742), mount it in a virtual driver and install it.
+
 * 监控
 
 *** 日志收集分析-ELK

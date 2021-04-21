@@ -1,0 +1,30 @@
+* 操作注册表
+  #+begin_src pascal
+  Option Explicit
+
+  Const HKEY_CLASSES_ROOT = &H80000000
+
+  Set objReg = GetObject("winmgmts:\\.\root\default:StdRegProv")
+
+  Function RegKeyExists(hKey, strSubKey)
+      Dim a, n
+      n = objReg.EnumKey(hKey, strSubKey, a)
+      If n = 0 Then
+          RegKeyExists = True
+      Else
+          RegKeyExists = False
+      End If
+  End Function
+
+  Function GetCLSID(strProgID, strCLSID)
+      Dim s
+      GetCLSID = False
+      If RegKeyExists(HKEY_CLASSES_ROOT, strProgID & "\CLSID") Then
+          objReg.GetStringValue(HKEY_CLASSES_ROOT, strProgID & "\CLSID", "", s)
+          If Not IsNull(s) Then
+              strCLSID = s
+              GetCLSID = True
+          End If
+      End If
+  End Function
+  #+end_src

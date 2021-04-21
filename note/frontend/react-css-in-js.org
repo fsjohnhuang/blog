@@ -1,0 +1,497 @@
+* [classnames](https://www.npmjs.com/package/classnames)
+Installs
+```
+npm i classnames --save
+```
+** Basic Usage
+```
+import classnames from "classnames"
+
+classnames("foo", {bar: false}, 0, false, null, 1) //=> "foo 1"
+
+// dynamic class name with ES2015 computed keys
+let btnType = "primary"
+classnames({
+  ['btn-${btnType}']: true
+}) //=> “btn-primary”
+```
+
+** Sub Module `dedupe`
+```
+import classnames from "classnames/dedupe"
+
+classnames("foo", "foo", "bar") //=> "foo bar"
+classnames("foo", {foo: false}, "bar") //=> "bar"
+```
+
+** Sub Module `bind`
+```
+import classnames from "classnames/bind"
+
+const classNames = {
+  foo: "btn-primary",
+  bar: "btn-error"
+}
+const cx = classnames(classNames)
+cx({
+  foo: true,
+  bar: false
+})//=> "btn-primary"
+```
+
+* CSS in JS
+Features:
+1. Generates random className, avoiding name conllisions.
+2. Accepts css class name + css-in-js.
+```
+const Title = styled.h2`
+  color: red;
+`
+<Title className="title">Hello World</Title> //=> <h2 class="title sc-aaxs xao">Hello World</h2>
+```
+3. supports pseudo selector
+4. supports media query
+5. supports css animation
+
+pros:
+1. adapts React and React-Native
+2. CSS must be attached to React Component, eliminates redundant CSS rules.
+3. supports autoprefix.
+4. compress the classnames.
+5. dynamic style(generate style on runtime)
+
+cons:
+1. hard to debug
+2. can't utilize css preprocessor, so migration from old project is hard.
+
+[css-in-js tech stack comparison](https://github.com/MicheleBertoli/css-in-js)
+
+** [styled-components](styled-components)
+```
+# Installs
+$ npm i styled-components --save
+```
+
+** Basic Usage
+```
+import styled, { css } from "styled-components"
+
+const Title = styled.h1`
+  font-size: 1.5em;
+  text-align: center;
+  color: ${props => props.color || "palevioletred"};
+
+  ${props => props.error && css`
+    background: red;
+    color: white;
+  `}
+`
+
+<Title>
+  Hello World
+</Title>
+<Title error>
+  Error
+</Title>
+```
+** Neating
+```
+import styled from "styled-components"
+
+const Title = styled.h1`
+  font-size: 20px;
+
+  &:hover {
+    text-shadow: 0 0 10px #888;
+  }
+
+  > .icon{
+    font-size: 14px;
+  }
+
+  @media all and (max-width:600px){
+    font-size: 18px;
+  }
+`
+```
+
+** Additional Props
+```
+import styled from "styled-components"
+
+const Title = styled.input.attrs({
+  placeholder: "Enter Name!",             // speicifies the native attributes of input element, so `active: false` would throw error
+  margin: props => props.margin || "1em"
+})`
+  color: ${ props => props.color };
+  /* use dynamically computed props */
+  margin: ${ props => props.margin };
+`
+```
+** Sharing Style
+1. `styled(ReactComponent)`
+```
+import styled from "styled-components"
+
+function Link ({className, children}){
+  return (
+    <a className={ className }>
+      { children }
+    </a>
+  )
+}
+const StyledLink = styled(Link)`
+  font-weight: bold;
+`
+```
+2. `StyledComponent.extend`
+```
+import styled from "styled-components"
+
+const StyledLink = styled("a")`
+  font-weight: bold;
+`
+
+const BigLink = StyledLink.extend`
+  font-size: 30px;
+`
+```
+** CSS Animation
+```
+import styled, { keyframes } from "styled-components"
+
+const rotate360 = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to{
+    transform: rotate(360deg);
+  }
+`
+
+const Rotate = styled.div`
+  display: inline-block;
+  animation: ${rotate360} 2s linear infinite;
+  padding: 2rem 1rem;
+  font-size: 1.2rem;
+`
+```
+** Theme
+Sets `<ThemeProvider>` as root of app.
+```
+import React, { Component } from "react"
+import styled, { ThemeProvider } from "styled-components"
+
+const THEMES = {
+  dark: {fg: "#fff", bg: "#333"},
+  light: {fg: "#333", bg: "#fff"}
+}
+
+const ListItem = styled.li.attrs({tabIndex:0})`
+  color: ${props => props.theme.fg};
+  border: solid 1px ${props => props.theme.fg};
+  background: ${props => props.theme.bg};
+`
+
+class ThemeList extends Component{
+  constructor(props){
+    super(props)
+
+    this.state = {
+      theme: "dark",
+      themes: Object.keys(THEMES)
+    }
+
+    this.changeTheme = this.changeTheme.bind(this)
+  }
+  changeTheme({target}){
+    this.setState({ theme: target.value })
+  }
+  render(){
+    return (
+      <ThemeProvider theme={ THEMES[this.state.theme] }>
+        <ul>
+        {
+          this.themes.map(theme => (
+            <ListItem innerRef={ x => { this[this.state.theme + "Ref"] = x } }
+                      key={ this.state.theme }
+                      value={ this.state.theme }
+                      onClick={ this.changeTheme }>
+              { this.state.theme }
+            </ListItem>
+          ))
+        }
+        </ul>
+      </ThemeProvider>
+    )
+  }
+}
+```
+
+theme 1-\* variants
+variants across multiple dimension:
+1. cosy and compact
+2. accessibility modes
+......
+tool/pattern: [styled-theming](http://thejameskyle.com/styled-theming.html)
+
+**Global Style**
+```
+import { injectGlobal } from "styled-components"
+
+injectGlobal`
+  @font-face{
+    font-family: "Operator Mono";
+    src: url("../fonts/Operator-Mono.ttf");
+  }
+
+  body{
+    margin: 0;
+  }
+`
+```
+
+* CSS Modules(https://github.com/css-modules/css-modules)
+The cons of CSS
+1. Global Namespace
+2. Complicate Dependencies Management
+3. Dead Code Elimination is Hard
+4. Minfication(long class name is hard to minficate)
+5. Can't Sharing Constants with JS
+6. Non-deterministic Resolution(because of cascade)
+7. Isolation(weak of couple)
+
+
+The pros of CSS Modules
+1. compresses the classnames.
+2. utilizes preprocessor.
+
+** Features
+1. Generates random className, avoiding name conllisions.
+2. Provides a way to access CSS classname and binding(not variable) by JS.
+3. Provides import and extend by `compose`
+4. 仅为CSS引入局部作用域和模块依赖系统，而不像Less、SCSS和CSS in JS那样将CSS改造为一种编程语言。
+
+** Enables CSS Modules in css-loader
+Webpack4
+1. 依赖
+#+begin_src
+"style-loader": "^2.0.0",
+"less": "^4.1.1",
+"less-loader": "^6.0.0",
+"css-loader": "^5.0.2",
+"postcss-loader": "^4.0.0",
+"postcss-modules-values": "^4.0.0",
+#+end_src
+2. webpack.config.js
+#+begin_src js
+// 启用CSS Modules的变量功能
+const values = require('postcss-modules-values')
+
+// 启动css、less、scss的CSS Module特性
+const cssRegex = /\.css$/
+const cssModuleRegex = /\.module\.css$/
+const lessRegex = /\.less$/
+const lessModuleRegex = /\.module\.less$/
+const scssRegex = /\.scss/
+const scssModuleRegex = /\.module\.scss$/
+
+const getStyleLoaders = (extension, module=false) => {
+  const loaders = ['style-loader']
+
+  loaders.push({
+      loader: 'css-loader',
+      options: {
+          /**
+           * 默认启用CSS Module后，会将css的class名称以[hash:base64]的算法转换为全局唯一的名称，然后开发者通过JS Object中和源css的class名称相同的键获取这个全局唯一的css class名称。
+           * 示例：
+           * 1. 在css文件中有 .title {color: red;}，经过处理后的css文件会变为 ._3zyde4l1ATCOkgn-DBWEL {color: red;}；
+           * 2. 在JS中引入局部样式 import styles from './index.module.css'，这样的styles为 {title: '_3zyde4l1ATCOkgn-DBWEL'}；
+           * 3. 在JS使用局部样式 <div className={styles.title}>hi</div>
+           *
+           * 若想修改处理后css class名称的名称变化规则，则可以通过设置localIdentName实现。
+           * [path] 为css文件路径，/会被换成-
+           * [name] 为css文件名称，.会被换成-
+           * [local] 为css class原名称
+           */
+          modules: module ? { localIdentName: '[path][name]__[local]' } : undefined
+      }
+  })
+
+  switch (extension) {
+    case '.less':
+        loaders.push({
+            loader: 'less-loader',
+            options: {
+                lessOptions: { javascriptEnabled: true }
+            }
+        })
+        break
+    case '.scss':
+        loaders.push('scss-loader')
+        break
+    default:
+        break
+  }
+
+  loaders.push('postcss-loader')
+
+  return loaders
+}
+
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: cssRegex,
+        exclude: cssModuleRegex,
+        use: getStyleLoaders('.css')
+      },
+      {
+        test: cssModuleRegex,
+        use: getStyleLoaders('.css', true)
+      },
+      {
+        test: lessRegex,
+        exclude: lessModuleRegex,
+        use: getStyleLoaders('.less')
+      },
+      {
+        test: lessModuleRegex,
+        use: getStyleLoaders('.less', true)
+      },
+      {
+        test: scssRegex,
+        exclude: scssModuleRegex,
+        use: getStyleLoaders('.scss')
+      },
+      {
+        test: scssModuleRegex,
+        use: getStyleLoaders('.scss', true)
+      }
+    ]
+  },
+  plugins: [
+    values
+  ]
+}
+#+end_src
+
+** Usage
+1. index.module.css
+   #+begin_src css
+   /* 隐式定义局部作用域的样式 */
+   .title {
+     color: red;
+   }
+
+   /* 显式定义局部作用域的样式 */
+   :local(.title2) {
+     color: yellow;
+   }
+
+   /* 在CSS Modules中定义全局作用域的样式*/
+   :global(.title) {
+     color: green;
+   }
+
+   .slogan {
+     /* 通过CSS Modules提供的composition特性，组合其他样式到某个样式下。
+      * composition特性对应的关键子字为composes。
+      * 最终编译出的CSS和没有composes是一样的，只是对于的JS Object的键值从一个class名称变为一组class名称。
+      */
+     composes: title;
+     composes: title3 from './another.module.css'; /* 从其他CSS文件中组合样式 */
+   }
+
+   /* CSS Modules变量
+    * 详细用法：https://github.com/css-modules/postcss-modules-values
+    */
+   @value primary: #333; /* 定义变量，可作为CSS样式属性值、样式名称或路径使用 */
+   .text-primary {
+     color: primary; /* 使用变量 */
+   }
+   @value primary, secondary from './colors.css'; /* 从其他样式文件引入变量 */
+   @value primary as o-p, secondary as o-s from './colors.css'; /* 从其他样式文件引入变量，并重命名 */
+   #+end_src
+2. index.js
+   #+begin_src js
+   import React, { Component } from 'react'
+   import styles from './index.module.css'
+
+   export default class Login extends Component {
+       render() {
+           return (
+               <div>
+                 <span className={styles.title}>Red<span>
+                 <span className={styles.title2}>Yellow<span>
+                 <span className="title">Green<span>
+               </div>
+           )
+       }
+   }
+   #+end_src
+
+** Integrate with SCSS
+#+begin_src css
+/* __variable.scss */
+$primary_fg: #fff;
+$error_fg: red;
+
+/* There is no variable in CSS Modules, but we could utilize variable of SCSS/SASS */
+:export{
+  primary_fg: $primary_fg;
+  error_fg: $error_fg;
+}
+
+/* reset.scss */
+/* `:global(<classname>)` indicates to preserve the classname*/
+body{
+  margin: 0;
+}
+:global(.main){
+  padding: 10px;
+}
+
+/* common.scss */
+.primary_background{
+  background: blue;
+}
+
+/* list.scss */
+@import 'reset.scss'
+@import '__variable.scss'
+
+.primary_border{
+  border: solid 1px $primary_fg;
+}
+.list__item{
+  composes: primary_border;
+  composes: primary_background from "./common.scss";
+  display: block;
+  animation: rotate 5s linear infinite;
+}
+
+/* the keyframes name `rotate` would be transform to random code */
+@keyframes rotate{
+  from{
+    transform: rotate(0deg);
+  }
+  to{
+    transform: rotate(360deg);
+  }
+}
+#+end_src
+
+** TODO [react-css-modules](https://github.com/gajus/react-css-modules)
+```
+import CSSModules from "react-css-modules"
+import styles from "./styles.css"
+
+function List(props){
+  return (
+    <a styleName="list__item">{ props.children }</a>
+  )
+}
+export default CSSModules(List, styles)
+```

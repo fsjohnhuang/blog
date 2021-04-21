@@ -236,6 +236,33 @@ Claws Mail.
   wget https://download.teamviewer.com/download/linux/teamviewer_amd64.deb
   sudo apt install ./teamviewer_amd64.deb
   #+end_src
+  若网络已连接的情况下，依然报"Not ready. Check your connection"。则执行
+  1. 重启TeamViewer服务
+     #+begin_src bash
+     sudo teamviewer daemon restart
+     sudo teamviewer daemon status
+     #+end_src
+  2. 关闭防火墙
+     #+begin_src bash
+     # 查看防火墙状态 sudo ufw status
+     sudo ufw disable
+     #+end_src
+
+  若还是不行有可能是网络的路由器禁止，要更换网络服务接入热点。
+
+* zoom
+  #+begin_src bash
+  wget https://zoom.us/client/latest/zoom_amd64.deb
+  sudo apt install ./zoom_amd64.deb
+  #+end_src
+
+* 截图软件——shutter
+  1. 安装
+     #+begin_src bash
+     sudo add-apt-repository -y ppa:linuxuprising/shutter
+     sudo apt install shutter
+     #+end_src
+  2. 解决shutter不能编辑的问题：https://itsfoss.com/shutter-edit-button-disabled/
 
 * 其它工具
 ** TODO ranger
@@ -514,3 +541,7 @@ lsb_release -a
    #+begin_src bash
    rsync -azv --password-file=rsyncd.password --exclude-from=./.gitignore --exclude=.git ./ apache@<server ip>::www | grep -e '\.js$'
    #+end_src
+* 录音工具
+  #+begin_src bash
+  sudo apt-get install audacity
+  #+end_src

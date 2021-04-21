@@ -404,7 +404,32 @@ index 5e6a0dc..29f2cd4 100644
   git subtree pull --prefix <dir> <repo> <branch>
   # 向子项目推送代码
   git subtree push --prefix <dir> <repo> <branch>
+
+
+  # 记录帐号、密码，后续git pull和git push免密码
+  cd ${project} && git config credential.helper store
+  echo https://{username}:{password}@github.com > ${project}/.git-credentials
+  # 然后第一次执行git pull或git push后输入帐号密码，后续则不用再输入。
   #+END_EXAMPLE
+
+* 已有目录创建仓库并推送到远端
+  #+begin_src bash
+  cd <project>
+  git init
+  git remote add origin <url to remote repository>
+  git add .
+  git commit -m '<comment>'
+  git push -u origin master
+  #+end_src
+
+* 已有仓库推送到远端
+  #+begin_src bash
+  cd <project>
+  git remote rename origin old-origin
+  git remote add origin <url to remote repository>
+  git push -u origin --all
+  git push -u origin --tags
+  #+end_src
 
 * 回滚远程仓库分支
   1. 私有远程分支

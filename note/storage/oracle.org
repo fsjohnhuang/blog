@@ -31,13 +31,191 @@ where segment_name=(select index_name from user_indexes where index_name='idx_i'
      3) 对数据库进行恢复操作
   4) sysoper 系统操作员身份
 
+* SQL高级篇
+
+** select into
+   ~create table <new table name> as select * from <exists table>~
+   要求目标表不存在，因为在插入时会自动创建表，并将查询表中指定字段数据复制到新建的表中。
+
+** insert into select
+   ~insert into <exists table1>(f1, f2, ...) select v1, v2, ... from <exists table2>~
+   要求exists table1必须存在，除了可以插入源表exists table2的字段外，还可以插入常量。
+
+** merge
+   作用：判断source_table和target_table是否满足ON中的条件，若满足则用source_table满足的记录更新target_table，否则插入target_table。
+   #+begin_src sql
+   merge into <target_table>
+   using <source_table>
+   on (<conditional expression>......)
+     when matched then
+         update ...
+     when not matched then
+         insert ...
+   #+end_src
+   1. 示例
+      #+begin_src sql
+      merge into user a
+      using (select 123 user_id, 'john', 18 username from dual) b
+      on (a.user_id = b.user_id and a.username = b.username)
+      -- 省略这句则只插入不更新
+      when matched then
+        update set a.age = b.age
+
+        -- 省略这句则只更新不插入
+      when not matched then
+        insert (user_id, username, age) values(123, 'john', 18);
+      #+end_src
+   2. 带where限制条件
+      #+begin_src sql
+      merge into user a
+      using (select 123 user_id, 'john', 18 username from dual) b
+      on (a.user_id = b.user_id and a.username = b.username)
+      -- 省略这句则只插入不更新
+      when matched then
+        update set a.age = b.age where b.city <> '江东'
+
+        -- 省略这句则只更新不插入
+      when not matched then
+        insert (user_id, username, age) values(123, 'john', 18) where b.city <> '江东';
+      #+end_src
+   3. 带delete功能
+      在 ~when matched then~ 子句中可以包含 ~delete where b.city = '江东'~ 的子句。
+
+** 分层/递归查询
+   作用：在进行递归遍历树形结构的时候用。
+   #+begin_src sql
+   select ...
+   start with
+   connect by prior
+   #+end_src
+
+*** 示例——普通查询
+    #+begin_src sql
+    select * from user where name like 'john%' -- where子句树状记录集中筛选结果
+    start with id = 123
+    connect by prior pid = id; -- 从叶子节点到根节点查询，即等号前是当前记录的字段，等号后是下一个记录的字段
+
+    select * from user where name like 'john%' -- where子句树状记录集中筛选结果
+    start with id = 123
+    connect by prior id = pid; -- 从根节点往叶子节点查询，即等号前是当前记录的字段，等号后是下一个记录的字段
+    #+end_src
+
+*** 示例——多个起始节点查询
+    #+begin_src sql
+    select * from user where name like 'john%' -- where子句树状记录集中筛选结果
+    start with id = 123 or id =321
+    connect by prior pid = id; -- 从叶子节点到根节点查询，即等号前是当前记录的字段，等号后是下一个记录的字段
+    #+end_src
+
+*** 示例——排序
+    #+begin_src sql
+    select * from user where name like 'john%' -- where子句树状记录集中筛选结果
+    start with id = 123 or id =321
+    connect by prior pid = id -- 从叶子节点到根节点查询，即等号前是当前记录的字段，等号后是下一个记录的字段
+    order by sal desc; -- 得到最后的结果集合后，再对结果集合进行排序。
+    #+end_src
+
+** over order by函数
+   作用：全集合连续求和
+   #+begin_src sql
+   -- 1. 按department排序，并以department进行分组后执行sum(sal)；
+   -- 2. 第一组 '连续求和' 的值为第一组的department中的sal值总和；
+   -- 3. 第二组 '连续求和' 的值为第一组的 '连续求和' + 第二组的department中的sal值总和；
+   -- 4. 第N组的 '连续求和' 都是第N-1组的 '连续求和' + 第N组的department中的sal值总和。
+   select department, sum(sal) over(order by department) '连续求和' from emp;
+   #+end_src
+   注意：
+   1. ~sum(sal) over()~ 和 ~sum(sal)~ 效果是一样的，即全集合求和。但若查询语句中出现了 ~sum(sal) over......~ 那么不能再出现写 ~sum(sal)~ ；
+   2. ~sum(sal) over(order by department, name)~ 先按部门再按名称排序，然后进行全集合连续求和。
+
+** over partition by 组合
+   作用：分区求和
+   #+begin_src sql
+   -- 按department分组，并分别统计各组的sal值总和。
+   select
+     department,
+     sum(sal) over(partition by department) '部门总和',
+     100*round(sal/sum(sal) over(partition by department)) '占部门工资份额%'
+   from emp;
+   #+end_src
+
+** over partition by order by 组合
+   作用：分区连续求和
+   #+begin_src sql
+   -- 1. 对每组department内的记录，根据name进行组内连续求和；
+   -- 2. 第N组的department的连接求和，与第N-1组的department的连续求和相互独立。
+   select
+     department,
+     sum(sal) over(partition by department order by name) '部门连续求和',
+   from emp;
+   #+end_src
+
+** row_number函数 over partition by order by 组合
+   作用：分区排序
+   #+begin_src sql
+   -- 按department分组，在组内按sal倒序排列，然后组内从上至下生成从1开始计算的行号；
+   -- 每个分组的行号都是从1开始算起。
+   select department, name, row_number() over(partition by department order by sal desc) '排名' from emp;
+   #+end_src
+
+** group by rollup函数组合
+   作用：基于group by分组语句的统计结果，以倒数第二个字段为分组条件再次汇总。
+
+*** 示例
+    1. group by
+       #+begin_src sql
+       select m, area, sum(incoming) from emp group by m, area;
+       -- 得到
+       -- 202101 北平 1098
+       -- 202101 上海 300
+       -- 202102 北平 2098
+       -- 202102 上海 1300
+       #+end_src
+    2. group by rollup
+       #+begin_src sql
+       select m, area, sum(incoming) from emp group by rollup(m, area);
+       -- 得到
+       -- 202101 北平 1098
+       -- 202101 上海 300
+       -- 202101      1398
+       -- 202102 北平 2098
+       -- 202102 上海 1300
+       -- 202102      3398
+       --             1398+3398
+       #+end_src
+
+** group by cube函数组合
+   作用：和group by rollup函数组合类似，不过是基于group by分组语句的统计结果，以函数入参中所有字段分别再分组汇总。
+
+** grouping函数
+   作用：针对group by rollup和group by cube组合。 ~grouping(<column_name>)~ 若为记录本身的值则返回0，若为统计的值则返回1。
+   那么就可以为group by rollup和group by cube的结果添加列名。
+   #+begin_src sql
+   select m,
+   (case when ((grouping(m) = 1) and (grouping(area) = 1)) then '总计'
+         when ((grouping(m) = 1) and (grouping(area) = 0)) then '月份小计'
+         else area end) area,
+   sum(incoming)
+   from emp
+   group by rollup(m, area);
+   #+end_src
+
+** rank函数
+   作用：排名会有并列，并且若同一个名次有多个时，下一个名次会产生跳跃。
+   如有2个第1名，那么第3个人则是第3名。
+   #+begin_src sql
+   select rank() over (order by incoming) from emp;
+   #+end_src
+
+** dense_rank函数
+   作用：和rank函数一样，但若同一个名次有多个时，下一个名次不会产生跳跃。
+
 * Oracle性能优化
 OLAP：并行会话少，以查询为主。
 OLTP：并行会话多，以CRUD为主。
 
 ** TODO sql_trace
  #+begin_example sql
-
  alter session set tracefile_identifier=bind;
 
  alter session set sql_trace=true;
@@ -69,7 +247,7 @@ OLTP：并行会话多，以CRUD为主。
        - 但执行 ~select ... for update~ 会阻止写。
     3) 写(update/delete/insert)永远不会阻止读(read)
        - 当一行被修改后，Oracle会通过 *回滚段* 提供给数据的一致性读。
-         - 当更新字段A，还没commit时，Oracle实际已经将新值写入字段A了。但旧值会保存打回滚段，其他会话读取时是从回滚段读取字段A的值。
+         - 当更新字段A，还没commit时，Oracle实际已经将新值写入字段A了。但旧值会保存在回滚段，其他会话读取时是从回滚段读取字段A的值。
 
 *** TM锁和TX锁——对单表的锁定
     TM表锁：发生在insert,update,delete以及select for update操作时，目的是保证操作能够正常进行，并阻止其它人对表执行DDL操作。
@@ -188,6 +366,17 @@ OLTP：并行会话多，以CRUD为主。
          select a.id, b.id where tbl1 a join tbl2 b on (a.id = b.id) where a.id > 3 for update of a.id;
          #+end_example
 
+*** 杀session释放锁
+    1. 通过 ~v$lock~ 找到哪个sid长时间占用；
+    2. 根据sid在 ~v$session~ 中找对应的session；
+       #+begin_src sql
+       select sid, serial# from v$session where sid=170;
+       #+end_src
+    3. 让DBA杀session。
+       #+begin_src sql
+       alter system kill session 'sid, serial';
+       #+end_src
+
 ** Latch
    Latches，系统资源方面的锁，比如内存结果、SQL解析。
    保证资源的串行访问：
@@ -269,7 +458,7 @@ OLTP：并行会话多，以CRUD为主。
 
 *** 获取执行计划的方式
 1) 方式1
-   - 方式
+   - 方式，若使用PLSQL则按F5即可。
      #+begin_example sql
      explain plan for select * from tbl;
      select * from table(dbms_xplan.display());
@@ -394,7 +583,6 @@ select index_name, clustering_factor from user_indexes where table_name='<table_
 #+end_example
 多个数据会存储在一个数据块上，若索引对应的值出现在多个数据块上，那么该值的clustering factor值就越大，表示通过索引查找数据时需要在多个数据块间查询，访问代价比较大。
 
-
 **** TODO 直方图
 #+begin_example sql
 -- 直方图统计，for all column size 1表示忽略Cardinality的值
@@ -408,17 +596,17 @@ exec dbms_stats.gather_table_stats(user,
 ~consistant gets~ 一致性读，数值越少性能越好。
 
 - 表访问方式
-  - tablescan，全表扫描
+  - table access full，全表扫描
   - index range scan，范围扫描
-  - index fast scan，快速扫描
   - index full scan，全索引扫描
   - index full fast scan，全索引并行扫描，应用在通过索引就可以获取到结果的场景。如 ~select count(*) from t;~
   - index skip scan
   - index unique scan 唯一索引扫描
 - 表关联方式
   - nested loop join，两张表逐条配对，因此要以小表作为驱动表，关联表则需要建索引。
-  - merge join，两张表各自先排序，然后再配对。
-  - hash join，将一张小表进行hash后与大表的记录进行配对，当小表没有索引时效果更好。
+    在内表(非驱动表)的目标列上建有索引对该表关联方式有效。而外表(驱动表)的目标列建索引，最多就是INDEX FULL SCAN或INDEX FULL FAST SCAN。
+  - (sort) merge join，两张表各自先排序，然后再配对。索引仅能避免数据排序过程，作用不大。
+  - hash join，将一张小表进行hash后与大表的记录进行配对，当小表没有索引时效果更好。索引对查询基本不影响。
 
 *** RBO(Rule Based Optimizer)优化器
 8i之前采用的优化器，以一套死板的规则来控制数据的访问。
@@ -482,6 +670,8 @@ exec dbms_stats.gather_table_stats(user,
       | * 2 | ---- index fast full scan | SYS_C0011176 |  100 |  4621 | 68 (0)     | 00:00:01 |
 
 ***** 示例——index full scan
+      使用单块读方式有序读取索引块，性能比index fast full scan低。
+
       #+begin_example sql
       select id from user_info order by id;
       #+end_example
@@ -548,7 +738,9 @@ exec dbms_stats.gather_table_stats(user,
 
 ** Hints
    使用范畴：尽量避免开发人员使用，而是DBA在排查和优化时使用。
-   注意：hints上的table_name为from后的表名，若表名有别名则table_name必须为别名。
+   注意：
+   1. hints上的table_name为from后的表名，若表名有别名则table_name必须为别名；
+   2. 即使添加Hint执行计划也不保证按Hint执行，若发现没有按Hint执行则需要查看统计信息是否过时了。
 
 *** Access Path Hints(访问路径的Hints)
 1) ~/*+ full(<table_name>) */~ 全表扫描
@@ -558,6 +750,13 @@ exec dbms_stats.gather_table_stats(user,
    - 多块读：由于Oralce支持多块读的特性，假如有100条记录，而每次IO读取6个数据块，那么全表扫描在只需17次即可读完。而索引的话还要200次才能读完。因此一次读取表中大部分记录时，全表扫描反而性能更高。
    - 并行读：
 2) ~/*+ index(<table_name> [<index_name>]) */~ 走索引
+   - 注意：
+     1. 当select语句的表起了别名，那么 ~<table_name>~ 必须写为别名；
+     2. 若表名或别名被修改，那么hint也要修改
+   - 示例：
+     #+begin_src sql
+     select /*+index(ttsh id_tt_shohou)*/ * from shohou_hist ttsh where .....;
+     #+end_src
 3) ~/*+ no_index(<table_name>) */~ 不走索引
    #+begin_example sql
    -- 默认会走索引，但传null或空字符串都会导致走索引效率比不走还低很多
@@ -609,11 +808,14 @@ exec dbms_stats.gather_table_stats(user,
      #+begin_example sql
      insert /*+ append */ into t select * from t;
      #+end_example
-2) ~/*+ dynamic_sampling(<level>)*/~ 设置动态采样的级别
+2) ~/*+ dynamic_sampling(<table_name> <level>)*/~ 设置动态采样的级别
    #+begin_example sql
-   select /*+ dynamic_sampling(3) */~ count(*) from t;
+   select /*+ dynamic_sampling(t 3) */~ count(*) from t;
    #+end_example
-   - 注意：级别越高收集的信息越多，但效率越低。
+   - 注意：级别越高收集的信息越多，但效率越低。取值范围0~10，其中0是不使用dynamic sampling。默认值为2。
+   - 适用场景：
+     - 临时表；
+     - 经常数据量大规模(超原数据量10%)发生变化，导致统计信息过期；
 3) ~/*+ parallel([<table_name> <n>])*/~ 指定并行度（OLAP特别适用）
    #+begin_example sql
    select /*+ parallel(t 2)*/ * from t;
@@ -685,6 +887,8 @@ SQL*Net message from client：Oracle自家的数据库通信协议。
      2) 异步I/O
      3) 增加多个dbwr进程
      4) 增大SGA
+9) db file scattered read
+   - 文件离散读，基本可以锁定是表扫描相关问题。
 
 *** 11g事件分类
 | Administrative | waits resulting from DBA commands that cause users to wait(e.g. index rebuild)                      |
@@ -725,7 +929,73 @@ select event, total_waits from v$session_event;
 select event, total_waits from v$system_event;
 #+end_example
 
-** 索引和分区(包括11g下新的组合分区)
+** TODO 索引和分区(包括11g下新的组合分区)
+
+*** 创建索引
+    #+begin_src sql
+    -- 完整语法
+    create index <index_name> on <table_name>(<field_name>,...)
+    tablespace <tablespace_name>
+    pctfree 5
+    initrans 2
+    maxtrans 255
+    storage (
+      minextents 1
+      maxextents 16382
+      pctincrease 0
+    );
+
+    -- 创建一般索引，字段值可重复
+    create index <index_name on <table_name>(ename) tablespace <tablespace_name>;
+
+    -- 创建联合/复合索引
+    create index <index_name on <table_name>(ename, age) tablespace <tablespace_name>;
+
+    -- 创建函数索引
+    create index <index_name> on <table_name>(UPPER(ename)) tablespace <tablespace_name>;
+
+    -- 创建位图索引
+    create bitmap index <index_name> on <table_name>(ename) tablespace <tablespace_name>;
+
+    -- 创建唯一索引
+    create unique index <index_name> on <table_name>(ename) tablespace <tablespace_name>;
+
+    -- 创建反向索引
+    create index <index_name> on <table_name>(ename) reverse;
+
+    -- 创建压缩索引
+    create index <index_name> on <table_name>(ename) compress;
+
+    -- 创建升序降序索引
+    create index <index_name> on <table_name>(ename desc, age asc);
+
+
+    -- 创建主键或唯一性约束时，使用指定的索引，或创建/修改索引的存储结构。
+    -- 创建表时会为主键自动创建主键索引和唯一性索引，后续可以对它们单独删除。
+    alter table <table_name>
+    add constraint pk_emp_id primary key (emp_id)
+    using index <index_name> tablepsace <tablespace_name>;
+    #+end_src
+
+*** 查看索引
+ #+begin_example sql
+ select num_rows,
+        distinct_keys,
+        blevel, -- 索引是多层级的
+        leaf_blocks, -- 索引的叶子的数据块个数
+        clustering_fact,
+        avg_leaf_blocks_per_key,
+        avg_data_blocks_per_key
+ from user_indexes
+ where table_name = '<table_name>';
+ #+end_example
+
+ 查询索引对应表格哪些字段
+ #+begin_example sql
+ select a.table_name, b.index_name, b.column_name
+ from user_indexes a join user_ind_columns b on (a.table_name = b.table_name and a.index_name = b.index_name)
+ where a.table_name = '<table_name>';
+ #+end_example
 
 *** 通过索引访问数据的流程
  1) 从索引的root开始读取
@@ -733,10 +1003,13 @@ select event, total_waits from v$system_event;
  3) 读取索引的键值
  4) 根据键值的rowid读取数据
  假如root和branch正好在同一个数据块，则可以合并到一个consistent get，那么整个过程即执行3次consistent gets。否则为4次consistent gets。
+ 如果SQL语句仅访问被索引的列，那么数据库只会读取索引中的数据，而不用读取表；否则读取索引后，还要根据rowid查找表中的行。
 
 *** 索引类型
+    Oracle没有SQL Server和MySQL中的聚集索引的索引类型。
+
     索引中的数据是已经排序的。
-    1) B-tree索引
+    1) B-tree索引(就是Balance Tree索引)
        - 原理： 一般为3层：根(root)、分支(branch)、叶(leaf)，叶之间存在链接。
        - index range scan的过程
          1) 访问root
@@ -783,73 +1056,63 @@ select event, total_waits from v$system_event;
          #+end_example
 
 *** TODO 反向索引
-*** 操作SQL
- #+begin_example sql
- select num_rows,
-        distinct_keys,
-        blevel, -- 索引是多层级的
-        leaf_blocks, -- 索引的叶子的数据块个数
-        clustering_fact,
-        avg_leaf_blocks_per_key,
-        avg_data_blocks_per_key
- from user_indexes
- where table_name = '<table_name>';
- #+end_example
+    作用：当索引的列是按顺序产生时，相应的索引键值会分布到同一个叶块中，若多个会话同时进行访问时，则容易引起热块问题。
+    缺点：对于范围检索，如 ~between, >, <~ 等，无法利用反向索引。
+    原理：对索引列的索引键值进行字节码反转，进而实现分散存放到不同叶子节点块。
 
- 查询索引对应表格哪些字段
- #+begin_example sql
- select a.table_name, b.index_name, b.column_name
- from user_indexes a join user_ind_columns b on (a.table_name = b.table_name and a.index_name = b.index_name)
- where a.table_name = '<table_name>';
- #+end_example
+**** 热块争用
+     原因：
+     1. 多个会话执行同一条SQL或类似的SQL，对一个表的相同数据块进行访问；
 
-*** TODO 联合索引
-9i以前的where子句中必须包含联合索引的第一个字段，否则无法使用索引。
-9i以后可通过index skip scan，即使where子句中不包含联合索引的第一个字段，也可以利用该复合索引。
+***** TODO 如何发现热块争用
+      通过v$session的event字段，查看等待事件。
+      具体？？
 
-1) 创建
+***** 发生热块争用那刻的解决方法
+      1. 数据库侧通过杀会话，实现释放资源；
+      2. 应用侧停掉调用该SQL的功能，减少数据库侧的压力。
+
+***** 发生热块争用后的改善方法
+      1. 优化SQL
+         1. 加索引并让SQL走性能更高的索引；
+         2. 增加查询条件，减少数据量；
+         3. 对于联表查询或多个表的访问，可以改变表访问的顺序；
+         4. 根据业务需求，修改SQL逻辑。
+      2. 反向索引
+         但由于范围查询无法使用反向索引，因此实际场景中使用不多。
 
 *** 分区表
     表建立分区后，表则变为一个逻辑名称就不再是段对象，而是分区为段对象，数据是放在分区中。
     一个分区表的各个分区可以放置在不同的表空间中，那么需要删除某分区时，只需直接删除其所属的表空间即可。
     分区除了能提高性能外，也为数据管理提供便利。
 
-    自动段管理？？
+    什么场景下需要使用分区表：访问频繁+数据量大。
+    每个分区表记录数最好不要超过500W条。
 
 **** 分区裁剪
      由于Oracle在扫描时是按段扫描的，对于非分区表即从文件头开始到高水位(high water marker)扫描；而分区表则从某分区的文件头到高水位扫描，而不是所有分区都扫描。
 
+**** 分区的分类
+     Oracle 11g提供7种分区。
+     查看分区情况： ~select * from user_tab_partitions;~
+     查看分区数据： ~select * from <table_name> partition(<partition_name>)~
 
-**** TODO 分区的分类
+
      1) List Partitioning
         - 场景：分区数量固定的
+        - 操作：
+          #+begin_src sql
+          create table <table_name>(<column_definition>+)
+          partition by list(<column_name>)
+          (
+            partition p1 values('value1', 'value2'),
+            partition p1 values('value3')
+          );
+          #+end_src
      2) Range Partitioning
         - 场景：以日期时间或数值等范围作为分区条件
         - 操作
-          1) 创建按日期时间的分区表
-             #+begin_example sql
-             -- 按日、周分区
-             create table <table_name>(<column_definition>+)
-             partition by range(<column_name>) interval (numtodsinterval(1, 'day'))
-             (
-               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当日的分区
-             );
-
-             -- 按月分区
-             create table <table_name>(<column_definition>+)
-             partition by range(<column_name>) interval (numtoyminterval(1, 'month'))
-             (
-               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当月的分区
-             );
-
-             -- 按年分区
-             create table <table_name>(<column_definition>+)
-             partition by range(<column_name>) interval (numtoyminterval(1, 'year'))
-             (
-               partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当年的分区
-             );
-             #+end_example
-          2) 创建按数值的分区表
+          1) 创建按数值的分区表
              #+begin_example sql
              create table <table_name>(<column_definition>+)
              partition by range(<column_name>)
@@ -857,24 +1120,74 @@ select event, total_waits from v$system_event;
                partition p1 values less than (1000),
                partition p2 values less than (2000),
                partition p3 values less than (3000),
-               partition pmax values less than (maxvalue)
+               partition pmax values less than (4000) -- 此时若插入列值大于4000,则会报无法插入的异常。
              );
              #+end_example
+        - 添加分区 ~alter table <table_name> add partition <partition_name> values less than(maxvalue)~
+        - 删除分区 ~alter table <table_name> drop partition <partition_name>~ ，分区中的数据也会被删除。
+        - 启用可移动分区行 ~alter table <table_name> enable row movement~ ，当将列值从1500修改为2500，那么将导致记录所属分区应该发生变化。由于默认行不可移动，因此会被禁止。启动该选项则可以更新。
      3) Hash Partitioning
-        - 场景：通过哈希打散数据后进行分区存储，业务需求不强。
-
-**** 组合分区/子分区(Composite Partitioning)
-     例如Rang-Hash组合分区，就是以时间或数值等范围作为分区条件后，在对分区内容进行Hash分区处理。
-     1) Oracle 10g提供2种组合分区
-        1) Range-Hash
-        2) Range-List
-     2) Oracle 11g提供6种组合分区
-        1) Range-Hash
-        2) Range-List
-        3) Range-Range
-        4) List-Range
-        5) List-Hash
-        6) List-List
+        - 场景：通过哈希打散数据后进行分区存储，业务需求不强。用于规避热点问题。
+        - 操作
+          #+begin_src sql
+          create table <table_name>(<column_definition>+)
+          partition by hash(<column_name>)
+          (
+            partition p1,
+            partition p2
+          );
+          #+end_src
+     4) Composite Partitioning(复合分区)
+        将多种分区方式组合一起进行分区。
+        - 复合分区的种类
+          1) Oracle 10g提供2种组合分区
+             1) Range-Hash
+             2) Range-List
+          2) Oracle 11g提供6种组合分区
+             1) Range-Hash
+             2) Range-List
+             3) Range-Range
+             4) List-Range
+             5) List-Hash
+             6) List-List
+        - 操作
+          #+begin_src sql
+          -- Range-Hash
+          create table <table_name>(<column_definition>+)
+          partition by range(<column_name1>)
+          subpartition by hash(<column_name2>)
+          subpartitions 4 -- Hash分区
+          -- Range分区
+          (
+               partition p1 values less than (1000),
+               partition p2 values less than (2000),
+               partition p3 values less than (maxvalue)
+          );
+          #+end_src
+     5) Interval Partitioning(间隔分区)
+        Oracle 11g提供的新分区类型，可以指定时间间隔进行自动化分区。
+        - 操作
+          #+begin_src sql
+          -- 按日、周分区
+          create table <table_name>(<column_definition>+)
+          partition by range(<column_name>) interval (numtodsinterval(1, 'DAY'))
+          (
+            partition p1 values less than (timestamp' '2015-02-01 00:00:00') -- 指定日期前的记录存储到第一个分区，然后该日期后每一日作为一个分区。
+          );
+           -- 按月分区
+          create table <table_name>(<column_definition>+)
+          partition by range(<column_name>) interval (numtoyminterval(1, 'MONTH'))
+          (
+            partition p1 values less than (timestamp '2018-02-01 00:00:00') -- 会创建当月的分区
+          );
+           -- 按年分区
+          create table <table_name>(<column_definition>+)
+          partition by range(<column_name>) interval (numtoyminterval(1, 'YEAR'))
+          (
+            partition p1 values less than (TO_DATE('1995-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS')) -- 会创建当年的分区
+          );
+          #+end_src
+     6) system分区
 
 **** 分区索引
      1) Local Index
@@ -883,16 +1196,247 @@ select event, total_waits from v$system_event;
           #+begin_example sql
           -- 创建索引
           create index <index_name> on <table_name>(<column_name>) local;
+          -- 查看索引
+          select * from user_ind_partitions;
           #+end_example
+        - 索引字段必须为分区字段
      2) Global Index
         索引对应表的所有分区，某分区的DDL操作会导致整个索引无效。而索引失效则会影响执行计划。
         - 操作
           #+begin_example sql
           -- 创建索引
-          create index <index_name> on <table_name>(<column_name>);
+          create index <index_name> on <table_name>(<column_name>) global;
           #+end_example
+        - 索引字段必须为分区字段
+     3) 前缀索引或自定义索引
+        在自定义数据区间定义索引。自定义索引必须使用maxvalue。
+        - 操作
+          #+begin_src sql
+          create index <index_name> on <table_name>(<field_name>) global
+          partition by range(<field_name) {
+              partition p1 values less then(1000);
+              partition maxp values less then(maxvalue);
+          };
+          #+end_src
+        - 索引字段必须为分区字段
 
-     Local Index和Global Index在查询效率上是一样的，甚至Local Index的性能还低于Global Index。因为当需要扫描多个Local Index时则需要重新从索引的root向下读取branch和leaf，而Global Index则是一直在leaf上逐个读取。
+
+     Local Index和Global Index在查询效率上是一样的，甚至Local Index的性能还低于Global Index。
+     因为当需要扫描多个Local Index时则需要重新从索引的root向下读取branch和leaf，而Global Index则是一直在leaf上逐个读取。
+
+**** 问题——跨节点Join的问题、跨节点合并、排序、分页等处理数据的问题
+     通用方案：将数据组织好存放到缓存中，定时或实时同步。
+     对于实时性要求不高的场景，可以通过中间表处理。
+
+**** 问题——多数据源问题
+     1. 使用类似MyCat中间件管理；
+     2. 各应用配置多个数据源，并按需要直接访问对应的数据库。
+
+*** 索引失效的场景
+
+**** 分析单条索引
+     1. 将索引设置为监控状态
+        #+begin_src sql
+        -- 将id_tt_test索引设置为监控状态，或刷新v$object_usage中的USED字段为NO。
+        alter index id_tt_test monitoring usage;
+        #+end_src
+     2. 查看是否有使用索引
+        #+begin_src sql
+        -- INDEX_NAME 为索引名称
+        -- TABLE_NAME 为所属表名称
+        -- MONITORING YES表示处于监控状态
+        -- USED YES表示索引已启用，刚设置为监控状态时必定为NO
+        -- START_MONITORING 开始监控的时间
+        -- END_MONITORING 结束监控的时间
+        select * from v$object_name where name = 'id_tt_test';
+
+        -- 执行目标分析的SQL语句，然后执行上述语句查看是否用走索引。
+        #+end_src
+     3. 关闭监控状态
+        #+begin_src sql
+        -- 将id_tt_test索引设置为非监控状态
+        alter index id_tt_test nomonitoring usage;
+        #+end_src
+
+**** 失效原因
+     1. 在索引列上使用函数
+        - 解决方法：建立函数索引，那么查询时必须使用相同的函数和非字段入参值也必须相同。
+          #+begin_src sql
+          create index id_tt_test
+          on tt_test(to_char(datetime_created, 'YYYYMMDD')
+          tablespace test_index;
+
+          -- 查询时则要
+          select * from tt_test where to_char(datetime_created, 'YYYYMMDD') < '20210101';
+          #+end_src
+     2. 索引的列进行隐式的类型转换
+        - 问题SQL
+          #+begin_src sql
+          -- col1的数据类型为VARCHAR2，因此下面的语句等价于 select * from tt_test where to_number(col1) = 5;
+          select * from tt_test where col1 = 5;
+          #+end_src
+     3. Where子句中包含不等于操作(~<>, !=, not, not in, not exist~)
+        - 解决方法：使用 ~or~ 替换，如 ~age <> 0~ 替换为 ~age > 0 or age < 0~
+     4. Where子句中使用 ~is null~ 或 ~is not null~
+        - 解决方法：使用函数索引
+          1. where子句中通过 ~nvl(column, defaultValue) = defaultValue~ 代替 ~column is null~
+          2. 在列上建立函数索引 ~create index id_tt_test on tt_test(nvl(column, defaultValue)) tablespace text_index;~
+     5. 对于组合/复合索引，Where子句中没有包含引导列
+        - 原因：对于 ~create index index_emp on emp(col1, col2, col3);~ 复合索引，其中 ~col1~ 为引导列，因此where子句中若不出现引导列，如 ~where col2=3 and col3=4~ 是无法使用该复合索引。
+        - 9i以前的where子句中必须包含联合索引的第一个字段，否则无法使用索引。
+        - 9i以后可通过index skip scan，即使where子句中不包含联合索引的第一个字段，也可以利用该复合索引。
+     6. ~like '%'~ 百分号在前面
+     7. 查询SQL不变，但随着系统的使用本来生效的索引，现在不走索引的原因：
+        1. 随着表记录的增加，通过where子句筛选出来的记录数大于全表记录的10%~15%,CBO计算认为走索引性能低于全表查询；
+           - 由于Oracle支持多块读和并行读，因此筛选的记录数大于10%~15%时，TABLE ACCESS FULL（只支持单块读）的性能会高于INDEX RANGE SCAN + TABLE ACCESS INDEX BY ROWID
+        2. 统计信息失效
+           - 解决方法：重新搜索统计信息
+        3. 索引本身失效
+           - 解决方法：在线重建索引
+     8. 由于表关联方式的不同，虽然索引没有失效，但没有对执行结果产生正向影响。
+     9. 是否使用系统数据字典或系统视图
+        - 由于系统数据字典和系统视图没有经过分析，所以导致极差的“执行计划”；
+        - 注意：不要擅自对系统数据字典进行分析，否则可能导致死锁或系统整体性能下降。
+     10. 索引列值存在NULL，导致不能使用索引。
+         - 如 ~select count(*) from user;~ 若索引没有NULL则会使用INDEX FAST FULL SCAN，若存在NULL则会使用TABLE ACCESS FULL。
+         - 查看列值是否含NULL ~select num_nulls from user_tab_col_statistics where table_name = <table_name> and column_name = <column_name>~
+     11. 索引列值的选择性不高。
+         - 原因分析：
+           1. 若记录数有100w条，但索引列值仅有10,20,30和40这4个值，那么Oracle默认假设数据均匀分配所以每个值均占有25w条记录，那么查询时从多个执行计划中自然会选择TABLE ACCESS FULL的那个；
+           2. 但实际情况是10占90w条记录，那么对10以外的使用索引查询明显效果更佳。
+         - 处理方式： 针对该列重新收集统计信息，从而改变Oracle对执行计划的选择。通过 ~exec dbms_stats.gather_table_stats~ 重新收集。
+         - 查看列值选择性： ~select num_distinct from user_tab_col_statistics where table_name = <table_name> and column_name = <column_name>~
+           - num_distinct的值越高表示选择性越高。
+     12. 并行查询无法使用索引，必须通过Hint强制查询走索引。
+         - 并行查询？？
+
+*** 冗余索引或索引碎片的弊端
+    1. 耗用大量存储空间（索引段的维护和管理）
+       对基本进行DML操作时，尤其执行delete操作时会引起索引表的index_entry的逻辑删除，当一个索引块中所有index_entry都被删除后，才会将该索引块删除。因此insert和delete操作会引起索引碎片问题。
+    2. 增加DML完成时间
+    3. 增加恢复时间
+
+**** 以下均是错误的认知
+     1. Oracle的B-Tree随着时间的推移会变得不平衡，需要重建索引；
+        - 正确认知：Oracle的B-Tree会实现自平衡，和有效利用索引碎片。
+     2. 索引的集群因子(Clustering Factor)不同步，需要重建索引。
+        - 正确认知：反映索引键值所对应的表中的数据排序情况
+          1. 如果clustering factor的值越接近索引中叶块(leaf_block)的数目，那么表中的数据越有序；若越接近表中的行数，则表中的数据越无序。
+             ~select * from user_indexes where index_name = <index_name>~
+          2. 重建索引不会影响集群因子，只有通过重组表的数据才能改变集群因子。
+
+**** TODO 什么情况下应该重建索引
+     1. 索引深度超过4（最基础的索引包含root，branch，leaf，即深度为3）；
+        - 查看索引深度 ~select index_name, blevel from user_indexes where index_name = <index_name>~
+        - blevel(二元高度)
+          blevel对把ROWID返回给用户进程时需要的IO操作起关键作用，因为blevel的每一级别都会增加一个读取块，并且这些块无法顺序读取，因此每读一块都要一个独立的IO操作。（若可以顺序读取，则可以通过一个IO操作一次性读取出来）
+          删除和更新操作都会增加blevel的高度。
+        - 查看深度、当前叶块数目和已删叶块数目等逻辑结构，收集统计信息后执行 ~select height, blocks, lf_rows, lf_blks, lf_rows_len, lf_blk_len, br_rows, br_blks, del_lf_rows from index_stats~
+     2. 已删除的索引条目(index_entry)占现有索引条目的20%～25%；
+     3. 索引或分区索引因介质故障损坏；
+     4. 标记为UNUSABLE的索引需要重建；
+        - 6个导致分区索引不可用(UNUSABLE)的操作（http://blog.sina.com.cn/s/blog_98a873890101lndf.html）
+        - 如何查看？？
+     5. 索引移动到新的表空间或需要改变某些存储参数；
+     6. 通过SQL*Loader加载数据到表分区后，需要重建分区索引；
+     7. 重建索引以启用键压缩；
+     8. 位图索引本质不同于B-Tree，因此需要重建。
+
+**** 优化手段——在线重建索引
+     公司DBA都用这个方式重建索引。
+     注意：执行rebuild时不要中断操作，否则会造成对该表的所有操作均报错，只能DBA手工处理，故障时间将很长。
+
+     #+begin_src sql
+     -- 普通表的在线重建索引
+     alter index <index_name> rebuild online nologging;
+
+     -- 分区表的在线重建索引
+     alter index <index_name> rebuild partition <partition_name> online nologging;
+     #+end_src
+
+**** 优化手段——索引合并(index coalesce)
+     公司DBA没有使用过这个进行索引合并。
+
+     好处：
+     1. 不需要占接近磁盘存储空间的2倍；
+     2. 可以在线操作；
+     3. 无需重建索引结构，而是尽快合并索引叶块，这样可避免系统开销过大。
+
+
+     #+begin_src sql
+     alter index <index_name> coalesce
+     #+end_src
+
+** 物化视图(Materialized View)
+   普通视图不存在物理存储结构，但其基表都删除后该普通视图这一数据库对象依然会存在，只是查询时会报错而已。
+   物化视图是特殊的物理表
+   1. 可以通过user_tables查询出来；
+   2. 是段对象(segment)，因此可以有自己的物理存储属性；
+   3. 占用物理存储磁盘空间，可以从user_segment查询出来。
+
+*** 手工刷新
+    默认采用手工刷新，即 ~ON DEMAND~ 。
+    仅在该物化视图需要被刷新，才进行刷新(REFRESH)。
+
+*** 自动刷新
+    ~ON COMMIT~ 即一旦任意一张基表发生事务提交COMMIT，则立即刷新。
+
+*** 创建语句
+    #+begin_src sql
+    create materialized view <view_name> [options...] as select * from <table_name> .....;
+    #+end_src
+    options:
+    - ~BUILD [IMMEDIATE | DEFERRED]~ 是否在创建视图时生成数据，默认为 ~IMMEDIATE~ ，即生成。 ~DEFERRED~ 是需要时再生成数据。
+    - ~REFRESH [FAST | COMPLETE | FORCE | NEVER]~
+      - FAST 为增量刷新，新增、修改、删除的才刷新，其他没有发生任何变化的就不刷新。
+      - COMPLETE 为全表刷新
+      - FORCE 能增量刷新则增量刷新，否则全表刷新
+      - NEVER 不刷新
+    - ~ON [DEMAND | COMMIT]~ 手工刷新还是实时刷新
+    - ~START WITH~ 通知数据库完成从主表到本地表第一次复制的时间，结合 ~ON DEMAND~ 使用。
+    - ~NEXT~ 制定刷新的时间间隔，下一次刷新的时间=上一次执行完成的时间+时间间隔，结合 ~ON DEMAND~ 使用。
+
+**** 示例 —— 定时刷新
+     #+begin_src sql
+     create materialized view mv_test
+     refresh  force
+     on demand
+     start with sysdate
+     next sysdate + 1 -- 一天后刷新，若要一分钟刷新一次则要设置为 sysdate + 1 / 1440
+     as select * from user;
+     #+end_src
+
+**** 示例 —— 增量刷新
+     原理：通过物化视图日志记录基表的记录变化，然后在执行物化视图刷新时则会根据日志对数据进行刷新。一个物化视图日志可能对应多个物化视图。
+     必须添加的操作：
+     1. 对每张基表执行 ~create materialized view log on <source_table> with <rowid | primary key | object id>~ ；
+        - sequence 必须配合其他3种方式创建物化视图日志，即在其它方式的基础上添加更新序列而已。
+          #+begin_src sql
+          create materialized view log on <source_table> with <rowid | primary key | object id> sequence(<field1, field2, ...) using new values;
+          #+end_src
+        - 物化视图日志名称为 ~mlog$~ + 表名中前20个字符。若出现重复则Oracle会自动在后面添加数字。
+     2. ~as select~ 中查询出来的字段必须包含基表的rowid。
+
+
+     采用rowid时：
+     #+begin_src sql
+     -- 删除：drop materialized view log on <source_table1>;
+     -- 修改：alter materialized view log on <source_table1> add primary key;
+     create materialized view log on <source_table1> with rowid;
+     create materialized view log on <source_table2> with rowid;
+
+     create materialized view mv_test
+     refresh fast
+     on demand
+     start with sysdate
+     next sysdate + 1 -- 一天后刷新，若要一分钟刷新一次则要设置为 sysdate + 1 / 1440
+     as select a.rowid, b.rowid, ...... from <source_table1> a join <source_table2> b;
+     #+end_src
+
+*** 删除语句
+    #+begin_src sql
+    drop materialized view <view_name>;
+    #+end_src
 
 ** 并行
    应用场景：
@@ -1076,6 +1620,74 @@ select event, total_waits from v$system_event;
 6) 低效SQL——SQL自身问题
 7) 数据库负载过大——架构设计问题
 
+*** 统计消息不准，当谓词越界时造成性能问题
+    谓词越界，SQL语句查询条件超出统计消息所记录的范围，导致因Oracle优化器错误地选择SQL语句的执行计划。
+    注意：此时执行计划反馈的Rows、Bytes和Cost数据都是错误的。
+
+**** 一般发生的场景
+     1. 业务临时表或接口表
+        - 表操作特点：先导入大量数据到临时表，然后处理完后将结果导入到业务表，最后删除临时表数据。
+        - 问题原因：自动收集统计信息时，临时表数据小，但白天处理数据时已导入大量数据到临时表。导致处理数据时执行计划走错。
+     2. 巨大表
+        - 问题原因：若巨大表存在1000W条记录，那么要10%即100W条记录被修改过才会触发自动收集统计信息，因此很容易导致处理数据时执行计划走错。
+
+**** 示例
+     1. 表t1(id)包含1到10000个值
+        #+begin_src sql
+        create table t1 (col1 number);
+        create index idx_t1 on t1(col1);
+
+        begin
+            for i in 1..10000 loop
+                insert into t1 values(i);
+            end loop;
+            commit;
+        end;
+        /
+        #+end_src
+     2. 收集统计信息
+        #+begin_src sql
+        -- 此时执行 select * from user_tab_col_statistics where table_name='t1'; 返回空集合
+        -- 而执行 select * from user_tab_statistics where table_name='t1'; 返回的记录的GLOBAL_STATS、USER_STATS均为NO
+        -- 即尚未收集该表格的统计信息。
+        exec dbms_stats.gather_table_stats(owner => 'MYTEST', tablename => 'T1');
+        -- 此时执行 select * from user_tab_col_statistics where table_name='t1'; 返回一条关于col1的记录
+        -- 而执行 select * from user_tab_statistics where table_name='t1'; 返回的记录的GLOBAL_STATS为YES，而USER_STATS为NO。
+
+        -- 通过dbms_stats.convert_raw_value将low_value和high_value翻译为可读信息
+        var number :x;
+        exec dbms_stats.convert_raw_value(select low_value from user_tab_col_statistics wehre table_name='T1' and column_name='COL1', :x);
+        #+end_src
+     3. 插入超过原记录数10%的新记录，并且不手动重新收集统计信息（也没有到晚上自动重新收集统计信息）
+        #+begin_src sql
+        begin
+            for i in 10001..10000000 loop
+                insert into t1 values(i, to_char(i));
+            end loop;
+            commit;
+        end;
+        /
+
+        -- 等待几分钟后查询得到YES
+        select stale_stats from user_tab_statistics where table_name = 'T1';
+        #+end_src
+     4. 此时得到的执行计划将有可能完全错误
+        - 示例：如执行计划显示性能很高，但执行如下查询却相当耗时
+          #+begin_src sql
+          set timing on;
+          select count(col1) from t1 where col1 between 10001 and 100000;
+          #+end_src
+     5. 手动执行统计信息收集
+        #+begin_src sql
+        exec dbms_stats.gather_table_stats('TEST', 'T1');
+        #+end_src
+     6. 查看统计信息是否已经更新
+        #+begin_src sql
+        -- 更新后应该返回NO
+        select stale_stats from user_tab_statistics where table_name = 'T1';
+        #+end_src
+     7. 此时执行计划会恢复正常。
+
 ** 性能问题定位方式
    原则：从小范围分析问题
    1) SQL层
@@ -1115,3 +1727,412 @@ select event, total_waits from v$system_event;
       - 工具
         - AWR(Oracle8中为STATSPARK) 不结合业务很难分析性能问题。如业务就是负载重，而AWR只能告知负载重，不能说明是性能问题。
         - OS Tools(top, iostat)
+** 统计信息
+
+*** 优化器收集的统计信息如下
+    1. Table Statistics
+       - Number of Rows
+       - Number of blocks
+       - Average Row Length
+    2. Column Statictics
+       - Number of Distinct Values(NDV) in Column
+       - Number of Nulls in Column
+       - Data Distribution (Histogram)
+    3. Index Statictics
+       - Number of Leaf Blocks
+       - Levels
+       - Clustering Factor
+    4. System Statictics
+       - I/O Performance and Utilization
+       - CPU Performance and Utilization
+
+*** 查看表的统计信息
+    #+begin_src sql
+    -- 查看用户表的统计信息
+    select * from user_tab_statistics where table_name=<table_name>;
+    -- 查看所有表的统计信息
+    select * from dba_tab_statistics where table_name=<table_name>;
+    -- 查看表的所有字段的统计信息
+    select * from user_tab_col_statistics where table_name=<table_name>;
+    #+end_src
+    字段STALE_STATS为NO则表示统计信息未过期，为YES则表示已过期。
+    注意：Oracle会监控所有表的DML活动，通常情况下，当表中多于STALE_PERCENT的值（默认为10%）的行发生变化则Oracle会认为该表当前的统计信息已过期。
+
+*** 更新表的统计信息
+    Oracle Statictics的收集可通过 ~analyze~ 命令 或 ~dbms_stats~ 包来收集，但 ~dbms_stats~ 包收集得更广和更准确。而 ~analyze~ 在以后的版本中可能会被移除。
+
+    plsql中在command window下执行
+    #+begin_src sql
+    -- dbms_stats.gather_index_stats 收集索引统计信息
+    -- dbms_stats.gather_table_stats 收集表格、列和索引的统计信息
+    -- dbms_stats.gather_schema_stats 收集schema中所有对象的统计信息
+    -- dbms_stats.gather_dictionary_stats 收集所有dictionary对象的统计信息，包含system schemas(SYS、SYSTEM、CTXSYS和DRSYS等)中所有对象的统计信息
+    -- dbms_stats.gather_database_stats 收集数据库中所有对象的统计信息
+
+    -- 更新索引的统计信息
+    execute dbms_stats.gather_index_stats(ownname => 'datacenter', indname => 'pk_tf_name', estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE);
+
+    -- 更新索引的统计信息
+    execute dbms_stats.gather_table_stats(ownname => 'datacenter', tabname => 'crmmg_tf', estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE, method_opt => 'FOR ALL COLUMNS SIZE AUTO');
+    #+end_src
+
+**** 定时自动更新表的统计信息
+     Oracle10g开始默认会创建一个GATHER_STATS_JOB的Scheduler自动收集所有对象的统计信息(主要是2种统计信息，Missing Statictics和Stale Statictics)，其执行过程为：
+     1. Scheduler在maintenance windows open时运行，默认每天晚上10点到次日早上6点；
+     2. 调用 ~dbms_stats.gather_database_stats_job_proc~ 收集统计信息；
+        - 查看Job信息
+          #+begin_src sql
+          select job_name, program_name, enabled, stop_on_window_close from dba_scheduler_jobs where job_name = 'gather_stats_job';
+          #+end_src
+        - 停止Job
+          #+begin_src sql
+          begin
+            dbms_scheduler.disable('GATHER_STATS_JOB');
+          end;
+          /
+          #+end_src
+     3. 首先检测统计信息缺失和陈旧(10%的rows被修改过)的对象；
+        - 通过监控来检测统计信息的缺失和陈旧
+          - 监控参数 ~STATISITCS_LEVEL~
+            - typical， 默认值。允许收集正常调整所需的所有统计信息，同时不收集对性能有不良影响的统计信息；
+            - all，收集所有sql语句相关的详细信息，会导致性能有退化。
+            - basic，禁用收集统计信息。
+          - 查看
+            #+begin_src sql
+            select * from v$statistics_level;
+            #+end_src
+          - 调整 ~alter session/system set statistics_level=typical|all|basic~
+          - 当启用监控后的操作流程
+            1. 从上次统计信息后的insert、update和delete等操作将会延迟写入到user_tab_modifications视图中；
+            2. 然后dbms_stats.flush_database_monitoring_info会将信息写入内存；
+            3. 当修改行数超过10%，那么就会触发dbms_stats.gather_database_stats或dbms_stats.gather_schema_stats去收集stale statistics。
+     4. 然后确定优先级，再进行统计信息。
+
+     可以通过以下等视图查看
+     - DBA_SCHEDULER_JOBS
+     - DBA_SCHEDULER_PROGRAMS
+     - DBA_SCHEDULER_WINDOWS
+     - DBA_SCHEDULER_JOB_RUN_DETAILS
+
+*** 清理历史统计信息
+    Oracle默认会保留31天的统计信息，可通过 ~dbms_stats.alter_stats_history_retention~ 修改保留天数。
+
+** 慢查询和全表查询定位
+
+**** 工作流程
+     1. 每周提取慢查询SQL语句；
+        #+begin_src sql
+        -- 10分钟前占用CPU使用率前十条语句
+        SELECT *
+        FROM
+          (SELECT SQL_ID, COUNT(*), ROUND(COUNT(*) / SUM(COUNT(*)) OVER(), 2) PCTLOAD
+           FROM V$ACTIVE_SESSION_HISTORY
+           WHERE SAMPLE_TIME > SYSDATE - 10 / (24 * 60)
+             AND SESSION_TYPE <> 'BACKGROUND'
+             AND SESSION_STATE = 'ON CPU'
+           GROUP BY SQL_ID
+           ORDER BY COUNT(*) DESC )
+        WHERE rownum <=10
+        #+end_src
+     2. 逐条SQL语句排查
+        1. 索引是否有效利用？
+           1. 是否Where子句写法导致索引失效？
+           2. 是否统计信息过期导致执行计划错误？
+           3. 是否索引列的选择度不高，导致选择低效的执行计划？
+           4. 是否索引的存储结构出现问题，导致使用索引时查询慢？
+     3. 是否存在热块争用
+        - 如何排除定位？
+        - 如何解除当前热块争用导致的问题。
+
+* 同义词
+  分为私有和公有同义词：
+  - 私有同义词：由普通用户创建，仅该用户可用。若其他用户要使用则需要使用schema作为前缀引用。
+    - 所需权限： ~grant create synonym to <user>;~
+    - 创建
+      #+begin_src sql
+      create synonym <synonym_name> for <object_name>;
+      #+end_src
+    - 删除 ~drop synonym <synonym_name>~
+  - 公有同义词：由dba创建的，所有用户可用。
+    - 所需权限： ~grant create public synonym to <user>;~
+    - 创建
+      #+begin_src sql
+      create public synonym <synonym_name> for <object_name>;
+      #+end_src
+    - 删除 ~drop public synonym <synonym_name>~
+
+
+  注意：
+  1. 若私有和公有同义词同名，那么私有同义词优先级更高；
+  2. 同义词对应的对象被删除，同义词仍然存在，只要重建其对应的对象，那么在下次使用该同义词时会自动重新编译。
+
+* DBLink
+  作用：访问另一个数据库实例的对象。
+  1. 创建DBLink
+     #+begin_src sql
+     create public database link <dblink_name>
+     connect to <account> identitified by <password> using
+     <tns_string>;
+     #+end_src
+  2. 使用
+     #+begin_src sql
+     select * from <table_name>@<dblink_name>;
+     #+end_src
+  3. 注意：
+     1. 无法通过DBLink获取远程表中的二进制(BLOB, CLOB)列；
+     2. 对于巨大表或频繁操作的sql，不要直接通过DBLink访问远程对象。否则有可能拖死对方数据库。
+
+* 表空间
+  数据库文件：数据文件、日志文件和控制文件。
+  数据库 1-n 表空间。
+  表空间 1-n 数据文件。
+  用户 n-n 表空间。用户和表空间没有隶属关系。
+
+  数据库的逻辑结构：表空间(tablespace)、段(segment)，数据块(data block)和模式对象(schema object)。
+  表空间(tablespace)，每个数据库创建时默认会创建SYSTEM表空间，可以对除SYSTEM外其他表空间，进行online和offline操作。
+  段(segment)，表空间内存储的对象，分为数据段、索引段、回退段和临时段。段由区组成，每个区的大小不一定相同，但必须是数据块大小的整数倍。
+  数据块(data block)，是数据库中最小的IO单位，也是内存数据缓冲区的单位和数据文件存储空间的单位。由参数DB_BLOCK_SIZE设置，必须设置为操作系统块大小的整数倍。
+  模式对象(schema object)，表、聚簇、视图、索引序列生成器、同义词等。
+
+  #+begin_src sql
+  -- 创建临时表空间
+  create temporary tablespace mydb_temp
+  tempfile '/path/to/mydb_temp.dbf' -- 指定临时表空间存储的数据文件
+  size 1024m
+  autoextend on
+  next 50m maxsize 2048m
+  extent management local;
+
+  -- 创建数据表空间
+  create tablespace mydb
+  datafile '/path/to/mydb.dbf' -- 指定数据表空间存储的数据文件
+  size 1024m
+  autoextend on
+  next 50m maxsize 2048m
+  extent management local;
+
+  -- 为数据表空间添加数据文件
+  alter tablespace mydb add datafile '/path/to/datafile.dbf'
+  size 1024m
+  autoextend on
+  next 50m maxsize 2048m
+  extent management local;
+
+  -- 创建用户并指定表空间
+  create user my identified by my123
+  default tablespace mydb
+  temporary tablespace mydb_temp;
+  #+end_src
+
+* 表
+
+** 分类
+   1. 堆表/堆组织表（Heap Organized Table）
+      - 默认创建的就是堆组织表。
+      - 行无序存储，访问采用全表扫描，即按命中顺序来获取数据，而不是数据插入的顺序。
+      - 当增加数据时，在段中找到第一个适合数据大小的空闲空间；当删除数据后，留下的空间允许随后的insert和update重用。
+      - 存储速度快，适合write IO多的场景。
+      - 相关参数
+        - pctfree
+        - pctused
+        - initrans 事务槽，默认值为2.每个并发事务都需要一个事务槽，若可能会对相同的块多个并发操作，则考虑设置大点的值。
+   2. 分区表
+   3. 索引组织表（IOT, Index Organized Table）
+      - 行根据主键有序存储在索引段，即数据存放在插入前已经确定了（一般就是先插入的记录排在前面）。
+      - 由于IOT将普通表和索引二合为一，所以经常以主键查询表数据，那么可以考虑建立索引组织表，加快表的访问速度。但插入和删除速度相对普通表要慢一些。
+      - IOT的叶子节点不存储ROWID，并且叶子节点存储所有表列。
+        - 若表列很多时，可以划分索引段和溢出段，加快访问速度。索引段存储除主键外其它常访问的字段，其它字段则存储在溢出段中。
+      - 创建语句
+        #+begin_src sql
+        create table iot_timran(
+          id int,
+          name varchar2(50),
+          sal int,
+          description varchar2(1000),
+          constraint pk_timrn primary key(id)
+        )
+        organization index -- IOT
+        pctthreshold 30 -- 当行数据在叶子节点占用大小超过30%，则就爱那个index_entry分为一分为二，包含主键和using指定字段的则存储在索引段，其他存储在溢出段。
+        overflow tablespace users -- 溢出段所属的表空间
+        including name, sal; -- 指定除主键外哪些字段存储在索引段。
+
+        -- select index_name, index_type, table_name from from user_indexes; IOT的索引的index_type为IOT-TOP。
+        -- select segment_name, segment_type, partition_name from user_segments; 查看是否产生两个段。
+        #+end_src
+   4. 索引聚簇表(Cluster Table)
+      - 两个相互关联的表的相关数据，存储在一个簇块中，并且多个表共用一个索引。当联合查询时，只要扫描一个数据块就可以，可以提高IO效率。
+      - 不宜使用簇表的场景
+        1. 表数据将被大量修改；
+        2. 单表全表扫描；
+        3. 频繁对表进行truncate操作，聚簇的表是不能truncate的，只能truncate簇；
+        4. 若查询的结果的数据量经常超出一两个Oracle数据块。
+      - 创建语句
+        #+begin_src sql
+        -- 创建簇段(Cluster Segment)
+        create cluster cluster1(deptno number)
+        PCTUSED 60
+        PCTFREE 10
+        -- 每个聚簇键关联1024字节的数据，假设数据块大小为8KB，那么一个数据块会存储7个聚簇键。即deptno值为10～60的数据均存在同一个数据块中。
+        -- 若size过小则导致一个聚簇键无法保存一整条数据，那么会产生跨数据块的串链，那么就失去建立簇表的意义了。
+        -- 若size过大则导致则每个数据块存储的聚簇键过少，浪费空间。
+        SIZE 1024
+        TABLESPACE USERS
+        storage (
+          INITIAL 128k
+          NEXT 128k
+          MINEXTENTS 2
+          MAXEXTENTS 20
+        );
+        -- 基于簇，创建两个相关表
+        create table student(deptno number, sname varchar2(20)) cluster cluster1(deptno);
+        create table address(deptno number, detail varchar2(20)) cluster cluster1(deptno);
+        -- 为簇创建索引
+        -- 在建立索引前无法对表进行查询操作。因为查询操作是先从聚簇索引上拿到一个聚簇键值，在其中获取数据块地址，再读取数据。
+        create index index1 on cluster cluster1;
+        #+end_src
+      - 查看
+        #+begin_src sql
+        select * from user_clusters;
+        select * from user_clu_columns;
+        #+end_src
+      - 删除
+        #+begin_src sql
+        drop cluster cluster1; -- 仅仅适合删除空簇
+        drop cluster cluster1 including tables; -- 删除簇和簇表
+        drop cluster cluster1 including tables cascade constratints; -- 删除簇、簇表和外键月是
+        #+end_src
+   5. 哈希聚簇表
+      - 数据存储上和索引聚簇表一样，而定位方面是采用哈希函数直接定位数据的物理位置，而不是采用索引。
+      - 适用：
+        1. 表大小可估算；
+        2. 绝大多数查询可通过hash列进行等值查询。
+      - 不适用：
+        1. 全表扫描；
+        2. 大量DML操作。
+   6. 有序哈希聚簇表
+      - 数据存储和数据定位方式和哈希聚簇表一样，但数据存储上还会按照某个指定列有序存储。
+      - 适用：where子句是hash列，order by子句是某个用于有序存储的指定列。
+      - 创建语句
+        #+begin_src sql
+        CREATE TABLE <table_name>(<column> <data_type> SORT);
+        #+end_src
+   7. 临时表
+      - 临时表的数据放在PGA中，若超过PGA中则会将数据放在临时表空间
+   8. 外部表
+      - Oracle 9i后提供的功能
+   9. 压缩表
+   10. 嵌套表
+       - 没啥用。
+
+** 外部表
+   结论：不是适用于实现文件元数据存储。
+
+   Oracle 9i后提供的功能，通过向Oracle提供外部表的元数据，把一个操作系统文件、目录等当作一个只读的数据库表进行操作。外部表的特点：
+   1. 位于文件系统中，按一定的格式分割数据；
+   2. 可通过SQL语句访问外部表，而且不需要事先加载外部表到数据库中；
+   3. 外部表为只读状态，无法执行DML操作，也不能建索引；
+   4. 只能使用DBMS_STATS包采集外部表的统计信息。
+
+*** 通过ORACLE_DATAPUMP类型创建
+    通过将某个数据表的记录转换为外部表的数据。
+
+    #+begin_src sql
+    CREATE OR REPLACE DIRECTORY dat_dir as '/home/oracle/external_tb/data/'; -- 创建外部表所在目录
+    GRANT READ, WRITE ON DIRECTORY dat_dir to scott;
+
+    CREATE TABLE <TABLE_NAME> (<COLUMN_DEFINITION>......)
+    ORGANIZATION EXTENERAL
+    (
+        TYPE ORACLE_DATAPUMP
+        DEFAULT DIRECTORY dat_dir -- 指定外部表所在目录
+        LOCATION('tb1.exp', 'tb2.exp') -- 指定外部表的文件
+        PARALLEL 2 -- 并行方式填充数据，并行度必须和文件数量一致才能生效。
+        AS -- 填充使用的原始数据
+        SELECT ename, job, sal, dname
+        FROM emp JOIN dept
+        ON emp.deptno = dept.deptno
+    );
+    #+end_src
+
+*** 通过ORACLE LOADER类型创建
+    以已有的外部文件作为数据源，创建外部表。
+
+    #+begin_src sql
+    CREATE TABLE <TABLE_NAME> (<COLUMN_DEFINTION>......)
+    ORGANIZATION EXTENERAL
+    (
+        TYPE ORACLE_LOADER
+        DEFAULT DIRECTORY dat_dir -- 指定外部表所在目录
+        LOCATION('tb1.exp', 'tb2.exp') -- 指定外部表的文件
+    )
+    #+end_src
+
+** 临时表
+   1. 临时表本质是cache，事先建好表结构，存放会话相关的数据。并存在2种模式
+      - on commit delete rows，基于事务的临时段，在事务提交时，就会自动删除记录；
+      - on commit preserve rows, 基于会话的临时段，会话结束时相关数据会被自动清理。
+   2. WITH子句实质是Oracle自动为用户创建临时表；
+   3. 没有DML锁，但可以建立索引、约束、试图和触发器；
+   4. 会产生少量UNDO信息，因此会产生少量REDO信息。但不会为修改临时表的操作记录生成REDO信息，因此对临时表的操作是不可恢复的。
+      - UNDO信息，用于回滚到事务中的一个SAVEPOINT。如执行INSERT操作，当插入到第100条记录时因违反约束条件导致插入失败，那么必须回滚到INSERT操作之前。
+      - 由于UNDO数据必须生成REDO来保护UNDO操作。
+      - 而临时表一般执行INSERT和SELECT操作，SELECT操作不产生UNDO数据，因此若不执行INSERT操作则不会产生REDO数据。
+
+*** 创建SQL
+    #+begin_src sql
+    CREATE GLOBAL TEMPORARY TABLE <TABLE_NAME> (<COLUMN_DEFINITIONS>......)
+    ON COMMIT PRESERVE ROWS; -- 或者 ON COMMIT DELETE ROWS
+    #+end_src
+
+* 处理过的数据量最大多少？
+  1. 具体记录数？
+     - 下线表 记录数1亿条左右
+     - 市场品质表 记录数4～5亿条左右
+       - 通过分区表，每日一个分区，一个分区大概几万条记录。
+  2. 遇到什么问题？
+  3. 如何处理？
+     1. 根据日期查询ID存储在临时表；
+     2. 临时表联表查询其余字段。
+
+* 最复杂的联表查询
+  1. 遇到什么问题？
+  2. 如何处理？
+     1. 实时查询
+        - 宽表，减少联表。
+        - 实时更新的物化试图
+     2. 非实时查询
+        - 定时更新的物化试图
+
+* 分页查询优化
+** Oracle伪列
+   伪列和表列相似，但并不存储在表中
+   1. 可以查询；
+   2. 不可以插入、修改和删除。
+
+
+   常用的伪列：
+   1. ~ROWID~ 表中行的物理存储地址，可以唯一标识数据库中的一行，所以可以通过 ~ROWID~ 快速定位表中的一行。
+      - 通过索引查询时，也是从索引中提取rowid，然后根据rowid定位表中的数据行。
+   2. ~ROWNUM~ 是查询返回结果中行的序号，可以用于限制返回的行数。
+      - 从1开始
+      - 分页时的注意事项
+        ~select * from emp where rownum > 2~ 或 ~select * from emp where rownum = 2~ 将报查询失败
+        - 原因：
+          1. rownum是针对查询结果，根据从数据文件或缓冲区读取记录的顺序生成的伪列，即先查出结果集之后再加上去的一个列；
+          2. 若rownum=2，那么由于从数据文件或缓冲区读取出来的第一条记录的rownum为1，而被丢弃，rownum归0。然后再从从数据文件或缓冲区读取出来一条记录，其rownum再次被设置为1，也会被丢弃，rownum又归0。
+      - 性能误解
+        由于rownum针对查询结果而生成的伪列，因此对查询性能的优化并无影响，但由于缩小的返回的记录集合，因此会减少记录的网络IO。
+** 优化——通过最大记录序号限制查询范围
+   #+begin_src sql
+   -- 不带排序
+   select *
+   from (select rownum rn, t.* from <table_name> t where rownum < &maxnum)
+   where rn > &minnum;
+
+   -- 带排序
+   select *
+   from (select rownum rn, t.*
+         from (select * from <table_name> order by <column_name>) t
+         where rownum < &maxnum)
+   where rn > &minnum;
+   #+end_src

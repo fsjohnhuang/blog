@@ -1,10 +1,97 @@
 * 搭建Electron开发环境
 
+** Ubuntu安装Node.js 14
+
+*** 采用NodeSource源
+    由于系统默认仓库包含的Node.js版本比较旧，因此需要使用NodeSource的Node.js Binary Distributions源。
+    #+begin_src bash
+    curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+
+    sudo apt-get install -y nodejs # install Node.js 14.x and npm
+    sudo apt-get install gcc g++ make # You may also need development tools to build native addons
+    ## To install the Yarn package manager, run:
+    curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+    sudo apt-get update && sudo apt-get install yarn
+    #+end_src
+
+*** 采用清华NodeSource镜像源(https://mirrors.tuna.tsinghua.edu.cn/)
+    若直接采用NodeSource源很慢，那么可以切换到清华的NodeSource镜像。但不现在已经移除了NodeSource的镜像了。
+
 ** 通过cnpm安装Electron
    #+begin_src bash
    npm install -g cnpm --registry=https://registry.npm.taobao.org
-   cnpm i electron --save-dev
+   cnpm i electron@9.3.2 --save-dev # 最新版在编译SQLite3时有问题。
    #+end_src
+
+** TODO Webpack4 + TypeScript + React + Electron 开发环境
+   https://www.jianshu.com/p/3aafab67ff70
+   https://archive.jlongster.com/Backend-Apps-with-Webpack--Part-I
+
+*** 不打包node_modules的依赖
+    https://github.com/liady/webpack-node-externals
+    对于后端服务若不想打包node_modules中的依赖，通过如下形式处理
+    1. 安装webpack-node-externals
+       #+begin_src bash
+       cnpm i webpack-node-externals -D
+       #+end_src
+    2. webpack.config.js
+       #+begin_src js
+       import nodeExternals from 'webpack-node-externals'
+
+       module.exports = {
+           target: 'electron-main', // or 'node'
+           // ......
+           externals: [nodeExternals()],
+       }
+       #+end_src
+
+*** SQLite3的注意事项
+    REF: http://ask.sov5.cn/q/TQIF0d9kve
+
+    webpack.config.js
+    #+begin_src js
+    externals: {
+        sqlite3: 'commonjs sqlite3' // 或 sqlite3: 'require("sqlite3")'
+    }
+    #+end_src
+    或使用webpack-node-externals排除整个node_modules也可以。
+
+    通过electron-builder构建应用时，要将sqlite3模块复制到dist目录下。（待验证）
+
+*** Sequelize的注意事项
+    由于sequelize采用动态引用其它模块(如sqlite、pg等)，而webpack无法探测到这些引用关系，导致编译打包时正常，但运行时就包找不到所以来的模块。
+    - 问题代码：
+      #+begin_src js
+      import Sequelize from 'sequelize'
+
+
+      export default new Sequelize({
+          dialect: 'sqlite',
+          storage: 'test.db',
+          logging: false,
+      })
+      #+end_src
+    - 解决方案：通过入参dialetcModule指明数据库驱动，实现运行时引用正常。(REF: https://github.com/sequelize/sequelize/issues/9489)
+      1. sequelize相关代码
+         #+begin_src js
+         import Sequelize from 'sequelize'
+         import sqlite3 from 'sqlite3'
+
+
+         export default new Sequelize({
+             dialect: 'sqlite',
+             dialectModule: sqlite3,
+             storage: 'test.db',
+             logging: false,
+         })
+         #+end_src
+      2. webpack.config.js中设置数据库驱动配置
+         #+begin_src js
+         externals: {
+           'sqlite3': 'commonjs sqlite3'
+         }
+         #+end_src
 
 * 单例模式
   注意：两种方式都必须在 ~app.on('ready', createWindow)~ 之前执行。
@@ -144,29 +231,63 @@
     3. 32位的操作系统无法调用64位的dll。
 
 ** Electron + ffi-napi
-     安装自动编译原生node模块
-       #+begin_src bash
-       npm i electron-rebuild -D
-       npx electron-rebuild # 运行自动编译
-       #+end_src
-       - 手动编译 进入node_module/ffi-napi文件夹执行node-gyp rebuild --target='当前electron的版本' --arch=x64 --dist-url=https://atom.io/download/atom-shell编译node原生模块
-	 1. arch ： 计算机的架构（x64或者ia32），如果node环境是32位，那么这里就是ia32，如果是node环境是64位，那么这里就是x64。
-	 2. 如果路径错误，换成国内镜像路径 --dist-url=https://npm.taobao.org/mirrors/atom-shell
+   - 安装自动编译原生node模块
+     #+begin_src bash
+     npm i electron-rebuild -D
+     npx electron-rebuild # 运行自动编译
+     #+end_src
+   - 手动编译 进入node_module/ffi-napi文件夹执行 ~node-gyp rebuild --target='当前electron的版本' --arch=x64 --dist-url=https://atom.io/download/atom-shell~ 编译node原生模块
+     1. arch ： 计算机的架构（x64或者ia32），如果node环境是32位，那么这里就是ia32，如果是node环境是64位，那么这里就是x64。
+     2. 如果路径错误，换成国内镜像路径 --dist-url=https://npm.taobao.org/mirrors/atom-shell
 
 * Integrated with SQLite3
+  1. node-sqlite3是Node.js的SQLite3 binding，即包含数据库Driver。
+     - 官网：https://github.com/mapbox/node-sqlite3
+     - 官网虽然说node-sqlite3只适用以下版本，但实际上通过源码编译的方式可以支持Electron v11.3.0。
+       - Node.js v11.x, v12.x, v13.x and v14.x.
+       - Electron v6.0.x, v6.1.x, v7.0.x, v7.1.x, v8.0.x, v8.1.x and v8.2.x.
+     - 通过npm安装时默认会先采用node-pre-gyp根据当前环境Node/Electron下载二进制版本，若不存在再采用node-gyp执行源码编译构建。
+     - 但由于国内下载很慢，所以一般采用Solution One的方式直接下载源码并编译构建即可。
+  2. node-sqlite只是Node.js的SQLite客户端而不是Driver，依赖底层Driver如node-sqlite3。
+     - 官网：https://github.com/kriasoft/node-sqlite
+     - 安装
+       #+begin_src bash
+       npm install sqlite3 -S # 安装node-sqlite3作为数据库Driver
+       npm install sqlite@latest -S # 安装node-sqlite
+       #+end_src
+     - 使用
+       #+begin_src js
+       import sqlite3 from 'sqlite3'
+       import { open } from 'sqlite'
+
+       (asycn () => {
+           const db = await open({
+               filename: 'database.db',
+               driver: sqlite3.Database,
+           })
+       })()
+       #+end_src
+
 ** Prerequisites
-   Install Python2.7 and VC++ build tools as ffi-napi does on Windows. Execute the following as Administrator.
-   #+begin_src bash
-   npm i -g --production windows-build-tools
-   npm config set python python2.7
-   npm config set msvs_version 2015
-   npm i -g node-gyp # `cnpm` is fine while installing node-gyp
-   #+end_src
+    Install Python2.7 and VC++ build tools as ffi-napi does on Windows. Execute the following as Administrator.
+    #+begin_src bash
+    npm i -g --production windows-build-tools
+    npm i -g node-gyp # `cnpm` is fine while installing node-gyp
+    npm config set disturl https://npm.taobao.org/mirrors/node # set china repository URL of node source code.
+    npm config set ELECTRON_MIRROR https://npm.toabao.org/mirrors/electron/ # set china repository URL of Electron.
+    # or set those repository URL in .npmrc file
+    # registry=https://registry.npm.taobao.org/
+    # disturl=https://npm.taobao.org/mirrors/node/
+    # ELECTRON_MIRROR=https://npm.toabao.org/mirrors/electron/
+
+    npm config set python python2.7
+    npm config set msvs_version 2015 # For Windows
+    #+end_src
 
 ** Solution One
    #+begin_src bash
    # It is the same for Mac OS and Windows.
-   cnpm install sqlite@latest --build-from-source --runtime=electron --target=1.7.9 --dist-url=http://atom.io/download/electron --save
+   cnpm install sqlite3@latest --build-from-source --runtime=electron --target=1.7.9 --dist-url=http://atom.io/download/electron --save
    # above command will compile node-sqlite3 by `node-gyp rebuild --target=1.7.9 --arch=x64 --target-arch=x64 --msvs_version=2015 --dist-url=http://atom.io/download/electron` after node-sqlite3 source has been downloaded.
    #+end_src
    If cnpm fails to download the prebuild of SQLite3 cooresponding to the electron version specified by ~--target~ option, it will build a proper one for you immediately.
@@ -186,24 +307,42 @@
 
 ** Solution Two
    #+begin_src bash
-   npm install sqlite3 --save
-   npm install electron-rebuild --save
-
-   # Mac OS
+   npm install sqlite3 -S
+   npm install electron-rebuild -D
+   # Mac OS / Linux
    ./node_modules/.bin/electron-rebuild
    # Windows
    .\node_modules\.bin\electron-rebuild.cmd
    #+end_src
 
-* TODO Rebuild Electron
+   QA:
+   1. throws ~undefined variable napi_build_version in binding.gyp while trying to load binding.gyp~
+      solution: update nodejs to the latest one.
+
+** Validate
+   After install node-sqlite3, first of all is to test it is avaiable or not.
+   #+begin_src js
+   // test.js
+   import sqlite3 from 'sqlite3'
+
+
+   new sqlite3.Database('test.db') // The installation is successful, if there is a test.db created under project directory after execute `node test.js` or `electron test.js`.
+   #+end_src
+
+** TODO Using with Sequalize
+* TODO Using Native Node Modules
   It is necessary to rebuild electron while integrating with ~ffi-napi~ or ~node-sqlite3~.
   In fact ~ffi-napi~, ~node-sqlite3~ and other binary library are as Node.js native addon compiled with Node.js/Electron headers.
+
+  官方指引: https://www.electronjs.org/docs/tutorial/using-native-node-modules
 
 ** Prerequisites
    The Node.js native addon build tool ~node-gyp~ requires Python2.7 and CPP compiler.
    1. Mac OS
       Pyton2.7 is built-in on Mac OS, and CPP compiler would be installed with ~xcode~. The only one extra installation on Mac OS is the ~xcode-select~ (~xcode-select --install~)
-   2. Windows
+   2. Linux
+      Python2.7, gcc, g++, make
+   3. Windows
       1. Solution One *windows-build-tools* (Recommanded)
 	 The npm package ~windows-build-tools~ willl install Python2.7 and visualstudiotools for you just by typing ~npm install windows-build-tools -g --production~ on CMD or Powershell as *Administrator*, and boost the download progress by ~npm config set registry https://registry.npm.taobao.org/~.
       2. Solution Two
@@ -226,6 +365,11 @@
    4. ~--python~, specify the path to Python2.7 interpretor, if it has been set in ~%PATH%~ environment variable or set by ~npm config set python /path/to/python.exe~ , ignore this option.
    5. ~--msvs_version=2015~, a fixed option, if you have set it by ~npm config set msvs_version 2015 --global~ , ignore this option.
       - If this option is not 2015, there will be ~MSBUILD: error MSB4132: ...... available tool version is 4.0 or 14.0~
+
+** TODO node-pre-gyp
+   官网: https://www.npmjs.com/package/node-pre-gyp
+
+** TODO Electron-Rebuild
 
 * 打包
 主流的打包工具有 ~electron-builder~ 和 ~electron-packager~ 。
@@ -251,18 +395,46 @@
 
 *** 文件大小
     Electron项目内嵌整个V8引擎和Chromium内核，因此通过 ~electron-builder --dir~ 打包但尚未压缩的空项目大小已经达到121.MB，而压缩后则为36MB。
+
 *** 打包后的项目结构
-    #+begin_src yml
-    /dist/win-unpacked
-    -- /locals
-        -- am.pak
-        -- 一堆pak文件
-    -- /resources
-        -- app.asar (空项目为2KB，一个实际项目为130MB+)
-        -- electron.asar (250KB左右)
-    -- electron.exe (67.5MB)
-    -- ......
-    #+end_src
+
+**** Windows
+     #+begin_src yaml
+     /dist/win-unpacked
+     -- /locals
+         -- am.pak
+         -- 一堆pak文件
+     -- /resources
+         -- app.asar # (空项目为2KB，一个实际项目为130MB+)
+         -- electron.asar # (250KB左右)
+     -- electron.exe # (67.5MB)
+     -- ......
+     #+end_src
+
+**** Linux
+     - ~asar: true~
+       #+begin_src yaml
+       /dist/win-unpacked
+       -- /locals
+           -- am.pak
+           -- 一堆pak文件
+       -- /resources
+           -- app.asar # (空项目为2KB，一个实际项目为130MB+)
+       -- ......
+       #+end_src
+     - ~asar: false~
+       #+begin_src yaml
+       /dist/win-unpacked
+       -- /locals
+           -- am.pak
+           -- 一堆pak文件
+       -- /resources
+           -- /app
+              -- build/electron.js
+              -- package.json # 将执行electron-builder --dir对应的package.json所在目录的内容复制过来。
+              -- ......
+       -- ......
+       #+end_src
 
 **** app.asar文件分析
      1. 解压asar文件
@@ -285,60 +457,104 @@
     2. 配置(package.json)
        #+begin_src javascript
        {
+         "version": "1.0.0",
          "scripts": {
-           "pack": "electron-builder --dir", // npm run pack, 生成package目录但不打包为一个文件
-           "dist": "electron-builder" // npm run dist, 生成一个exe或dmg文件
+           // npm run pack, 生成在发布目录下生成linux-unpacked目录。
+           // 会根据当前编译构建打包环境生成不同工件，如Windows则使用属性win相关的配置。
+           // 也可以运行 electron-builder --publish never --linux 指定工件的目标环境，但一般没有必要。
+           "pack": "electron-builder --dir",
+           // npm run dist, 生成一个msi,exe,dmg等文件，里面包含就是linux-unpacked的内容。
+           // 会根据当前编译构建打包环境生成不同工件，如Windows则使用属性win相关的配置。
+           // 也可以运行 electron-builder --publish never --linux 指定工件的目标环境，但一般没有必要。
+           "dist": "electron-builder --publish never"
          },
+         // electron-builder配置
          "build": {
            "appId": "com.example.app", // 应用程序id
            "productName": "测试", // 应用名称
-          // 设置为 true 可以把自己的代码合并并加密
-         "asar": true,
-         "directories": {
-            "buildResources": "build", // 构建资源路径默认为build
-            "output": "dist" // 输出目录 默认为dist
-          },
-          "mac": {
-            "category": "public.app-category.developer-tools", // 应用程序类别
-            "target": ["dmg", "zip"],  // 目标包类型
-            "icon": "build/icon.icns" // 图标的路径
-          },
+           "asar": true, // 设置为 true 可以把自己的代码合并并加密
+           "directories": {
+              // The path to build resources
+              // Note: build resources is not packed into the app. if you need to use some files, e.g. as tray icon, please include required files explicity: `"files": ["**/*", "build/icon.*"]`
+              "buildResources": "build",
+              "output": "dist", // 输出目录
+              "app": "app" // The application directory in bundle, containing the application package.json.
+           },
+           // 指定打包(复制)哪些文件到app.asar文件中，默认是打包package.json所在目录下所有文件
+           files: [
+             "!node_modules", // 排除
+             "./build/**", // 包含子孙目录和文件
+             "./package.json" // 包含文件
+           ],
+           // The compression level: "store" | "normal" | "maximum"
+           // store for test environemt, maximum for product environment.
+           "compression": "normal",
+           // https://www.electron.build/configuration/contents#extraresources
+           // copy the file or directory with matching names directly into the app's resources directory(`Contents/Resources` for MacOS, `resources` for Linux and Windows).
+           "extraResources": [
+             { "from": "./local.db", "to": "./" }
+           ],
+           // https://www.electron.build/configuration/contents#extrafiles
+           // copy the file or directory with matching names directly into the app's directory(`Contents` for MacOS, `app` for Linux and Windows).
+           "extraFiles": [],
+           // Linux
+           "linux": {
+             "target": "tar.gz"
+           },
+           // Mac OS
+           "mac": {
+             "category": "public.app-category.developer-tools", // 应用程序类别
+             "target": ["dmg", "zip"],  // 目标包类型
+             "icon": "build/icon.icns" // 图标的路径
+            },
           "dmg": {
             "background": "build/background.tiff or build/background.png", // 背景图像的路径
             "title": "标题",
             "icon": "build/icon.icns" // 图标路径
            },
            "win": {
-             // 打包成一个独立的 exe 安装程序
-             // 'target': 'nsis',
-             // 这个意思是打出来32 bit + 64 bit的包，但是要注意：这样打包出来的安装包体积比较大，所以建议直接打32的安装包。
-             // 'arch': [
-             //   'x64',
-             //   'ia32'
-             // ]
-              "icon": "path/to/icon.ico",
-              "target": ["nsis","zip"] // 目标包类型
-	  "requestedExecutionLevel": "highestAvailable" // Ask for executing this application as Administrator every time. The value "highestAvailable" is the same as "requireAdminstrator". And the "asInvoker" is the default value.
-             },
-       "nsis": {
-          // 是否一键安装，建议为 false，可以让用户点击下一步、下一步、下一步的形式安装程序，如果为true，当用户双击构建好的程序，自动安装程序并打开，即：一键安装（one-click installer）
-          "oneClick": false,
-          // 允许请求提升。 如果为false，则用户必须使用提升的权限重新启动安装程序。
-          "allowElevation": true,
-          // 允许修改安装目录，建议为 true，是否允许用户改变安装目录，默认是不允许
-          "allowToChangeInstallationDirectory": true,
-          // 安装图标
-          "installerIcon": "build/installerIcon_120.ico",
-          // 卸载图标
-          "uninstallerIcon": "build/uninstallerIcon_120.ico",
-          // 安装时头部图标
-          "installerHeaderIcon": "build/installerHeaderIcon_120.ico",
-          // 创建桌面图标
-          "createDesktopShortcut": true,
-          // 创建开始菜单图标
-          "createStartMenuShortcut": true,
-          // electron中LICENSE.txt所需要的格式，并非是GBK，或者UTF-8，LICENSE.txt写好之后，需要进行转化，转化为ANSI
-         "license": "LICENSE.txt"
+             "target": "nsis" // 目标包类型
+             // Optional, 这个意思是打出来32 bit + 64 bit的包，但是要注意：这样打包出来的安装包体积比较大，所以建议直接打32的安装包。
+             'arch': ['x64', 'ia32']
+             // Optional
+             "icon": "path/to/icon.ico",
+             // Optional, Ask for executing this application as Administrator every time. The value "highestAvailable" is the same as "requireAdminstrator". And the "asInvoker" is the default value.
+             "requestedExecutionLevel": "highestAvailable"
+           },
+           // Optional
+           "nsis": {
+             // 是否一键安装，建议为 false，可以让用户点击下一步、下一步、下一步的形式安装程序，如果为true，当用户双击构建好的程序，自动安装程序并打开，即：一键安装（one-click installer）
+             // 为true会导致perMachine强制为true。
+             "oneClick": true,
+             // 安装包名称
+             "artifactName": "${productName}-setup-${version}.${ext}",
+             // 卸载工具名称
+             "uninstallDisplayName": "${productName} ${version}",
+             // 当oneClick为true时有效
+             "deleteAppDataOnUninstall": false,
+             // whether to show install mode installer page(choice per-machine or per-user) for assisted installer. Or whether installation always per all users(per-machine).
+             "perMachine": false,
+             // 允许请求提升。 如果为false，则用户必须使用提升的权限重新启动安装程序。
+             "allowElevation": true,
+             // 允许修改安装目录，建议为 true，是否允许用户改变安装目录，默认是不允许
+             "allowToChangeInstallationDirectory": false,
+             // 安装图标
+             "installerIcon": "build/installerIcon_120.ico",
+             // 卸载图标
+             "uninstallerIcon": "build/uninstallerIcon_120.ico",
+             // 安装时头部图标
+             "installerHeaderIcon": "build/installerHeaderIcon_120.ico",
+             // The name that will be used for all shortcuts.
+             "shortcutName": "${productName}",
+             // 创建桌面图标, "always" - recreate also on reinstall(even if removed by user).
+             "createDesktopShortcut": true,
+             // 创建开始菜单图标
+             "createStartMenuShortcut": true,
+             // Whether to run the installed application after finish. For assisted installer corresponding checkbox will be removed.
+             "runAfterFinish": true,
+             // electron中LICENSE.txt所需要的格式，并非是GBK，或者UTF-8，LICENSE.txt写好之后，需要进行转化，转化为ANSI
+             "license": "LICENSE.txt"
+           }
        }
        #+end_src
     3. 运行打包
@@ -349,6 +565,11 @@
        npm run dist
        #+end_src
 
+*** 打包过程
+    1. electron-builder会从源码编译构建node native module；
+       - 因此当package.json存在electron-rebuild，则会提示electron-rebuild为多余依赖，但保留也不会影响打包。
+    2. 检查electron是否已经下载，若没有则从github下载。
+
 *** 打包时下载electron失败的解决方案
     原因：
     1. 由于electron-builder在打包时会检查npm的cache中是否包含electron包，若没有则从github上下载，而国内网络环境从github上拉取大部分情况下会失败。
@@ -358,6 +579,10 @@
        - Windows: ~%LOCALAPPDATA%/electron/Cache~ or ~~/AppData/Local/electron/Cache/~
     解决方法：从淘宝的 ~~/AppData/Local/electron/Cache/httpscdn.npm.taobao.orgdistelectronv9.2.1electron-v9.2.1-win32-x64.zip~ 目录复制其中的 ~electron-v9.2.1-win32-x64.zip~ 到 ~~/AppData/Local/electron/Cache/~ 即可。
     Download all kinds of electron from https://npm.taobao.org/mirrors/electron/9.3.2/
+
+    *注意：*
+    通过 ~cnpm i electron -D~ 下载的electron包不是直接保存在 ~.cache/electron~ 目录下，而是保存在如下路径 ~~/.cache/electron/087ae42001f7295df383c1c4422a348b3f1f67aa3bd8d51310d8aa4c5ff3781f/electron-v11.3.0-linux-x64.zip~ ，这样electron-builder也会认为缺失electron包。
+    解决方法：将 ~electron-v11.3.0-linux-x64.zip~ 复制到 ~.cache/electron~ 目录下即可。
 
 *** 打包时包 ~react-script/node_modules/.......~ 无法解析的解决方案
     - 原因：
@@ -376,14 +601,35 @@
 **** 主进程(Electron层)代码打包
      可以使用webpack对主进程的代码进行打包压缩，但注意 ~target~ 需要设置为 ~electron-main~
 
-**** 双package.json文件进行依赖管理
-     作用：用于将package.json中dependencies中的部分依赖排除在打包之外。
+**** 双package.json文件进行依赖管理(https://www.electron.build/tutorials/two-package-structure)
+     由于electron-builder会将package.json中dependencies中的依赖都打包，若renderer(如React)和electron的依赖均通过同一个package.json管理，
+     而renderer中的以来已经通过Webpack等打包，那么最终的asar包中就会包含多余的renderer的依赖。
+     因此通过two package structure的方式
+     #+begin_src yaml
+     - dist # 打包文件所在目录
+     - package.json # development package.json
+     - app/
+       -- package.json  # application package.json
+       -- build # 编译文件所在目录
+     #+end_src
+     作用：开发环境和前端框架使用的dependencies和开发阶段使用devDependencies都写在development package.json，而生产环境electron使用的dependencies则记录在application package.json。
      用法：
-     1. 在项目下创建app目录
-	若根目录下存在app目录，那么electron-builder会以该目录作为打包的根目录，并且只会打包该目录下的文件(即package.json中的build配置均是基于app目录而定)
-     2. 将根目录的package.json复制app目录下，并删除devDependencies和dependencies中不被打包的依赖。
+     1. development package.json作为主配置文件
+        - electron-builder相关的build配置均在这里配置；
+        - ~build.directories.buildResources, build.files, build.extraFiles, build.extraResources~ 以application package.json所在目录为工作目录
+        - ~build.directories.output~ 以development package.json所在目录为工作目录
+        - ~main~ 由于编译文件所在目录必须位于application package.json所在目录下，因此应设置为如 ~./app/build/electron.js~
+     2. application package.json
+        - 必须包含 ~name,version,main~ 属性，并且保持和development package.json一致
+        - ~main~ 由于编译文件所在目录必须位于application package.json所在目录下，因此应设置为如 ~./build/electron.js~
+        - ~dependencies~ 包含需要打包的node_modules模块
+     3. 位于application package.json所在目录下，执行 ~cnpm i~ 安装dependencies
+     4. 位于development package.json所在目录下，执行 ~./node_modules/.bin/electron-builder --publish never~ 打包
 
-     这时开发使用的依赖则写入根目录的package.json，而打包用的则写入app/package.json。
+
+     注意：
+     1. 每次修改development package.json信息后，均要检查application package.json是否需要同步；
+     2. 由于build目录位于application package.json所在目录下，因此Webpack打包时的output路径也要做调整。
 
 *** QA
     1. Application entry file "build\electron.js" in the "E:\repos\l1k\l1k-client-fed\dist\win-unpacked\resources\app.asar" does not exist.
@@ -468,7 +714,7 @@
       #+end_src
    3. 在VSCode左侧选择debug面板，启动 ~All~ 项目开始调试。此时即可在主进程和渲染进程对应的文件中添加断点。
 * 开发环境hot reload
-** Electron Connect方案
+** TODO Electron Connect方案(https://github.com/Quramy/electron-connect)
    通过electron-connect可实现代码文件发生修改后自动重启Electron主进程的功能。
 
 *** TODO 问题
@@ -862,11 +1108,12 @@
      - npm5.x后在用户家目录下创建 ~.npminstall_tarball~ 目录缓存所有模块，而项目中的node_modules下则用软连接引用项目所依赖的模块。
 
 ** yarn
-*** Install on Ubuntu 20.x
+*** Install on Ubuntu 19+
 1. Import Yarn repos GPG key and APT to local system.
 #+begin_src bash
 curl -sS https://dl.yarnpkg.com/debian/pubkey-gpg | sudo apt-key add -
 echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+sudo apt update
 #+end_src
 2. Install Yarn
 #+begin_src bash
@@ -980,3 +1227,44 @@ sudo apt install --no-install-recommends yarn
 
 * CORS
   ~new BrowserWindow({webPreferences: {webSecurity: false}})~ disable CORS limited.
+* 无边框窗口
+  1. 调整窗口属性
+     #+begin_src js
+     const { BrowserWindow } = require('electron')
+     const win = new BrowserWindow({
+       width: 800,
+       height: 600,
+       resizable: false, // 不允许修改窗口尺寸
+       frame: false, // Windows和Linux下去除窗口边框
+     })
+     win.show()
+     #+end_src
+  2. 设置可拖放区域
+     #+begin_src css
+     .dragable-area {
+       -webkit-app-region: drag;
+       -webkit-user-select: none; /* 文字默认会被选中，导致拖放效果失效，因此需要设置为文字不可选中。 */
+     }
+     /* 可拖放元素中的元素默认无法响应点击和悬停等鼠标操作，因此需要设置为不可拖放。 */
+     .dgrable-area .no-dragable {
+       -webkit-app-region: no-drag;
+     }
+     #+end_src
+* 性能优化
+** 启动优化
+*** 白屏问题
+    由于界面渲染需要一定时间，因此可以等待页面加载完成后再显示窗口。
+    #+begin_src js
+    import { BrowserWindow } from 'electron'
+    const mainWindow = new BrowserWindow({
+        show: false
+    })
+
+    mainWindow.on('ready-to-show', () => {
+        mainWindow.show()
+        mainWindow.focus()
+    })
+    #+end_src
+* QA
+  1. 运行 ~./node_modules/.bin/electron .~ 报 ~Error: FATAL ERROR: Error::ThrowAsJavaScriptException napi_throw~
+     - 解决方法：重启操作系统即可。

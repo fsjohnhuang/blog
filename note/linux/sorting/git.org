@@ -1,6 +1,6 @@
 
 * 配置
-#+BEGIN_SRC 
+#+BEGIN_SRC
 # 设置全局提交者的信息显示在更新历史中
 git config --global user.name '<user name>'
 git config --global user.email '<user email>'
@@ -52,7 +52,7 @@ git config --local --unset credential.helper -f
 本地仓库(Repository)
 
 ** 获取远程仓库
-#+BEGIN_SRC 
+#+BEGIN_SRC
 git clone http://127.0.0.1:9999/root/test.git
 cd test
 touch README.md
@@ -64,9 +64,9 @@ git push -u origin master
 # git push -u origin --tags
 #+END_SRC
 
-#+begin_src 
+#+begin_src
 # 查看远程库版本信息
-git remote -v 
+git remote -v
 
 # 查看远程库信息
 git remote show <remote>
@@ -135,7 +135,7 @@ git diff <commit_id> <filepath>
 #+end_src
 
 ** 分支操作
-#+BEGIN_SRC 
+#+BEGIN_SRC
 # 查看本地所有分支信息
 git branch
 
@@ -188,7 +188,7 @@ git remote prune origin
 fast forward？
 
 *** 分支合并
-#+BEGIN_SRC 
+#+BEGIN_SRC
 # 以非fast-forward方式合并分支到当前分支
 git merge --no-ff <branch_name>
 
@@ -269,7 +269,7 @@ git push --tags
 
 第三中的bugfix可以省略，直接在预发布分支上修复bug
 一个功能分支可能由一个人开发，或者由一个小组开发
-   
+
 
 *** hotfix分支
 当正式环境发现的bug无需马上处理时，可排到下一个版本发布，那么就不用创建hotfixs分支，而是在develop分支上拉一个功能分支即可。
@@ -277,7 +277,7 @@ git push --tags
 1) 当正式环境发现bug，那么就从主分支对应的标签上创建一个hotfix分支
 2) hotfix修复并集成测试通过后，合并到主分支并打上标签后，发布正式，并删除该分支。同时也要合并到develop和预发布分支，防止遗漏这个bug修正
 3) 有可能主分支标签有1.0.0-RELEASE和1.1.0-RELEASE，现在发现1.0.0下有bug，而1.1.0没有，那么就从1.0.0创建hotfix，验证后合并为1.0.1版本。
-   
+
 
 *** 裁剪
 可省去功能分支，直接在开发分支上采用集中式工作流的方式开发，但就无法做到预开发了。
@@ -346,7 +346,7 @@ VBoxManage controlvm <vm_name> poweroff
 ** CentOS7下安装
 gitlab ce版的国内镜像：https://mirror.tuna.tsinghua.edu.cn/help/gitlab-ce/
 
-#+BEGIN_SRC 
+#+BEGIN_SRC
 # 安装ssh服务
 yum install -y curl policycoreutils-python  openssh-server openssh-clients
 
@@ -429,7 +429,7 @@ gitlab_rails['gitlab_email_from'] = 'xxxx@xx.com'
 前提：已为两个分支建立对应的MR
 场景：分支A先完成MR，而分支B修改内容与分支A冲突，那么分支B的MR页面会提示
 #+BEGIN_QUOTE
-There are merge conflicts 
+There are merge conflicts
 #+END_QUOTE
 那么只有主程序员可以处理冲突，点击 *Resolve conflicts* 在页面中处理 或 下载到本地处理。
 
@@ -450,7 +450,7 @@ There are merge conflicts
       2) 在评论区添加评论
 4) Owner/主Reviewer统计全票通过后在执行分支合并
 *** TODO IDE集成
-   
+
 
 ** TODO 缺陷管理集成
 Redmine
@@ -465,7 +465,7 @@ CI：Jenkins、Travis CI
    1) 配置为非80端口，然后以root通过iptables作端口映射 ~iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080~
    2) 利用nginx等转发，不过nginx需要使用root权限
    3) 直接用root启动GitLab
-   
+
 分析思路：
    1) ~gitlab-ctl status~ 多次发现unicorn服务PID不断增加，而其他服务PID不变化，那么可以定位时unicorn有问题
    2) ~gitlab-ctl tail unicorn~ 查看unicorn运行日志，发现如下日志，就能断定是权限问题
@@ -491,7 +491,6 @@ CI：Jenkins、Travis CI
 *** GitLab上Activity时间存在8小时时差
 原因：可能是时区问题
 解决办法：gitlab_rails['time_zone'] = 'Asia/Shanghai'
-
 
 
 
@@ -620,7 +619,6 @@ bug票要体现在缺陷管理系统，也要体现在CI测试结果记录中
 5) 必要条件下对中间件作配置和启动
 6) 执行单元测试、集成测试和用户验收测试等
 
-
 * 迁出模式
 锁模式：加锁->编辑->解锁
 版本管理系统：VSS(Visual Source Safe)、Peroforce、PVCS
@@ -728,7 +726,6 @@ windows建立符号链接
 #+BEGIN_EXAMPLE
 mklink /D /J 符号路径 目录文件路径
 #+END_EXAMPLE
-
 
 
 * 配置化架构

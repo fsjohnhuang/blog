@@ -403,7 +403,6 @@ JDK1.5引入java.util.concurrent包提供多线程子系统的组件，如线程
             #+END_EXAMPLE
           - ~boolean isCancelled()~
           - ~boolean isDone()~
-  3)
 
 * 等待唤醒和防止虚假唤醒
   1) 同步方法的方式

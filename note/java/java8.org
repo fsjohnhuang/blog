@@ -352,6 +352,24 @@ read方法返回一个整数(0~255)代表读取到的字节内容，达到流末
 FileInputStream每次调用read都会从磁盘读取一个字节到内存，可以 ~new BufferedInputStream(new FileInputStream("/path/to/file"))~ 从磁盘一次读取一大块数据到内存，然后再逐个字节读出来处理。
 FileOutputStream每次调用write都会往磁盘写入一个字节的数据，可以通过 ~new BufferedOutputStream(new FileOutputStream("/path/to/file"))~ 往磁盘一次写入一大块数据。
 
+- 构造文件系统路径
+  1. 通过 ~File.separator~ 或 ~System.getProperty("file.separator")~
+     #+begin_src java
+     String path1 = "/path/to" + File.separator + "newfile";
+     String path2 = "/path/to" + System.mgetProperty("file.separator") + "newfile";
+     #+end_src
+  2. 通过 ~new File~
+     #+begin_src java
+     File file = new File("/path/to", "newfile"); // 得到指向/path/to/newfile的File实例
+     if (file.createNewFile()) {
+         // File is created.
+     }
+     else {
+         // File is already existed.
+     }
+     #+end_src
+
+
 *** 管道操作
 管道可作为两个线程间字节、字符通信方式，一个管道必须由一个Input和一个Output关联出现，并且一个线程持有Input，另一个线程持有Output，Input和Output不能同一个线程持有。(read、write方法均为同步阻塞方法)
 
@@ -439,6 +457,8 @@ try {
 #+end_example
 
 ** 字符流
+   以16位传输。
+
    - Reader
      - BufferedReader
        - 示例：从标准输入读取字符
@@ -469,6 +489,8 @@ try {
      - FilterWriter
 
 ** 字节流
+   以8位传输。
+
    - InputStream
      - FileInputStream
      - FilterInputStream
@@ -494,9 +516,10 @@ try {
    同步阻塞编程方式，JDK1.4引入的特性。
 
 ** NIO(Unblocking/New IO)
-   同步非阻塞编程方式，基于Reactor。
+   同步非阻塞编程方式，基于Reactor。客户端和服务端通过Channel通信，实现多路服用。
 
 ** AIO(Asynchronous IO)
+   也称为NIO2
    异步非阻塞编程方式，JDK1.7引入被称为NIO2.0。位于 ~java.nio.channels~ 下的4个异步通道：
    1) AsynchronousSocketChannel
    2) AsynchronousServerSocketChannel
@@ -560,7 +583,7 @@ try {
      public enum Sex {
        MALE(1, "男性"), FEMALE(2, "女性"); // 枚举值MALE和FEMALE
 
-       private int id;
+       private int id; // 最好定义为private final int id; 然后必须在构造函数中赋值
        private String name;
 
        // 枚举的构造方法始终为private，因此可以省略访问控制符
@@ -1374,6 +1397,8 @@ P p = new P("john"){
         | SecurityException               | 由安全管理器抛出的异常，指示存在安全侵犯。                                                                           |
         | StringIndexOutOfBoundsException | 此异常由 String 方法抛出，指示索引或者为负，或者超出字符串的大小。                                                   |
         | UnsupportedOperationException   | 当不支持请求的操作时，抛出该异常。                                                                                   |
+        | VirtualMachineError             |                                                                                                                      |
+        | AssertionError                  |                                                                                                                      |
      2) checked exception(检查性异常)
         编译时会发现、提示并强制开发人员添加异常处理器或throws申明异常，才能通过编译的异常类型。
         | 异常                       | 描述                                                                                                                       |
@@ -1385,6 +1410,8 @@ P p = new P("john"){
         | InterruptedException       | 一个线程被另一个线程中断，抛出该异常。                                                                                     |
         | NoSuchFieldException       | 请求的变量不存在                                                                                                           |
         | NoSuchMethodException      | 请求的方法不存在                                                                                                           |
+        | IOException                |                                                                                                                            |
+        | SQLException               |                                                                                                                            |
   3) 异常处理器
      #+BEGIN_EXAMPLE java
      try{
@@ -1462,6 +1489,7 @@ P p = new P("john"){
          e.printStackTrace();
      }
      #+end_example
+  9) 对于unchecked exception可以省略catch子句
 
 * TODO 文件系统操作
 * TODO 集合类型
@@ -2283,6 +2311,53 @@ public class P {
     1) 行注释: 以 ~#~ 开头
     2) 编码: ~ISO-8859-1~, 该编码不支持中文，中文需转换为Unicode编码才行。
 
+** 读取resources资源文件路径
+
+*** 原因
+    项目被编译打包为JAR或WAR时，java目录下的源码文件被编译为class文件并和resources目录下的静态资源一起放在了target/classes目录下。
+    - 在IDEA中运行项目时，虽然class文件和resources目录的静态资源到打包到target/classes目录下，但IDEA模块的项目目录将作为Java进程的工作目录，而target/classes只是资源的存放目录并非工作目录。
+      - 因此此时通过相对路径 ~src/main/resources/properties/test.properties~ 依然能读取相应的静态资源。
+    - 在容器中(Tomcat等)运行项目时， 资源的存放路径为 ~classes/properties/test.properties~ 而Java进程的工作目录就是 ~classes/~ 。
+      - 因此此时通过相对路径 ~src/main/resources/properties/test.properties~ 会报 ~FileNotFoundException~ 。
+      - ~src/main/java~ 和 ~src/main/resources~ 这个是Maven工程结构决定项目开发阶段的目录结构，编译后会均会存放到 ~target/classes~ 目录下。
+
+*** Java读取方式
+    #+begin_src java
+    // 入参必须采用绝对路径，即以/作为前缀。因此/表示classpath。
+    InputStream inStream1 = this.getClass().getResourceAsStream("/properties/test.properties");
+
+    // 默认从classpath中找文件，因此入参不能以/作为前缀，否则会抛空指针。
+    // /作为前缀即相当于当前进程的根目录，即项目根目录。
+    InputStream inStream2 = this.getClass().getClassLoader().getResourceAsStream("properties/test.properties");
+    #+end_src
+
+*** Spring读取方式
+    1. 配置为Spring上下文
+       #+begin_src xml
+       <!-- 引入properties文件中的键值对时，采用${xxx.server} -->
+       <context:property-placeholder loaction="classpat:properties/test.properties" ignore-unresolvable="true"/>
+       #+end_src
+    2. 配置为Bean
+       #+begin_src xml
+       <!-- 引入properties文件中的键值对时，采用${xxx.server} -->
+       <bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+          <property name="location" value="classpath:properties/test.properties"/>
+       </bean>
+       #+end_src
+    3. 使用 ~ClassPathResource~
+       #+begin_src java
+       String strpath = "keyword.txt"; // 位于src/main/resources下
+       Resource resource = new ClassPathResource(strpath);
+       InputStreamReader isr = new InputStreamReader(resource.getInputStream(), "gbk");// 修改为通过resource获取数据
+       BufferedReader bufferedReader = new BufferedReader(isr);
+       String strLine = bufferedReader.readLine();
+       while (strLine != null && strLine.length() != 0)
+       {
+           list.add(strLine.trim().replace(" ", ""));
+           strLine = bufferedReader.readLine();
+       }
+       #+end_src
+
 * ClassLoader(类加载器)
   类文件可以存放在文件系统、JAR文件里、远程某个位置或者在内存中动态构建。而类加载器就是负责加载字节流，并且在虚拟机中将它们转化为一个类或接口。
 
@@ -2364,9 +2439,9 @@ public class P {
      #+END_EXAMPLE
 
 * TODO JNI(Java Native Interface)
-  
+
 * JNA(https://github.com/java-native-access/jna)
-  
+
 ** SpringBoot中DLL放置的位置
    1. 通过系统属性 ~jna.library.path~ 设置DLL的路径
       1. JVM参数 ~-Djna.library.path=/path/to/~
@@ -2903,6 +2978,8 @@ public class LdapUserMapper implements AttributesMapper {
        .count();                            // 执行终止操作产生结果，该操作会触发懒惰操作执行，此后前面的流将不能再使用
    #+END_EXAMPLE
 
+   注意：流创建后只能操作一次，再操作则需要重新创建。
+
 *** 创建流
     1) 集合及其派生类型(Set,List,Queue,Stack)转换为Stream实例： 通过接口 ~Collection~ 提供的stream方法
     2) 数组转换为Stream实例：
@@ -3118,6 +3195,44 @@ LocalDate date = LocalDate.of(1994,1,1)
 ** Nashorn JavaScript引擎
 
 ** Base64
+
+*** Java8+
+    ~java.util~ 包中新增Base64类
+    #+begin_src java
+    Base64.Decoder decoder = Base64.getDecoder();
+    Base64.Encoder encoder = Base64.getEncoder();
+
+    String text = "源字符串";
+    byte[] textByte = text.getBytes("UTF-8");
+
+    String encodedText = encoder.encodeToString(textByte);
+    String decodedText = new String(decoder.decode(encodedText), "UTF-8");
+    #+end_src
+
+*** Java8以前
+    使用 ~sun.misc~ 包中的BASE64Encoder和BASE64Decoder。效率比Java8提供的要差11倍，后期JDK可能会删除该API。
+    #+begin_src java
+    BASE64Decoder decoder = new BASE64Encoder();
+    BASE64Encoder encoder = new BASE64Decoder();
+
+    String text = "源字符串";
+    byte[] textByte = text.getBytes("UTF-8");
+
+    String encodedText = encoder.encode(textByte);
+    String decodedText = new String(decoder.decodeBuffer(encodedText), "UTF-8");
+    #+end_src
+
+*** Apache Commons Codec
+    ~org.apache.commons.codec.binary.Base64~ 。效率比Java8提供的要差3倍。
+    #+begin_src java
+    Base64 base64 = new Base64();
+
+    String text = "源字符串";
+    byte[] textByte = text.getBytes("UTF-8");
+
+    String encodedText = base64.encodeToString(textByte);
+    String decodedText = new String(base64.decode(encodedText), "UTF-8");
+    #+end_src
 
 * [[https://www.projectlombok.org/features/all][Lombok]]
   通过注解在编译时自动附加代码，从而简化Java代码和加速开发效率。
@@ -3475,7 +3590,7 @@ https://github.com/airlift/airline
 1) 每个Command标识的类仅能包含一个使用Arguments标识的字段，包含父类。
 * JSON
 - Gson 谷歌开发的JSON库
-- FastJson 阿里巴巴开发的JSON库，性能十分优秀
+- FastJson 阿里巴巴开发的JSON库，性能十分优秀，但漏洞比较多。
 - Jackson 支持JSON、YAML、Smile、CSV和XML序列化反序列化，社区活跃，更新快速。Spring内置的。
   - Smile为二进制的JSON数据格式，等同于标准JSON格式。于2010年发布。
 
@@ -3818,10 +3933,13 @@ assert data[0] == "1"
 *** 接收邮件
 * 调用外部进程
 ** java.lang.Runtime#exec
+   ~java.lang.Runtime~ 作为与Java程序当前运行环境交互的统一入口，提供执行子进程、获取可用CPU核数和显示JVM可用内存量等。
+
    1. 方法描述
       #+begin_src java
       /**
       Executes the specified command and arguments in a separate process with the specified environment and working directory.
+      @argument envp - specifed environment
       @argument dir - the working directory.
       @throws
       SecurityException - If a security manager exists and its checkExec method doesn't allow creation of the subprocess.
@@ -3835,6 +3953,7 @@ assert data[0] == "1"
    2. 简单示例
       #+begin_src java
       // Windows下调用系统命令，像dir等命令是由cmd解析器解释执行的，因此若直接写"dir"则会被认为在当前工作目录下有一个"dir.exe"文件，那么当然会执行失败。
+      // 注意：字符串数组中的地一个元素将作为命令来处理，因此写成new String[]{"cmd /c copy", "path/to/src", "/path/to/dest"}会报无法找到命令cmd /c copy。
       Runtime.getRuntime().exec(new String[]{"cmd", "/C", "copy /path/to/src /path/to/dest"});
       Runtime.getRuntime().exec(new String[]{"cmd", "/C", "start copy /path/to/src /path/to/dest"}); // 弹出另一个console执行系统命令
       // Linux下调用系统命令
@@ -3865,12 +3984,12 @@ assert data[0] == "1"
       try {
           String cmd = "cmd /c start cmd.exe";
           Process child = Runtime.getRuntime().exec(cmd);
-          
+
           OutputStream output = child.getOutputStream();
           output.write("cd C:/ /r/n".getBytes());
           output.flush();
-          output.write("dir /r/n".getBytes());          
-          output.close();	  
+          output.write("dir /r/n".getBytes());
+          output.close();
       }
       catch (IOException e) {}
       #+end_src
@@ -3879,22 +3998,69 @@ assert data[0] == "1"
 
 ** java.lang.Process
    1. 成员方法
-      - ~int exitValue()~, 以非阻塞方式获取进程执行的返回值。若进程尚未完成时调用该方法，则会报异常 ~java.lang.IllegalThreadStateException~
-      - ~int waitFor()~, 以阻塞方式获取进程执行的返回值。若进程尚未完成则会等待进程完成后才恢复当前线程。
-	- 问题：若进程无法正常关闭，则会导致Java线程一直挂起。
-      - ~void destory()~
-      - ~InputStream getErrorStream()~
-      - ~InputStream getInputStream()~
-      - ~OutputStream getOutputStream()~
+      - ~int exitValue()~, 以非阻塞方式获取子进程执行的返回值（习惯0表示正常结束）。若子进程尚未完成时调用该方法，则会报异常 ~java.lang.IllegalThreadStateException~
+      - ~int waitFor()~, 以阻塞方式获取子进程执行的返回值。若进程尚未完成则会等待子进程完成后才恢复当前线程。
+	- 问题：若子进程无法正常关闭，则会导致Java线程一直挂起；
+        - 返回值为子进程的退出码；
+      - ~boolean waitFor(long timeout, TimeUnit unit)~ 如果超时前子进程结束，那么返回 ~true~ ，否则返回 ~false~
+      - ~void destory()~ 强行终止子进程，但调用后子进程不会马上被终止，所以立即调用 ~boolean isAlive()~ 方法可能会返回 ~true~ ，因此需配合 ~waitFor~ 使用。
+      - ~Process destoryForcibly()~ 默认实现为调用 ~void destory()~ 方法。从JDK1.8开始提供。
+      - ~boolean isAlive()~ 如果子进程还没结束则返回 ~true~ 。从JDK1.8开始提供。
+      - ~InputStream getErrorStream()~ 获取子进程的异常输出流，如果子进程以 ~ProcessBuilder~ 创建，且通过 ~ProcessBuilder.redirectError~ 设置重定向，那么该方法返回 ~null~
+      - ~InputStream getInputStream()~ 获取子进程的标准输出流，如果子进程以 ~ProcessBuilder~ 创建，且通过 ~ProcessBuilder.redirectOutput~ 设置重定向，那么该方法返回 ~null~
+      - ~OutputStream getOutputStream()~ 获取子进程的标准输入流，如果子进程以 ~ProcessBuilder~ 创建，且通过 ~ProcessBuilder.redirectInput~ 设置重定向，那么该方法返回 ~null~
 
 ** java.lang.ProcessBuilder
    功能和java.lang.runtime#exec一样，只是java.lang.ProcessBuilder仅接收命令行以数组形式传递给java.lang.ProcessBuilder#command()而已。
-   #+begin_src java
-   ProcessBuilder pb = new ProcessBuilder();
-   pb.command("cmd", "/c", "dir"); // pb.command("cmd /c dir"); 这样会报错
-   try {
-       Process process = pb.start();
-       // 后面都是操作Process实例的方法
-   }
-   catch (IOException e){}
-   #+end_src
+   1. 基本使用
+      #+begin_src java
+      ProcessBuilder pb = new ProcessBuilder();
+      // pb.command("cmd /c dir"); 这样会报错
+      // 或者写到new ProcessBuilder("cmd", "/c", "dir")
+      pb.command("cmd", "/c", "dir");
+      try {
+          Process process = pb.start();
+          // 后面都是操作Process实例的方法
+      }
+      catch (IOException e){}
+      #+end_src
+   2. 重定向
+      - ~public ProcessBuilder redirectInput(File file)~ 输入重定向
+      - ~public ProcessBuilder redirectOutput(File file)~ 输出重定向
+      - ~public ProcessBuilder redirectError(File file)~ 异常重定向
+      - 示例
+        #+begin_src java
+        try {
+            ProcessBuilder pb = new ProcessBuilder("cmd");
+            // 在标准输入中，通过换行符分隔多行命令。
+            // commands.txt的内容为
+            // javac Demo.java
+            // java Demo
+            File commands = new File("/path/to/commands.txt");
+            File error = new File("/path/to/error");
+            File output = new File("/path/to/output");
+
+            pd.redirectInput(commands);
+            pd.redirectOutput(output);
+            pd.redirectError(error);
+
+            pd.start();
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+        }
+        #+end_src
+* 多线程
+** sleep 和 wait 的区别
+   1. sleep是让调用线程进入阻塞状态，释放CPU时间片，但没有改变对象锁状态，所以其他线程仍然无法访问该对象；
+   2. wait会让线程进入阻塞状态并释放对象锁，然后等待超时或其他线程调用notify或notifyAll唤醒。
+* Java中文字符所占的字节数
+  由字符的编码方式决定
+  #+begin_src java
+  String text = "测试";
+  text.getBytes("ISO-8859-1").length // 2
+  text.getBytes("GB2312").length // 4
+  text.getBytes("GBK").length // 4
+  text.getBytes("UTF-8").length // 6
+  text.getBytes().length // 根据程序所运行的平台的默认编码方式进行转换，Windows平台下是GB2312，因此1个中文占2个字节。
+  #+end_src
