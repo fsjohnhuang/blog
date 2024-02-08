@@ -8,6 +8,11 @@
   --background-end-rgb: 255, 255, 255;
 }
 
+@font-face {
+  font-family: 'Neue Montreal';
+  src: url("/Neue Montreal/NeueMontreal-Bold.otf");
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --foreground-rgb: 255, 255, 255;
@@ -24,4 +29,8 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
+}
+
+nav {
+  font-family: 'Neue Montreal';
 }
